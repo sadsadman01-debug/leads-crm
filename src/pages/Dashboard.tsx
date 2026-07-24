@@ -18,6 +18,7 @@ import { StatTile } from '@/components/charts/StatTile'
 import { FunnelChart } from '@/components/charts/FunnelChart'
 import { TrendChart } from '@/components/charts/TrendChart'
 import { DonutChart } from '@/components/charts/DonutChart'
+import { RemindersWidget } from '@/components/RemindersWidget'
 import { LEAD_SOURCE_COLORS, PRIORITY_COLORS, SENTIMENT_COLORS, STATUS_DIST_COLORS } from '@/lib/chartColors'
 
 const GRANULARITIES: Array<{ value: 'day' | 'week' | 'month'; label: string }> = [
@@ -61,6 +62,8 @@ export function Dashboard() {
           ))}
         </select>
       </div>
+
+      <RemindersWidget reminders={data.reminders} />
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
         <StatTile label="Total Leads" value={data.totals.leads} icon={Users} tone="accent" />

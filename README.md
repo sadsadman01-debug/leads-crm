@@ -3,7 +3,8 @@
 A private, single-admin lead tracking system for outbound sales (cold email, WhatsApp, and multi-channel outreach). Built as a JAMstack app for Netlify: static React frontend + Netlify Functions API + Supabase (Postgres, Auth, Storage).
 
 **Phase 1**: auth, lead data model, outreach status toggles, basic list/detail views.
-**Phase 2** (this update): advanced filtering, bulk actions, CSV/Google Sheets import, CSV export, and a full analytics dashboard.
+**Phase 2**: advanced filtering, bulk actions, CSV/Google Sheets import, CSV export, and a full analytics dashboard.
+**Phase 3** (this update): configurable pipeline stages, a drag-and-drop Kanban board, and a follow-up reminder system.
 
 ## Stack
 
@@ -17,17 +18,21 @@ A private, single-admin lead tracking system for outbound sales (cold email, Wha
 ```
 netlify/functions/       Serverless API (auth-checked, uses the Supabase service-role key)
   api.ts                 Single router entry point (/api/*)
-  lib/                   auth verification, supabase admin client, http helpers, tag resolution
-  routes/                leads (incl. filters/bulk), tags, attachments, importExport, dashboard
+  lib/                   auth verification, supabase admin client, http helpers, tag resolution, reminders
+  routes/                leads (filters/bulk/stage/kanban), tags, attachments, importExport, dashboard,
+                         pipelineStages, settings
 src/
   pages/                 Login, Dashboard, Leads (list/detail/form), Settings
   components/            Layout, shared UI (Badge, Toggle, Modal), StatusPanel, AttachmentsPanel,
-                         FiltersBar, BulkActionsBar, ImportModal, charts/ (StatTile, Funnel, Trend, Donut)
+                         FiltersBar, BulkActionsBar, ImportModal, RemindersWidget,
+                         PipelineStagesSettings, FollowUpIntervalSettings,
+                         kanban/ (Board, Column, Card), charts/ (StatTile, Funnel, Trend, Donut)
   contexts/AuthContext   Supabase session state
   lib/                   supabase client, api client (calls /api/*), chartColors
-  types/lead.ts          Shared Lead/Status/Tag/Attachment/Filters/DashboardSummary types
-supabase/schema.sql       Full DB schema, RLS policies, storage bucket setup
-scripts/seed-admin.mjs    One-time script to create the single admin user
+  types/lead.ts          Shared Lead/Status/Tag/Attachment/Filters/DashboardSummary/Stage types
+supabase/schema.sql              Full DB schema for fresh installs (includes all phases)
+supabase/migrations/             Incremental SQL to run against an already-provisioned project
+scripts/seed-admin.mjs           One-time script to create the single admin user
 ```
 
 ## How auth works
@@ -40,7 +45,7 @@ scripts/seed-admin.mjs    One-time script to create the single admin user
 ## Local setup
 
 1. **Create a Supabase project** at supabase.com.
-2. **Run the schema**: open the SQL editor in Supabase, paste the contents of [`supabase/schema.sql`](supabase/schema.sql), and run it. This creates all tables, triggers, RLS policies, and the private `lead-attachments` storage bucket.
+2. **Run the schema**: open the SQL editor in Supabase, paste the contents of [`supabase/schema.sql`](supabase/schema.sql), and run it. This creates all tables, triggers, RLS policies, and the private `lead-attachments` storage bucket (fresh installs get every phase in one file — the `supabase/migrations/` folder is only for projects that already had an earlier phase's schema applied and need the incremental diff).
 3. **Create the admin account** — Supabase Auth needs at least one user; there's no public sign-up UI. Run:
    ```bash
    SUPABASE_URL=https://your-project.supabase.co \
@@ -87,7 +92,14 @@ scripts/seed-admin.mjs    One-time script to create the single admin user
 - **Dashboard** (`GET /api/dashboard/summary?granularity=day|week|month`): pulls all leads with their status once and aggregates outreach counts/percentages, reply sentiment, conversion rate, an outreach funnel, lead source/priority/status distributions, and a trend series in JS. Capped at 20,000 leads — fine for a single-admin CRM, but would need a real SQL aggregation (or a materialized view) well before that.
 - **Chart colors** (`src/lib/chartColors.ts`): a validated categorical palette (dataviz skill's `validate_palette.js`, dark mode) for lead-source distribution; status/priority/sentiment charts reuse the same tones as their Part 1 badges so a color's meaning never changes between a table badge and a chart slice.
 
+## Phase 3 additions
+
+- **Pipeline stages** (`pipeline_stages` table, `/api/pipeline-stages*`): admin-configurable, ordered Kanban columns. Ships with the default sequence (Cold Email → Follow-up 1 → Follow-up 2 → Follow-up 3 → Replied → Converted); reorder via drag-and-drop in Settings (`@dnd-kit`), which calls `PATCH /pipeline-stages/reorder` with the full ordered id list. Deleting a stage is blocked while any lead is still on it. Every lead defaults to the first stage via a DB trigger (`assign_default_stage`) — this covers direct inserts too (CSV/Sheets import), not just the create-lead form.
+- **Kanban board** (`GET /api/leads/kanban`, capped at 1,000 leads): a lighter-weight lead list (no tags/social profiles) grouped into columns by `stage_id`. Toggle it from the Leads page next to the existing Table view — same page, same data, different layout. Dragging a card calls `PATCH /leads/:id/stage`.
+- **Follow-up reminders**: marking Cold Email / Follow-up 1 / Follow-up 2 sent stores a computed due date for the *next* step (`lead_status.followup{1,2,3}_due_at`), using the interval from `app_settings.follow_up_interval_days` (editable in Settings, default 3 days) at the moment it's computed — changing the interval later doesn't shift already-computed dates. `netlify/functions/lib/reminders.ts` is the single place that turns those stored dates into "next due / overdue / due today," reused by the leads list, lead detail, the Kanban cards, and the dashboard widget so they never disagree. A lead stops needing reminders once it's replied to or converted.
+- **Dashboard widget**: `GET /api/dashboard/summary` now also returns a `reminders` block (overdue/due-today counts + a sorted list) computed from the same leads query the rest of the dashboard already fetches — no extra full-table scan.
+
 ## What's intentionally deferred to later phases
 
-- Kanban board, reminders/templates, lead scoring
+- Outreach templates, lead scoring
 - Multi-user roles/permissions (schema already supports adding this)

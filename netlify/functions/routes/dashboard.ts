@@ -1,6 +1,9 @@
 import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
+import { computeReminder } from '../lib/reminders.js'
+
+const MAX_REMINDER_ITEMS = 50
 
 const MAX_LEADS_FOR_AGGREGATION = 20000
 
@@ -85,7 +88,7 @@ export async function getDashboardSummary(event: HandlerEvent) {
 
   const { data: leads, error } = await supabase
     .from('leads')
-    .select('id, created_at, lead_source, priority, lead_status(*)')
+    .select('id, company_name, created_at, lead_source, priority, lead_status(*)')
     .order('created_at', { ascending: true })
     .limit(MAX_LEADS_FOR_AGGREGATION)
 
@@ -165,7 +168,24 @@ export async function getDashboardSummary(event: HandlerEvent) {
     })),
   }
 
+  const reminderItems = rows
+    .map((lead: any, i: number) => ({ lead, reminder: computeReminder(statuses[i]) }))
+    .filter((r) => r.reminder.is_overdue || r.reminder.is_due_today)
+    .sort((a, b) => (a.reminder.next_follow_up_due_at! < b.reminder.next_follow_up_due_at! ? -1 : 1))
+    .slice(0, MAX_REMINDER_ITEMS)
+    .map(({ lead, reminder }) => ({
+      id: lead.id,
+      company_name: lead.company_name,
+      priority: lead.priority,
+      due_at: reminder.next_follow_up_due_at,
+      is_overdue: reminder.is_overdue,
+    }))
+
+  const overdueCount = statuses.filter((s: any) => computeReminder(s).is_overdue).length
+  const dueTodayCount = statuses.filter((s: any) => computeReminder(s).is_due_today).length
+
   return json(200, {
+    reminders: { overdueCount, dueTodayCount, items: reminderItems },
     totals: { leads: totalLeads },
     outreach,
     replies: {

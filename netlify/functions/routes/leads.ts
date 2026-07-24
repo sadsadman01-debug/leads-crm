@@ -2,11 +2,13 @@ import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
 import { ensureTagIds } from '../lib/tags.js'
+import { computeReminder, FOLLOW_UP_DUE_TRIGGERS } from '../lib/reminders.js'
+import { getFollowUpIntervalDays } from './settings.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 export const LEAD_SELECT = `
   id, company_name, address, phone, email, website, notes, lead_source, priority,
-  created_at, updated_at,
+  stage_id, created_at, updated_at,
   lead_status ( * ),
   lead_tags ( tags ( id, name ) ),
   lead_social_profiles ( id, platform, url )
@@ -15,9 +17,10 @@ export const LEAD_SELECT = `
 export function normalizeLead(row: any) {
   if (!row) return row
   const { lead_tags, lead_social_profiles, lead_status, ...rest } = row
+  const status = Array.isArray(lead_status) ? lead_status[0] : lead_status
   return {
     ...rest,
-    status: Array.isArray(lead_status) ? lead_status[0] : lead_status,
+    status: status ? { ...status, ...computeReminder(status) } : status,
     social_profiles: lead_social_profiles ?? [],
     tags: (lead_tags ?? []).map((t: any) => t.tags).filter(Boolean),
   }
@@ -299,12 +302,25 @@ export async function updateLeadStatus(id: string, event: HandlerEvent) {
   const body = JSON.parse(event.body || '{}')
 
   const update: Record<string, any> = {}
+  let intervalDays: number | null = null
 
   for (const [key, { flagField, tsField }] of Object.entries(STATUS_FIELDS)) {
     if (key in body) {
       const value = Boolean(body[key])
       update[flagField] = value
       update[tsField] = value ? new Date().toISOString() : null
+
+      const trigger = FOLLOW_UP_DUE_TRIGGERS[key]
+      if (trigger) {
+        if (value) {
+          intervalDays ??= await getFollowUpIntervalDays()
+          const due = new Date()
+          due.setUTCDate(due.getUTCDate() + intervalDays)
+          update[trigger.setsDueField] = due.toISOString()
+        } else {
+          update[trigger.setsDueField] = null
+        }
+      }
     }
   }
 
@@ -323,7 +339,52 @@ export async function updateLeadStatus(id: string, event: HandlerEvent) {
     .single()
 
   if (error) throw new HttpError(500, error.message)
-  return json(200, data)
+  return json(200, { ...data, ...computeReminder(data) })
+}
+
+export async function updateLeadStage(id: string, event: HandlerEvent) {
+  const supabase = getSupabaseAdmin()
+  const body = JSON.parse(event.body || '{}')
+  const stageId = body.stage_id
+
+  if (!stageId) throw new HttpError(400, 'stage_id is required')
+
+  const { error } = await supabase.from('leads').update({ stage_id: stageId }).eq('id', id)
+  if (error) throw new HttpError(500, error.message)
+
+  return getLead(id)
+}
+
+const KANBAN_SELECT = `
+  id, company_name, priority, stage_id,
+  lead_status ( cold_email_sent, followup1_sent, followup2_sent, followup3_sent,
+    whatsapp_sent, linkedin_sent, sms_sent, replied, converted,
+    followup1_due_at, followup2_due_at, followup3_due_at )
+`
+const KANBAN_MAX_LEADS = 1000
+
+export async function getKanbanLeads() {
+  const supabase = getSupabaseAdmin()
+  const { data, error } = await supabase
+    .from('leads')
+    .select(KANBAN_SELECT)
+    .order('created_at', { ascending: false })
+    .limit(KANBAN_MAX_LEADS)
+
+  if (error) throw new HttpError(500, error.message)
+
+  const leads = (data ?? []).map((row: any) => {
+    const status = Array.isArray(row.lead_status) ? row.lead_status[0] : row.lead_status
+    return {
+      id: row.id,
+      company_name: row.company_name,
+      priority: row.priority,
+      stage_id: row.stage_id,
+      status: status ? { ...status, ...computeReminder(status) } : status,
+    }
+  })
+
+  return json(200, { leads, truncated: leads.length >= KANBAN_MAX_LEADS })
 }
 
 const MAX_BULK_IDS = 500

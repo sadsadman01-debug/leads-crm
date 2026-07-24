@@ -13,8 +13,11 @@ import {
   Linkedin,
   Twitter,
   Link as LinkIcon,
+  AlertCircle,
+  Clock,
 } from 'lucide-react'
-import { leadsApi } from '@/lib/api'
+import { format, parseISO } from 'date-fns'
+import { leadsApi, pipelineStagesApi } from '@/lib/api'
 import { PriorityBadge, TagPill, Badge } from '@/components/ui/Badge'
 import { StatusPanel } from '@/components/StatusPanel'
 import { AttachmentsPanel } from '@/components/AttachmentsPanel'
@@ -38,11 +41,21 @@ export function LeadDetail() {
     enabled: Boolean(id),
   })
 
+  const { data: stagesData } = useQuery({ queryKey: ['pipeline-stages'], queryFn: pipelineStagesApi.list })
+
   const deleteMutation = useMutation({
     mutationFn: () => leadsApi.remove(id!),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['leads'] })
       navigate('/leads')
+    },
+  })
+
+  const stageMutation = useMutation({
+    mutationFn: (stageId: string) => leadsApi.updateStage(id!, stageId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['lead', id] })
+      queryClient.invalidateQueries({ queryKey: ['leads'] })
     },
   })
 
@@ -82,8 +95,38 @@ export function LeadDetail() {
         </div>
       </div>
 
+      {lead.status?.next_follow_up_due_at && (
+        <div
+          className={`mb-6 flex items-center gap-2.5 rounded-lg px-4 py-3 text-sm ${
+            lead.status.is_overdue ? 'bg-danger-bg text-danger' : lead.status.is_due_today ? 'bg-warn-bg text-warn' : 'bg-base-800 text-base-300'
+          }`}
+        >
+          {lead.status.is_overdue ? <AlertCircle size={16} /> : <Clock size={16} />}
+          <span>
+            {lead.status.is_overdue ? 'Follow-up overdue since ' : lead.status.is_due_today ? 'Follow-up due today' : 'Next follow-up due '}
+            {!lead.status.is_due_today && format(parseISO(lead.status.next_follow_up_due_at), 'MMM d, yyyy')}
+          </span>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-1">
+          <div className="card space-y-3 p-6">
+            <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-base-300">
+              Pipeline Stage
+            </h2>
+            <select
+              className="input"
+              value={lead.stage_id ?? ''}
+              disabled={stageMutation.isPending}
+              onChange={(e) => stageMutation.mutate(e.target.value)}
+            >
+              {(stagesData?.stages ?? []).map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+
           <div className="card space-y-3 p-6">
             <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-base-300">
               Contact Info

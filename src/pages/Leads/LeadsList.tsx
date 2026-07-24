@@ -10,16 +10,20 @@ import {
   Building2,
   Upload,
   Download,
+  Rows3,
+  Columns3,
 } from 'lucide-react'
-import { bulkApi, exportApi, leadsApi } from '@/lib/api'
+import { bulkApi, exportApi, leadsApi, pipelineStagesApi } from '@/lib/api'
 import { PriorityBadge, TagPill, Badge } from '@/components/ui/Badge'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { FiltersBar } from '@/components/FiltersBar'
 import { BulkActionsBar } from '@/components/BulkActionsBar'
 import { ImportModal } from '@/components/ImportModal'
+import { KanbanBoard } from '@/components/kanban/KanbanBoard'
 import type { LeadFilters } from '@/types/lead'
 
 const PAGE_SIZE = 20
+type View = 'table' | 'kanban'
 
 const SORT_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'created_at', label: 'Date Added' },
@@ -39,13 +43,18 @@ export function LeadsList() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [importOpen, setImportOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [view, setView] = useState<View>('table')
   const debouncedSearch = useDebouncedValue(search, 300)
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['leads', { search: debouncedSearch, page, sortBy, sortOrder, filters }],
     queryFn: () => leadsApi.list({ search: debouncedSearch, page, pageSize: PAGE_SIZE, sortBy, sortOrder, filters }),
     placeholderData: (prev) => prev,
+    enabled: view === 'table',
   })
+
+  const { data: stagesData } = useQuery({ queryKey: ['pipeline-stages'], queryFn: pipelineStagesApi.list })
+  const stageNameById = new Map((stagesData?.stages ?? []).map((s) => [s.id, s.name]))
 
   const total = data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
@@ -137,6 +146,26 @@ export function LeadsList() {
           <p className="mt-1 text-sm text-base-400">{total} total lead{total === 1 ? '' : 's'}</p>
         </div>
         <div className="flex gap-2">
+          <div className="flex gap-1 rounded-lg bg-base-850 p-1">
+            <button
+              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                view === 'table' ? 'bg-accent-500 text-white' : 'text-base-300 hover:text-base-100'
+              }`}
+              onClick={() => setView('table')}
+            >
+              <Rows3 size={15} />
+              Table
+            </button>
+            <button
+              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                view === 'kanban' ? 'bg-accent-500 text-white' : 'text-base-300 hover:text-base-100'
+              }`}
+              onClick={() => setView('kanban')}
+            >
+              <Columns3 size={15} />
+              Kanban
+            </button>
+          </div>
           <button className="btn-secondary" onClick={() => setImportOpen(true)}>
             <Upload size={16} />
             Import
@@ -152,6 +181,10 @@ export function LeadsList() {
         </div>
       </div>
 
+      {view === 'kanban' ? (
+        <KanbanBoard />
+      ) : (
+        <>
       <div className="card mb-4 flex flex-wrap items-center gap-3 p-4">
         <div className="relative min-w-[260px] flex-1">
           <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base-400" />
@@ -230,6 +263,7 @@ export function LeadsList() {
                 </th>
                 <th className="px-5 py-3 font-medium">Company</th>
                 <th className="px-5 py-3 font-medium">Contact</th>
+                <th className="px-5 py-3 font-medium">Stage</th>
                 <th className="px-5 py-3 font-medium">Tags</th>
                 <th className="px-5 py-3 font-medium">Priority</th>
                 <th className="px-5 py-3 font-medium">Status</th>
@@ -252,12 +286,27 @@ export function LeadsList() {
                     />
                   </td>
                   <td className="px-5 py-3.5">
-                    <div className="font-medium text-base-100">{lead.company_name}</div>
+                    <div className="flex items-center gap-1.5">
+                      {lead.status?.is_overdue && (
+                        <span className="h-2 w-2 shrink-0 rounded-full bg-danger" title="Overdue follow-up" />
+                      )}
+                      {!lead.status?.is_overdue && lead.status?.is_due_today && (
+                        <span className="h-2 w-2 shrink-0 rounded-full bg-warn" title="Follow-up due today" />
+                      )}
+                      <div className="font-medium text-base-100">{lead.company_name}</div>
+                    </div>
                     <div className="text-xs text-base-400">{lead.address || '—'}</div>
                   </td>
                   <td className="px-5 py-3.5 text-base-300">
                     <div>{lead.phone || '—'}</div>
                     <div className="text-xs text-base-400">{lead.email || '—'}</div>
+                  </td>
+                  <td className="px-5 py-3.5">
+                    {lead.stage_id && stageNameById.has(lead.stage_id) ? (
+                      <Badge tone="neutral">{stageNameById.get(lead.stage_id)}</Badge>
+                    ) : (
+                      <span className="text-base-400">—</span>
+                    )}
                   </td>
                   <td className="px-5 py-3.5">
                     <div className="flex flex-wrap gap-1.5">
@@ -307,6 +356,8 @@ export function LeadsList() {
             </button>
           </div>
         </div>
+      )}
+        </>
       )}
 
       <ImportModal open={importOpen} onClose={() => setImportOpen(false)} onImported={invalidateLeads} />

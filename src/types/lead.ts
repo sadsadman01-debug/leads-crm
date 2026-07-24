@@ -59,6 +59,12 @@ export interface LeadStatus {
   cold_call_made_at: string | null
   cold_call_outcome: ColdCallOutcome | null
   updated_at: string
+  followup1_due_at?: string | null
+  followup2_due_at?: string | null
+  followup3_due_at?: string | null
+  next_follow_up_due_at?: string | null
+  is_overdue?: boolean
+  is_due_today?: boolean
 }
 
 export interface Lead {
@@ -73,10 +79,51 @@ export interface Lead {
   priority: Priority
   created_at: string
   updated_at: string
+  stage_id: string | null
   status?: LeadStatus
   tags: Tag[]
   social_profiles: SocialProfile[]
   attachments?: Attachment[]
+}
+
+export interface PipelineStage {
+  id: string
+  name: string
+  position: number
+}
+
+export interface KanbanLead {
+  id: string
+  company_name: string
+  priority: Priority
+  stage_id: string | null
+  status: Pick<
+    LeadStatus,
+    | 'cold_email_sent'
+    | 'followup1_sent'
+    | 'followup2_sent'
+    | 'followup3_sent'
+    | 'whatsapp_sent'
+    | 'linkedin_sent'
+    | 'sms_sent'
+    | 'replied'
+    | 'converted'
+    | 'next_follow_up_due_at'
+    | 'is_overdue'
+    | 'is_due_today'
+  > | null
+}
+
+export interface AppSettings {
+  follow_up_interval_days: number
+}
+
+export interface ReminderItem {
+  id: string
+  company_name: string
+  priority: Priority
+  due_at: string
+  is_overdue: boolean
 }
 
 export interface LeadListResponse {
@@ -144,5 +191,10 @@ export interface DashboardSummary {
   trend: {
     granularity: 'day' | 'week' | 'month'
     points: Array<{ date: string; leadsAdded: number; emailsSent: number }>
+  }
+  reminders: {
+    overdueCount: number
+    dueTodayCount: number
+    items: ReminderItem[]
   }
 }

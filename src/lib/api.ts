@@ -1,5 +1,15 @@
 import { supabase } from './supabase'
-import type { DashboardSummary, Lead, LeadFilters, LeadListResponse, LeadStatus, Tag } from '@/types/lead'
+import type {
+  AppSettings,
+  DashboardSummary,
+  KanbanLead,
+  Lead,
+  LeadFilters,
+  LeadListResponse,
+  LeadStatus,
+  PipelineStage,
+  Tag,
+} from '@/types/lead'
 
 class ApiError extends Error {
   status: number
@@ -82,6 +92,11 @@ export const leadsApi = {
 
   updateStatus: (id: string, payload: Partial<LeadStatus>) =>
     request<LeadStatus>(`/leads/${id}/status`, { method: 'PATCH', body: JSON.stringify(payload) }),
+
+  updateStage: (id: string, stageId: string) =>
+    request<Lead>(`/leads/${id}/stage`, { method: 'PATCH', body: JSON.stringify({ stage_id: stageId }) }),
+
+  kanban: () => request<{ leads: KanbanLead[]; truncated: boolean }>('/leads/kanban'),
 }
 
 export const bulkApi = {
@@ -148,6 +163,34 @@ export const dashboardApi = {
 
 export const tagsApi = {
   list: () => request<{ tags: Tag[] }>('/tags'),
+}
+
+export const pipelineStagesApi = {
+  list: () => request<{ stages: PipelineStage[] }>('/pipeline-stages'),
+
+  create: (name: string) =>
+    request<PipelineStage>('/pipeline-stages', { method: 'POST', body: JSON.stringify({ name }) }),
+
+  rename: (id: string, name: string) =>
+    request<PipelineStage>(`/pipeline-stages/${id}`, { method: 'PUT', body: JSON.stringify({ name }) }),
+
+  reorder: (orderedIds: string[]) =>
+    request<{ stages: PipelineStage[] }>('/pipeline-stages/reorder', {
+      method: 'PATCH',
+      body: JSON.stringify({ orderedIds }),
+    }),
+
+  remove: (id: string) => request<{ success: true }>(`/pipeline-stages/${id}`, { method: 'DELETE' }),
+}
+
+export const settingsApi = {
+  get: () => request<AppSettings>('/settings'),
+
+  update: (followUpIntervalDays: number) =>
+    request<AppSettings>('/settings', {
+      method: 'PUT',
+      body: JSON.stringify({ follow_up_interval_days: followUpIntervalDays }),
+    }),
 }
 
 export const attachmentsApi = {

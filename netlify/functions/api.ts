@@ -9,6 +9,8 @@ import {
   deleteLead,
   checkDuplicate,
   updateLeadStatus,
+  updateLeadStage,
+  getKanbanLeads,
   bulkAction,
 } from './routes/leads.js'
 import { listTags } from './routes/tags.js'
@@ -20,6 +22,8 @@ import {
 } from './routes/attachments.js'
 import { importRows, importFromSheet, exportLeads } from './routes/importExport.js'
 import { getDashboardSummary } from './routes/dashboard.js'
+import { listStages, createStage, renameStage, reorderStages, deleteStage } from './routes/pipelineStages.js'
+import { getSettings, updateSettings } from './routes/settings.js'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -70,9 +74,17 @@ export const handler: Handler = async (event) => {
         await requireUser(event)
         if (method === 'GET') response = await exportLeads(event)
         else throw new HttpError(405, 'Method not allowed')
+      } else if (id === 'kanban') {
+        await requireUser(event)
+        if (method === 'GET') response = await getKanbanLeads()
+        else throw new HttpError(405, 'Method not allowed')
       } else if (sub === 'status') {
         await requireUser(event)
         if (method === 'PATCH') response = await updateLeadStatus(id, event)
+        else throw new HttpError(405, 'Method not allowed')
+      } else if (sub === 'stage') {
+        await requireUser(event)
+        if (method === 'PATCH') response = await updateLeadStage(id, event)
         else throw new HttpError(405, 'Method not allowed')
       } else {
         await requireUser(event)
@@ -89,6 +101,25 @@ export const handler: Handler = async (event) => {
       await requireUser(event)
       if (id === 'summary' && method === 'GET') response = await getDashboardSummary(event)
       else throw new HttpError(404, 'Not found')
+    } else if (resource === 'pipeline-stages') {
+      await requireUser(event)
+      if (!id) {
+        if (method === 'GET') response = await listStages()
+        else if (method === 'POST') response = await createStage(event)
+        else throw new HttpError(405, 'Method not allowed')
+      } else if (id === 'reorder') {
+        if (method === 'PATCH') response = await reorderStages(event)
+        else throw new HttpError(405, 'Method not allowed')
+      } else {
+        if (method === 'PUT') response = await renameStage(id, event)
+        else if (method === 'DELETE') response = await deleteStage(id)
+        else throw new HttpError(405, 'Method not allowed')
+      }
+    } else if (resource === 'settings') {
+      await requireUser(event)
+      if (method === 'GET') response = await getSettings()
+      else if (method === 'PUT') response = await updateSettings(event)
+      else throw new HttpError(405, 'Method not allowed')
     } else if (resource === 'attachments') {
       const user = await requireUser(event)
       if (!id && method === 'POST') response = await saveAttachmentMetadata(event, user)
