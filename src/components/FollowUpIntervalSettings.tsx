@@ -32,7 +32,7 @@ export function FollowUpIntervalSettings() {
         later. Changing it only affects follow-ups computed from now on.
       </p>
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <label className="label mb-0" htmlFor="interval-days">Interval</label>
         <input
           id="interval-days"
@@ -45,7 +45,7 @@ export function FollowUpIntervalSettings() {
         <span className="text-sm text-base-400">days</span>
 
         <button
-          className="btn-primary ml-auto"
+          className="btn-primary sm:ml-auto"
           disabled={!dirty || mutation.isPending}
           onClick={() => mutation.mutate(days)}
         >

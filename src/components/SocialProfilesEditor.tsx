@@ -25,9 +25,9 @@ export function SocialProfilesEditor({
   return (
     <div className="space-y-2">
       {value.map((profile, i) => (
-        <div key={i} className="flex gap-2">
+        <div key={i} className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
           <select
-            className="input w-40"
+            className="input w-full sm:w-40"
             value={SUGGESTED_PLATFORMS.includes(profile.platform) ? profile.platform : 'Other'}
             onChange={(e) => update(i, { platform: e.target.value === 'Other' ? '' : e.target.value })}
           >
@@ -38,19 +38,19 @@ export function SocialProfilesEditor({
           </select>
           {!SUGGESTED_PLATFORMS.includes(profile.platform) && (
             <input
-              className="input w-32"
+              className="input w-full sm:w-32"
               placeholder="Platform"
               value={profile.platform}
               onChange={(e) => update(i, { platform: e.target.value })}
             />
           )}
           <input
-            className="input flex-1"
+            className="input min-w-0 flex-1"
             placeholder="https://…"
             value={profile.url}
             onChange={(e) => update(i, { url: e.target.value })}
           />
-          <button type="button" className="btn-ghost px-2" onClick={() => remove(i)}>
+          <button type="button" className="btn-ghost shrink-0 px-2" onClick={() => remove(i)}>
             <Trash2 size={16} />
           </button>
         </div>

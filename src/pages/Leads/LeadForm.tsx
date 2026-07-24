@@ -124,10 +124,10 @@ export function LeadForm() {
           e.preventDefault()
           saveMutation.mutate()
         }}
-        className="card space-y-6 p-6"
+        className="card space-y-6 p-4 sm:p-6"
       >
-        <div className="grid grid-cols-2 gap-4">
-          <div className="col-span-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
             <label className="label">Company Name *</label>
             <input
               className="input"
@@ -137,7 +137,7 @@ export function LeadForm() {
             />
           </div>
 
-          <div className="col-span-2">
+          <div className="sm:col-span-2">
             <label className="label">Address</label>
             <input className="input" value={form.address} onChange={(e) => set('address', e.target.value)} />
           </div>
@@ -157,7 +157,7 @@ export function LeadForm() {
             />
           </div>
 
-          <div className="col-span-2">
+          <div className="sm:col-span-2">
             <label className="label">Website</label>
             <input
               className="input"
@@ -226,7 +226,7 @@ export function LeadForm() {
           <p className="text-sm text-danger">Something went wrong. Please try again.</p>
         )}
 
-        <div className="flex justify-end gap-3 border-t border-base-700/60 pt-4">
+        <div className="flex flex-wrap justify-end gap-3 border-t border-base-700/60 pt-4">
           <button type="button" className="btn-secondary" onClick={() => navigate(-1)}>
             Cancel
           </button>

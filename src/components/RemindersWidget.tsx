@@ -10,9 +10,9 @@ export function RemindersWidget({ reminders }: { reminders: DashboardSummary['re
 
   return (
     <div className="card p-6">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-base-300">Follow-up Reminders</h2>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {overdueCount > 0 && (
             <span className="pill bg-danger-bg text-danger">
               <AlertCircle size={12} />
@@ -36,16 +36,16 @@ export function RemindersWidget({ reminders }: { reminders: DashboardSummary['re
             <li
               key={item.id}
               onClick={() => navigate(`/leads/${item.id}`)}
-              className="flex cursor-pointer items-center justify-between rounded-lg px-3 py-2.5 transition-colors hover:bg-base-850"
+              className="flex cursor-pointer flex-col gap-1 rounded-lg px-3 py-2.5 transition-colors hover:bg-base-850 sm:flex-row sm:items-center sm:justify-between"
             >
-              <div className="flex items-center gap-2.5">
+              <div className="flex min-w-0 items-center gap-2.5">
                 <span
                   className={`h-2 w-2 shrink-0 rounded-full ${item.is_overdue ? 'bg-danger' : 'bg-warn'}`}
                 />
-                <span className="text-sm text-base-100">{item.company_name}</span>
+                <span className="truncate text-sm text-base-100">{item.company_name}</span>
                 <PriorityBadge priority={item.priority} />
               </div>
-              <span className={`text-xs ${item.is_overdue ? 'text-danger' : 'text-warn'}`}>
+              <span className={`shrink-0 pl-4 text-xs sm:pl-0 ${item.is_overdue ? 'text-danger' : 'text-warn'}`}>
                 {item.is_overdue ? 'Overdue since ' : 'Due '}
                 {format(parseISO(item.due_at), 'MMM d')}
               </span>

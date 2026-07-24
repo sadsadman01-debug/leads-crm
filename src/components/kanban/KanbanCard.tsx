@@ -1,9 +1,9 @@
 import { useDraggable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
-import { Mail, Send, MessageCircle, Linkedin, MessageSquare, Reply, Trophy } from 'lucide-react'
+import { Mail, Send, MessageCircle, Linkedin, MessageSquare, Reply, Trophy, MoveRight } from 'lucide-react'
 import clsx from 'clsx'
 import { PriorityBadge } from '@/components/ui/Badge'
-import type { KanbanLead } from '@/types/lead'
+import type { KanbanLead, PipelineStage } from '@/types/lead'
 
 const QUICK_ICONS: Array<{ key: keyof NonNullable<KanbanLead['status']>; icon: typeof Mail; label: string }> = [
   { key: 'cold_email_sent', icon: Mail, label: 'Cold email sent' },
@@ -19,11 +19,15 @@ const QUICK_ICONS: Array<{ key: keyof NonNullable<KanbanLead['status']>; icon: t
 
 export function KanbanCard({
   lead,
+  stages,
   onOpen,
+  onMoveToStage,
   dragging,
 }: {
   lead: KanbanLead
+  stages: PipelineStage[]
   onOpen: () => void
+  onMoveToStage: (stageId: string) => void
   dragging?: boolean
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -71,6 +75,24 @@ export function KanbanCard({
           ))}
         </div>
       )}
+
+      {/* Touch-drag fallback — always reachable on mobile where drag gestures can be unreliable */}
+      <div
+        className="relative mt-3 md:hidden"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <select
+          value={lead.stage_id ?? ''}
+          onChange={(e) => onMoveToStage(e.target.value)}
+          className="input w-full appearance-none pl-8 text-xs"
+        >
+          {stages.map((s) => (
+            <option key={s.id} value={s.id}>{s.name}</option>
+          ))}
+        </select>
+        <MoveRight size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-base-400" />
+      </div>
     </div>
   )
 }

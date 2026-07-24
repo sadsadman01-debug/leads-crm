@@ -93,9 +93,9 @@ export function AttachmentsPanel({ leadId, attachments }: { leadId: string; atta
               key={a.id}
               className="flex items-center justify-between rounded-lg border border-base-700/60 bg-base-850 px-4 py-2.5"
             >
-              <div className="flex items-center gap-2.5 truncate">
+              <div className="flex min-w-0 items-center gap-2.5">
                 <Paperclip size={16} className="shrink-0 text-base-400" />
-                <div className="truncate">
+                <div className="min-w-0 truncate">
                   <p className="truncate text-sm text-base-100">{a.file_name}</p>
                   <p className="text-xs text-base-400">{formatSize(a.size_bytes)}</p>
                 </div>

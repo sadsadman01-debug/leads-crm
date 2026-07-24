@@ -140,12 +140,12 @@ export function LeadsList() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-base-100">Leads</h1>
           <p className="mt-1 text-sm text-base-400">{total} total lead{total === 1 ? '' : 's'}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <div className="flex gap-1 rounded-lg bg-base-850 p-1">
             <button
               className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
@@ -186,7 +186,7 @@ export function LeadsList() {
       ) : (
         <>
       <div className="card mb-4 flex flex-wrap items-center gap-3 p-4">
-        <div className="relative min-w-[260px] flex-1">
+        <div className="relative min-w-0 flex-1 sm:min-w-[260px]">
           <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base-400" />
           <input
             className="input pl-9"
@@ -202,7 +202,7 @@ export function LeadsList() {
         <FiltersBar filters={filters} onChange={updateFilters} />
 
         <select
-          className="input w-auto"
+          className="input w-auto flex-1 sm:flex-initial"
           value={sortBy}
           onChange={(e) => {
             setSortBy(e.target.value)
@@ -235,105 +235,159 @@ export function LeadsList() {
         busy={bulkBusy}
       />
 
-      <div className="card overflow-hidden">
-        {isLoading && !data ? (
-          <div className="p-12 text-center text-base-400">Loading leads…</div>
-        ) : isError ? (
-          <div className="p-12 text-center text-danger">Failed to load leads.</div>
-        ) : data && data.leads.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 p-16 text-center">
-            <Building2 size={32} className="text-base-500" />
-            <p className="text-base-300">No leads found.</p>
-            <button className="btn-primary" onClick={() => navigate('/leads/new')}>
-              <Plus size={16} />
-              Add your first lead
-            </button>
-          </div>
-        ) : (
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-base-700/60 text-xs uppercase tracking-wide text-base-400">
-                <th className="w-10 px-5 py-3">
-                  <input
-                    type="checkbox"
-                    checked={allOnPageSelected}
-                    onChange={toggleSelectAllOnPage}
-                    className="h-4 w-4 rounded border-base-600 bg-base-800 text-accent-500 focus:ring-accent-500"
-                  />
-                </th>
-                <th className="px-5 py-3 font-medium">Company</th>
-                <th className="px-5 py-3 font-medium">Contact</th>
-                <th className="px-5 py-3 font-medium">Stage</th>
-                <th className="px-5 py-3 font-medium">Tags</th>
-                <th className="px-5 py-3 font-medium">Priority</th>
-                <th className="px-5 py-3 font-medium">Status</th>
-                <th className="px-5 py-3 font-medium">Updated</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data?.leads.map((lead) => (
-                <tr
-                  key={lead.id}
-                  onClick={() => navigate(`/leads/${lead.id}`)}
-                  className="cursor-pointer border-b border-base-800 transition-colors hover:bg-base-850"
-                >
-                  <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
+      {isLoading && !data ? (
+        <div className="card p-12 text-center text-base-400">Loading leads…</div>
+      ) : isError ? (
+        <div className="card p-12 text-center text-danger">Failed to load leads.</div>
+      ) : data && data.leads.length === 0 ? (
+        <div className="card flex flex-col items-center gap-3 p-16 text-center">
+          <Building2 size={32} className="text-base-500" />
+          <p className="text-base-300">No leads found.</p>
+          <button className="btn-primary" onClick={() => navigate('/leads/new')}>
+            <Plus size={16} />
+            Add your first lead
+          </button>
+        </div>
+      ) : (
+        <>
+          {/* Desktop / tablet: table */}
+          <div className="card hidden overflow-x-auto md:block">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-base-700/60 text-xs uppercase tracking-wide text-base-400">
+                  <th className="w-10 px-5 py-3">
                     <input
                       type="checkbox"
-                      checked={selectedIds.has(lead.id)}
-                      onChange={() => toggleSelected(lead.id)}
+                      checked={allOnPageSelected}
+                      onChange={toggleSelectAllOnPage}
                       className="h-4 w-4 rounded border-base-600 bg-base-800 text-accent-500 focus:ring-accent-500"
                     />
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center gap-1.5">
-                      {lead.status?.is_overdue && (
-                        <span className="h-2 w-2 shrink-0 rounded-full bg-danger" title="Overdue follow-up" />
-                      )}
-                      {!lead.status?.is_overdue && lead.status?.is_due_today && (
-                        <span className="h-2 w-2 shrink-0 rounded-full bg-warn" title="Follow-up due today" />
-                      )}
-                      <div className="font-medium text-base-100">{lead.company_name}</div>
-                    </div>
-                    <div className="text-xs text-base-400">{lead.address || '—'}</div>
-                  </td>
-                  <td className="px-5 py-3.5 text-base-300">
-                    <div>{lead.phone || '—'}</div>
-                    <div className="text-xs text-base-400">{lead.email || '—'}</div>
-                  </td>
-                  <td className="px-5 py-3.5">
-                    {lead.stage_id && stageNameById.has(lead.stage_id) ? (
-                      <Badge tone="neutral">{stageNameById.get(lead.stage_id)}</Badge>
-                    ) : (
-                      <span className="text-base-400">—</span>
-                    )}
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <div className="flex flex-wrap gap-1.5">
-                      {lead.tags.slice(0, 2).map((t) => (
-                        <TagPill key={t.id} label={t.name} />
-                      ))}
-                      {lead.tags.length > 2 && (
-                        <span className="text-xs text-base-400">+{lead.tags.length - 2}</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <PriorityBadge priority={lead.priority} />
-                  </td>
-                  <td className="px-5 py-3.5">{statusSummary(lead)}</td>
-                  <td className="px-5 py-3.5 text-base-400">
-                    {new Date(lead.updated_at).toLocaleDateString()}
-                  </td>
+                  </th>
+                  <th className="px-5 py-3 font-medium">Company</th>
+                  <th className="px-5 py-3 font-medium">Contact</th>
+                  <th className="px-5 py-3 font-medium">Stage</th>
+                  <th className="px-5 py-3 font-medium">Tags</th>
+                  <th className="px-5 py-3 font-medium">Priority</th>
+                  <th className="px-5 py-3 font-medium">Status</th>
+                  <th className="px-5 py-3 font-medium">Updated</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+              </thead>
+              <tbody>
+                {data?.leads.map((lead) => (
+                  <tr
+                    key={lead.id}
+                    onClick={() => navigate(`/leads/${lead.id}`)}
+                    className="cursor-pointer border-b border-base-800 transition-colors hover:bg-base-850"
+                  >
+                    <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(lead.id)}
+                        onChange={() => toggleSelected(lead.id)}
+                        className="h-4 w-4 rounded border-base-600 bg-base-800 text-accent-500 focus:ring-accent-500"
+                      />
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <div className="flex items-center gap-1.5">
+                        {lead.status?.is_overdue && (
+                          <span className="h-2 w-2 shrink-0 rounded-full bg-danger" title="Overdue follow-up" />
+                        )}
+                        {!lead.status?.is_overdue && lead.status?.is_due_today && (
+                          <span className="h-2 w-2 shrink-0 rounded-full bg-warn" title="Follow-up due today" />
+                        )}
+                        <div className="font-medium text-base-100">{lead.company_name}</div>
+                      </div>
+                      <div className="text-xs text-base-400">{lead.address || '—'}</div>
+                    </td>
+                    <td className="px-5 py-3.5 text-base-300">
+                      <div>{lead.phone || '—'}</div>
+                      <div className="text-xs text-base-400">{lead.email || '—'}</div>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      {lead.stage_id && stageNameById.has(lead.stage_id) ? (
+                        <Badge tone="neutral">{stageNameById.get(lead.stage_id)}</Badge>
+                      ) : (
+                        <span className="text-base-400">—</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <div className="flex flex-wrap gap-1.5">
+                        {lead.tags.slice(0, 2).map((t) => (
+                          <TagPill key={t.id} label={t.name} />
+                        ))}
+                        {lead.tags.length > 2 && (
+                          <span className="text-xs text-base-400">+{lead.tags.length - 2}</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <PriorityBadge priority={lead.priority} />
+                    </td>
+                    <td className="px-5 py-3.5">{statusSummary(lead)}</td>
+                    <td className="px-5 py-3.5 text-base-400">
+                      {new Date(lead.updated_at).toLocaleDateString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile / small tablet: stacked cards */}
+          <div className="grid gap-3 md:hidden">
+            {data?.leads.map((lead) => (
+              <div
+                key={lead.id}
+                onClick={() => navigate(`/leads/${lead.id}`)}
+                className="card flex cursor-pointer items-start gap-1 p-3 active:bg-base-850"
+              >
+                <label
+                  className="flex h-11 w-11 shrink-0 items-center justify-center"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(lead.id)}
+                    onChange={() => toggleSelected(lead.id)}
+                    className="h-5 w-5 rounded border-base-600 bg-base-800 text-accent-500 focus:ring-accent-500"
+                  />
+                </label>
+
+                <div className="min-w-0 flex-1 py-1">
+                  <div className="flex items-center gap-1.5">
+                    {lead.status?.is_overdue && (
+                      <span className="h-2 w-2 shrink-0 rounded-full bg-danger" title="Overdue follow-up" />
+                    )}
+                    {!lead.status?.is_overdue && lead.status?.is_due_today && (
+                      <span className="h-2 w-2 shrink-0 rounded-full bg-warn" title="Follow-up due today" />
+                    )}
+                    <p className="truncate font-medium text-base-100">{lead.company_name}</p>
+                  </div>
+
+                  <p className="mt-0.5 truncate text-xs text-base-400">
+                    {[lead.phone, lead.email].filter(Boolean).join(' · ') || lead.address || '—'}
+                  </p>
+
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <PriorityBadge priority={lead.priority} />
+                    {statusSummary(lead)}
+                    {lead.stage_id && stageNameById.has(lead.stage_id) && (
+                      <Badge tone="neutral">{stageNameById.get(lead.stage_id)}</Badge>
+                    )}
+                  </div>
+
+                  <p className="mt-2 text-xs text-base-500">
+                    Updated {new Date(lead.updated_at).toLocaleDateString()}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       {data && total > 0 && (
-        <div className="mt-4 flex items-center justify-between text-sm text-base-400">
+        <div className="mt-4 flex flex-col gap-3 text-sm text-base-400 sm:flex-row sm:items-center sm:justify-between">
           <span>
             Page {page} of {totalPages}
           </span>

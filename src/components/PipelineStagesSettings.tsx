@@ -44,7 +44,7 @@ function SortableStageRow({
       <button
         {...attributes}
         {...listeners}
-        className="cursor-grab touch-none text-base-500 hover:text-base-300 active:cursor-grabbing"
+        className="flex h-11 w-11 shrink-0 cursor-grab touch-none items-center justify-center text-base-500 hover:text-base-300 active:cursor-grabbing"
         aria-label="Drag to reorder"
       >
         <GripVertical size={18} />

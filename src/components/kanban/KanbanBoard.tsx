@@ -42,12 +42,7 @@ export function KanbanBoard() {
     setActiveLead((event.active.data.current?.lead as KanbanLead) ?? null)
   }
 
-  function handleDragEnd(event: DragEndEvent) {
-    setActiveLead(null)
-    const { active, over } = event
-    if (!over) return
-    const leadId = String(active.id)
-    const newStageId = String(over.id)
+  function moveLeadToStage(leadId: string, newStageId: string) {
     const lead = leads.find((l) => l.id === leadId)
     if (!lead || lead.stage_id === newStageId) return
 
@@ -59,15 +54,28 @@ export function KanbanBoard() {
     moveMutation.mutate({ leadId, stageId: newStageId })
   }
 
+  function handleDragEnd(event: DragEndEvent) {
+    setActiveLead(null)
+    const { active, over } = event
+    if (!over) return
+    moveLeadToStage(String(active.id), String(over.id))
+  }
+
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div className="flex gap-4 overflow-x-auto pb-4">
+      <div className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-4 md:snap-none">
         {stages.map((stage) => {
           const stageLeads = leads.filter((l) => l.stage_id === stage.id)
           return (
             <KanbanColumn key={stage.id} id={stage.id} title={stage.name} count={stageLeads.length}>
               {stageLeads.map((lead) => (
-                <KanbanCard key={lead.id} lead={lead} onOpen={() => navigate(`/leads/${lead.id}`)} />
+                <KanbanCard
+                  key={lead.id}
+                  lead={lead}
+                  stages={stages}
+                  onOpen={() => navigate(`/leads/${lead.id}`)}
+                  onMoveToStage={(stageId) => moveLeadToStage(lead.id, stageId)}
+                />
               ))}
             </KanbanColumn>
           )
@@ -75,7 +83,15 @@ export function KanbanBoard() {
       </div>
 
       <DragOverlay>
-        {activeLead ? <KanbanCard lead={activeLead} onOpen={() => {}} dragging /> : null}
+        {activeLead ? (
+          <KanbanCard
+            lead={activeLead}
+            stages={stages}
+            onOpen={() => {}}
+            onMoveToStage={() => {}}
+            dragging
+          />
+        ) : null}
       </DragOverlay>
     </DndContext>
   )

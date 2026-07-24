@@ -23,14 +23,14 @@ export function Modal({
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/60 backdrop-blur-sm animate-fadeIn sm:items-center sm:p-4">
       <div
-        className="card w-full max-w-md p-6 animate-slideUp"
+        className="card w-full max-w-md animate-slideUp overflow-y-auto rounded-none p-5 sm:max-h-[85vh] sm:rounded-xl2 sm:p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-base-100">{title}</h2>
-          <button onClick={onClose} className="text-base-400 hover:text-base-100">
+          <button onClick={onClose} className="btn-ghost -mr-2 px-2 text-base-400 hover:text-base-100">
             <X size={20} />
           </button>
         </div>

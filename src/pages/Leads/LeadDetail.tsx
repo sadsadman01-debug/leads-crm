@@ -70,9 +70,9 @@ export function LeadDetail() {
         Back to Leads
       </button>
 
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <div className="mb-2 flex items-center gap-3">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="mb-2 flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-semibold text-base-100">{lead.company_name}</h1>
             <PriorityBadge priority={lead.priority} />
           </div>
@@ -154,10 +154,10 @@ export function LeadDetail() {
                     href={normalizeUrl(p.url)}
                     target="_blank"
                     rel="noreferrer"
-                    className="flex items-center gap-2.5 text-sm text-base-300 hover:text-accent-400"
+                    className="flex min-w-0 items-center gap-2.5 text-sm text-base-300 hover:text-accent-400"
                   >
                     <Icon size={16} className="shrink-0" />
-                    <span className="truncate">{p.platform}</span>
+                    <span className="min-w-0 truncate">{p.platform}</span>
                   </a>
                 )
               })}
@@ -221,9 +221,9 @@ function InfoRow({
 }) {
   if (!value) return null
   const content = (
-    <div className="flex items-center gap-2.5 text-sm text-base-200">
+    <div className="flex min-w-0 items-center gap-2.5 text-sm text-base-200">
       <Icon size={16} className="shrink-0 text-base-400" />
-      <span className="truncate">{value}</span>
+      <span className="min-w-0 truncate">{value}</span>
     </div>
   )
   return href ? (

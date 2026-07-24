@@ -47,13 +47,13 @@ export function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-base-100">Dashboard</h1>
           <p className="mt-1 text-sm text-base-400">Outreach performance at a glance</p>
         </div>
         <select
-          className="input w-auto"
+          className="input w-full sm:w-auto"
           value={granularity}
           onChange={(e) => setGranularity(e.target.value as any)}
         >
@@ -65,7 +65,7 @@ export function Dashboard() {
 
       <RemindersWidget reminders={data.reminders} />
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
         <StatTile label="Total Leads" value={data.totals.leads} icon={Users} tone="accent" />
         <StatTile
           label="Cold Emails Sent"

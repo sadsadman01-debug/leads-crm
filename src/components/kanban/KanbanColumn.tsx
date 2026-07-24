@@ -16,7 +16,7 @@ export function KanbanColumn({
   const { setNodeRef, isOver } = useDroppable({ id })
 
   return (
-    <div className="flex w-72 shrink-0 flex-col">
+    <div className="flex w-[85vw] shrink-0 snap-center flex-col sm:w-[70vw] md:w-72 md:snap-align-none">
       <div className="mb-3 flex items-center justify-between px-1">
         <h3 className="truncate text-sm font-semibold text-base-100">{title}</h3>
         <span className="pill bg-base-800 text-base-300">{count}</span>

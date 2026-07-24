@@ -57,7 +57,7 @@ export function FiltersBar({
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="card absolute right-0 z-50 mt-2 w-[380px] p-5 animate-slideUp">
+          <div className="card fixed inset-x-4 top-20 z-50 max-h-[80vh] w-auto overflow-y-auto p-5 animate-slideUp sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-[380px]">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="text-sm font-semibold text-base-100">Filter Leads</h3>
               {!isFiltersEmpty(filters) && (
@@ -86,7 +86,7 @@ export function FiltersBar({
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className="label">Priority</label>
                   <select
@@ -116,7 +116,7 @@ export function FiltersBar({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className="label">Date Added From</label>
                   <input
