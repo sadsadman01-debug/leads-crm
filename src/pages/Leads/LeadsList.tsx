@@ -1,10 +1,23 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { Search, ChevronLeft, ChevronRight, Plus, ArrowUpDown, Building2 } from 'lucide-react'
-import { leadsApi } from '@/lib/api'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  ArrowUpDown,
+  Building2,
+  Upload,
+  Download,
+} from 'lucide-react'
+import { bulkApi, exportApi, leadsApi } from '@/lib/api'
 import { PriorityBadge, TagPill, Badge } from '@/components/ui/Badge'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
+import { FiltersBar } from '@/components/FiltersBar'
+import { BulkActionsBar } from '@/components/BulkActionsBar'
+import { ImportModal } from '@/components/ImportModal'
+import type { LeadFilters } from '@/types/lead'
 
 const PAGE_SIZE = 20
 
@@ -17,29 +30,91 @@ const SORT_OPTIONS: Array<{ value: string; label: string }> = [
 
 export function LeadsList() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [sortBy, setSortBy] = useState('created_at')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+  const [filters, setFilters] = useState<LeadFilters>({})
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [importOpen, setImportOpen] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const debouncedSearch = useDebouncedValue(search, 300)
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['leads', { search: debouncedSearch, page, sortBy, sortOrder }],
-    queryFn: () => leadsApi.list({ search: debouncedSearch, page, pageSize: PAGE_SIZE, sortBy, sortOrder }),
+    queryKey: ['leads', { search: debouncedSearch, page, sortBy, sortOrder, filters }],
+    queryFn: () => leadsApi.list({ search: debouncedSearch, page, pageSize: PAGE_SIZE, sortBy, sortOrder, filters }),
     placeholderData: (prev) => prev,
   })
 
   const total = data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
-  function toggleSort(field: string) {
-    if (sortBy === field) {
-      setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'))
-    } else {
-      setSortBy(field)
-      setSortOrder('asc')
-    }
+  function updateFilters(next: LeadFilters) {
+    setFilters(next)
     setPage(1)
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAllOnPage() {
+    if (!data) return
+    const allSelected = data.leads.every((l) => selectedIds.has(l.id))
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (allSelected) {
+        data.leads.forEach((l) => next.delete(l.id))
+      } else {
+        data.leads.forEach((l) => next.add(l.id))
+      }
+      return next
+    })
+  }
+
+  function invalidateLeads() {
+    queryClient.invalidateQueries({ queryKey: ['leads'] })
+  }
+
+  const bulkStatusMutation = useMutation({
+    mutationFn: (field: string) => bulkApi.markStatus([...selectedIds], field, true),
+    onSuccess: () => {
+      invalidateLeads()
+      setSelectedIds(new Set())
+    },
+  })
+
+  const bulkTagMutation = useMutation({
+    mutationFn: (tagNames: string[]) => bulkApi.addTags([...selectedIds], tagNames),
+    onSuccess: () => {
+      invalidateLeads()
+      setSelectedIds(new Set())
+      queryClient.invalidateQueries({ queryKey: ['tags'] })
+    },
+  })
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: () => bulkApi.remove([...selectedIds]),
+    onSuccess: () => {
+      invalidateLeads()
+      setSelectedIds(new Set())
+    },
+  })
+
+  const bulkBusy = bulkStatusMutation.isPending || bulkTagMutation.isPending || bulkDeleteMutation.isPending
+
+  async function handleExport() {
+    setExporting(true)
+    try {
+      await exportApi.downloadCsv({ search: debouncedSearch, filters })
+    } finally {
+      setExporting(false)
+    }
   }
 
   function statusSummary(lead: (typeof data extends undefined ? never : NonNullable<typeof data>)['leads'][number]) {
@@ -52,6 +127,8 @@ export function LeadsList() {
     return <Badge tone="neutral">New</Badge>
   }
 
+  const allOnPageSelected = Boolean(data?.leads.length) && data!.leads.every((l) => selectedIds.has(l.id))
+
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
@@ -59,10 +136,20 @@ export function LeadsList() {
           <h1 className="text-2xl font-semibold text-base-100">Leads</h1>
           <p className="mt-1 text-sm text-base-400">{total} total lead{total === 1 ? '' : 's'}</p>
         </div>
-        <button className="btn-primary" onClick={() => navigate('/leads/new')}>
-          <Plus size={16} />
-          Add New Lead
-        </button>
+        <div className="flex gap-2">
+          <button className="btn-secondary" onClick={() => setImportOpen(true)}>
+            <Upload size={16} />
+            Import
+          </button>
+          <button className="btn-secondary" disabled={exporting} onClick={handleExport}>
+            <Download size={16} />
+            {exporting ? 'Exporting…' : 'Export'}
+          </button>
+          <button className="btn-primary" onClick={() => navigate('/leads/new')}>
+            <Plus size={16} />
+            Add New Lead
+          </button>
+        </div>
       </div>
 
       <div className="card mb-4 flex flex-wrap items-center gap-3 p-4">
@@ -78,6 +165,8 @@ export function LeadsList() {
             }}
           />
         </div>
+
+        <FiltersBar filters={filters} onChange={updateFilters} />
 
         <select
           className="input w-auto"
@@ -104,6 +193,15 @@ export function LeadsList() {
         </button>
       </div>
 
+      <BulkActionsBar
+        selectedCount={selectedIds.size}
+        onClear={() => setSelectedIds(new Set())}
+        onMarkStatus={(field) => bulkStatusMutation.mutate(field)}
+        onAddTags={(tagNames) => bulkTagMutation.mutate(tagNames)}
+        onDelete={() => bulkDeleteMutation.mutate()}
+        busy={bulkBusy}
+      />
+
       <div className="card overflow-hidden">
         {isLoading && !data ? (
           <div className="p-12 text-center text-base-400">Loading leads…</div>
@@ -122,6 +220,14 @@ export function LeadsList() {
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-base-700/60 text-xs uppercase tracking-wide text-base-400">
+                <th className="w-10 px-5 py-3">
+                  <input
+                    type="checkbox"
+                    checked={allOnPageSelected}
+                    onChange={toggleSelectAllOnPage}
+                    className="h-4 w-4 rounded border-base-600 bg-base-800 text-accent-500 focus:ring-accent-500"
+                  />
+                </th>
                 <th className="px-5 py-3 font-medium">Company</th>
                 <th className="px-5 py-3 font-medium">Contact</th>
                 <th className="px-5 py-3 font-medium">Tags</th>
@@ -137,6 +243,14 @@ export function LeadsList() {
                   onClick={() => navigate(`/leads/${lead.id}`)}
                   className="cursor-pointer border-b border-base-800 transition-colors hover:bg-base-850"
                 >
+                  <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(lead.id)}
+                      onChange={() => toggleSelected(lead.id)}
+                      className="h-4 w-4 rounded border-base-600 bg-base-800 text-accent-500 focus:ring-accent-500"
+                    />
+                  </td>
                   <td className="px-5 py-3.5">
                     <div className="font-medium text-base-100">{lead.company_name}</div>
                     <div className="text-xs text-base-400">{lead.address || '—'}</div>
@@ -194,6 +308,8 @@ export function LeadsList() {
           </div>
         </div>
       )}
+
+      <ImportModal open={importOpen} onClose={() => setImportOpen(false)} onImported={invalidateLeads} />
     </div>
   )
 }

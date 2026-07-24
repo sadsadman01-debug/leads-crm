@@ -9,6 +9,7 @@ import {
   deleteLead,
   checkDuplicate,
   updateLeadStatus,
+  bulkAction,
 } from './routes/leads.js'
 import { listTags } from './routes/tags.js'
 import {
@@ -17,6 +18,8 @@ import {
   getSignedDownloadUrl,
   deleteAttachment,
 } from './routes/attachments.js'
+import { importRows, importFromSheet, exportLeads } from './routes/importExport.js'
+import { getDashboardSummary } from './routes/dashboard.js'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -55,6 +58,18 @@ export const handler: Handler = async (event) => {
       } else if (id === 'check-duplicate') {
         await requireUser(event)
         response = await checkDuplicate(event)
+      } else if (id === 'bulk') {
+        await requireUser(event)
+        if (method === 'POST') response = await bulkAction(event)
+        else throw new HttpError(405, 'Method not allowed')
+      } else if (id === 'import' && sub === 'sheet') {
+        response = await importFromSheet(event, await requireUser(event))
+      } else if (id === 'import') {
+        response = await importRows(event, await requireUser(event))
+      } else if (id === 'export') {
+        await requireUser(event)
+        if (method === 'GET') response = await exportLeads(event)
+        else throw new HttpError(405, 'Method not allowed')
       } else if (sub === 'status') {
         await requireUser(event)
         if (method === 'PATCH') response = await updateLeadStatus(id, event)
@@ -70,6 +85,10 @@ export const handler: Handler = async (event) => {
       await requireUser(event)
       if (method === 'GET') response = await listTags()
       else throw new HttpError(405, 'Method not allowed')
+    } else if (resource === 'dashboard') {
+      await requireUser(event)
+      if (id === 'summary' && method === 'GET') response = await getDashboardSummary(event)
+      else throw new HttpError(404, 'Not found')
     } else if (resource === 'attachments') {
       const user = await requireUser(event)
       if (!id && method === 'POST') response = await saveAttachmentMetadata(event, user)

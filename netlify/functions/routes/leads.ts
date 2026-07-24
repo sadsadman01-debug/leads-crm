@@ -1,9 +1,10 @@
 import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
+import { ensureTagIds } from '../lib/tags.js'
 import type { AuthedUser } from '../lib/auth.js'
 
-const LEAD_SELECT = `
+export const LEAD_SELECT = `
   id, company_name, address, phone, email, website, notes, lead_source, priority,
   created_at, updated_at,
   lead_status ( * ),
@@ -11,7 +12,7 @@ const LEAD_SELECT = `
   lead_social_profiles ( id, platform, url )
 `
 
-function normalizeLead(row: any) {
+export function normalizeLead(row: any) {
   if (!row) return row
   const { lead_tags, lead_social_profiles, lead_status, ...rest } = row
   return {
@@ -20,6 +21,92 @@ function normalizeLead(row: any) {
     social_profiles: lead_social_profiles ?? [],
     tags: (lead_tags ?? []).map((t: any) => t.tags).filter(Boolean),
   }
+}
+
+export interface LeadFilters {
+  priority?: string
+  leadSource?: string
+  tagIds?: string[]
+  statusChecks?: Array<{ field: string; value: boolean }>
+  dateFrom?: string
+  dateTo?: string
+  hasWebsite?: boolean
+  hasSocialProfile?: boolean
+}
+
+export function parseFilters(params: Record<string, string | undefined>): LeadFilters {
+  if (!params.filters) return {}
+  try {
+    const parsed = JSON.parse(params.filters)
+    return typeof parsed === 'object' && parsed !== null ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+/**
+ * Filters spanning a join (status toggles, tags, has-social-profile) are resolved to a
+ * set of matching lead ids first, then intersected — this sidesteps PostgREST's
+ * embedded-resource filter semantics (which filter the nested array, not the parent
+ * row, unless every join is hinted !inner) in favor of something easy to reason about.
+ * Returns null when no join-based filters are active (i.e. no id constraint needed),
+ * or a Set of allowed lead ids (possibly empty, meaning "no matches").
+ */
+export async function resolveJoinFilteredIds(filters: LeadFilters): Promise<Set<string> | null> {
+  const supabase = getSupabaseAdmin()
+  let result: Set<string> | null = null
+
+  function intersect(ids: string[]) {
+    const next = new Set(ids)
+    result = result === null ? next : new Set([...result].filter((id) => next.has(id)))
+  }
+
+  if (filters.statusChecks && filters.statusChecks.length > 0) {
+    let q = supabase.from('lead_status').select('lead_id')
+    for (const check of filters.statusChecks) {
+      if (!(check.field in STATUS_FIELDS)) continue
+      q = q.eq(check.field, Boolean(check.value))
+    }
+    const { data, error } = await q
+    if (error) throw new HttpError(500, error.message)
+    intersect((data ?? []).map((r: any) => r.lead_id))
+  }
+
+  if (filters.tagIds && filters.tagIds.length > 0) {
+    const { data, error } = await supabase.from('lead_tags').select('lead_id').in('tag_id', filters.tagIds)
+    if (error) throw new HttpError(500, error.message)
+    intersect([...new Set((data ?? []).map((r: any) => r.lead_id))])
+  }
+
+  if (filters.hasSocialProfile) {
+    const { data, error } = await supabase.from('lead_social_profiles').select('lead_id')
+    if (error) throw new HttpError(500, error.message)
+    intersect([...new Set((data ?? []).map((r: any) => r.lead_id))])
+  }
+
+  return result
+}
+
+export function applyColumnFilters<T extends { eq: any; not: any; gte: any; lte: any; or: any }>(
+  query: T,
+  filters: LeadFilters,
+  search: string
+): T {
+  let q = query
+  if (search) {
+    const like = `%${search}%`
+    q = q.or(
+      `company_name.ilike.${like},phone.ilike.${like},email.ilike.${like},address.ilike.${like}`
+    )
+  }
+  if (filters.priority) q = q.eq('priority', filters.priority)
+  if (filters.leadSource) q = q.eq('lead_source', filters.leadSource)
+  if (filters.dateFrom) q = q.gte('created_at', filters.dateFrom)
+  if (filters.dateTo) q = q.lte('created_at', filters.dateTo)
+  if (filters.hasWebsite) {
+    q = q.not('website', 'is', null).not('website', 'eq', '')
+  }
+  return q
 }
 
 export async function listLeads(event: HandlerEvent) {
@@ -32,15 +119,16 @@ export async function listLeads(event: HandlerEvent) {
     ? params.sortBy!
     : 'created_at'
   const sortOrder = params.sortOrder === 'asc' ? true : false
+  const filters = parseFilters(params)
+
+  const allowedIds = await resolveJoinFilteredIds(filters)
+  if (allowedIds !== null && allowedIds.size === 0) {
+    return json(200, { leads: [], page, pageSize, total: 0 })
+  }
 
   let query = supabase.from('leads').select(LEAD_SELECT, { count: 'exact' })
-
-  if (search) {
-    const like = `%${search}%`
-    query = query.or(
-      `company_name.ilike.${like},phone.ilike.${like},email.ilike.${like},address.ilike.${like}`
-    )
-  }
+  query = applyColumnFilters(query as any, filters, search) as any
+  if (allowedIds !== null) query = query.in('id', [...allowedIds])
 
   const from = (page - 1) * pageSize
   const to = from + pageSize - 1
@@ -86,31 +174,7 @@ export async function checkDuplicate(event: HandlerEvent) {
 
 async function replaceTags(leadId: string, tagNames: string[]) {
   const supabase = getSupabaseAdmin()
-  const cleanNames = [...new Set(tagNames.map((t) => t.trim()).filter(Boolean))]
-
-  let tagIds: string[] = []
-  if (cleanNames.length > 0) {
-    const { data: existing, error: existErr } = await supabase
-      .from('tags')
-      .select('id, name')
-      .in('name', cleanNames)
-    if (existErr) throw new HttpError(500, existErr.message)
-
-    const existingNames = new Set((existing ?? []).map((t) => t.name))
-    const toCreate = cleanNames.filter((n) => !existingNames.has(n))
-
-    let created: any[] = []
-    if (toCreate.length > 0) {
-      const { data: createdRows, error: createErr } = await supabase
-        .from('tags')
-        .insert(toCreate.map((name) => ({ name })))
-        .select('id, name')
-      if (createErr) throw new HttpError(500, createErr.message)
-      created = createdRows ?? []
-    }
-
-    tagIds = [...(existing ?? []), ...created].map((t) => t.id)
-  }
+  const tagIds = (await ensureTagIds(tagNames)).map((t) => t.id)
 
   const { error: delErr } = await supabase.from('lead_tags').delete().eq('lead_id', leadId)
   if (delErr) throw new HttpError(500, delErr.message)
@@ -214,7 +278,7 @@ export async function deleteLead(id: string) {
   return json(200, { success: true })
 }
 
-const STATUS_FIELDS: Record<string, { flagField: string; tsField: string }> = {
+export const STATUS_FIELDS: Record<string, { flagField: string; tsField: string }> = {
   cold_email_sent: { flagField: 'cold_email_sent', tsField: 'cold_email_sent_at' },
   followup1_sent: { flagField: 'followup1_sent', tsField: 'followup1_sent_at' },
   followup2_sent: { flagField: 'followup2_sent', tsField: 'followup2_sent_at' },
@@ -260,4 +324,64 @@ export async function updateLeadStatus(id: string, event: HandlerEvent) {
 
   if (error) throw new HttpError(500, error.message)
   return json(200, data)
+}
+
+const MAX_BULK_IDS = 500
+
+function requireIds(body: any): string[] {
+  const ids = body.ids
+  if (!Array.isArray(ids) || ids.length === 0) {
+    throw new HttpError(400, 'ids must be a non-empty array')
+  }
+  if (ids.length > MAX_BULK_IDS) {
+    throw new HttpError(400, `Cannot operate on more than ${MAX_BULK_IDS} leads at once`)
+  }
+  return ids
+}
+
+export async function bulkAction(event: HandlerEvent) {
+  const supabase = getSupabaseAdmin()
+  const body = JSON.parse(event.body || '{}')
+  const type = body.type
+
+  if (type === 'status') {
+    const ids = requireIds(body)
+    const { field, value } = body
+    if (!(field in STATUS_FIELDS)) throw new HttpError(400, `Unknown status field: ${field}`)
+    const { tsField, flagField } = STATUS_FIELDS[field]
+    const boolValue = Boolean(value)
+
+    const { error } = await supabase
+      .from('lead_status')
+      .update({ [flagField]: boolValue, [tsField]: boolValue ? new Date().toISOString() : null })
+      .in('lead_id', ids)
+
+    if (error) throw new HttpError(500, error.message)
+    return json(200, { success: true, updated: ids.length })
+  }
+
+  if (type === 'tags') {
+    const ids = requireIds(body)
+    const tagNames = (body.tagNames ?? []) as string[]
+    if (tagNames.filter((t) => t.trim()).length === 0) {
+      throw new HttpError(400, 'tagNames must be a non-empty array')
+    }
+
+    const tagIds = (await ensureTagIds(tagNames)).map((t) => t.id)
+    const rows = ids.flatMap((lead_id) => tagIds.map((tag_id) => ({ lead_id, tag_id })))
+
+    const { error: insErr } = await supabase.from('lead_tags').upsert(rows, { onConflict: 'lead_id,tag_id' })
+    if (insErr) throw new HttpError(500, insErr.message)
+
+    return json(200, { success: true, updated: ids.length })
+  }
+
+  if (type === 'delete') {
+    const ids = requireIds(body)
+    const { error } = await supabase.from('leads').delete().in('id', ids)
+    if (error) throw new HttpError(500, error.message)
+    return json(200, { success: true, deleted: ids.length })
+  }
+
+  throw new HttpError(400, `Unknown bulk action type: ${type}`)
 }

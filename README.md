@@ -1,6 +1,9 @@
-# Leads CRM — Phase 1
+# Leads CRM
 
 A private, single-admin lead tracking system for outbound sales (cold email, WhatsApp, and multi-channel outreach). Built as a JAMstack app for Netlify: static React frontend + Netlify Functions API + Supabase (Postgres, Auth, Storage).
+
+**Phase 1**: auth, lead data model, outreach status toggles, basic list/detail views.
+**Phase 2** (this update): advanced filtering, bulk actions, CSV/Google Sheets import, CSV export, and a full analytics dashboard.
 
 ## Stack
 
@@ -14,14 +17,15 @@ A private, single-admin lead tracking system for outbound sales (cold email, Wha
 ```
 netlify/functions/       Serverless API (auth-checked, uses the Supabase service-role key)
   api.ts                 Single router entry point (/api/*)
-  lib/                   auth verification, supabase admin client, http helpers
-  routes/                leads, tags, attachments route handlers
+  lib/                   auth verification, supabase admin client, http helpers, tag resolution
+  routes/                leads (incl. filters/bulk), tags, attachments, importExport, dashboard
 src/
   pages/                 Login, Dashboard, Leads (list/detail/form), Settings
-  components/            Layout, shared UI (Badge, Toggle, Modal), StatusPanel, AttachmentsPanel
+  components/            Layout, shared UI (Badge, Toggle, Modal), StatusPanel, AttachmentsPanel,
+                         FiltersBar, BulkActionsBar, ImportModal, charts/ (StatTile, Funnel, Trend, Donut)
   contexts/AuthContext   Supabase session state
-  lib/                   supabase client (frontend), api client (calls /api/*)
-  types/lead.ts          Shared Lead/Status/Tag/Attachment types
+  lib/                   supabase client, api client (calls /api/*), chartColors
+  types/lead.ts          Shared Lead/Status/Tag/Attachment/Filters/DashboardSummary types
 supabase/schema.sql       Full DB schema, RLS policies, storage bucket setup
 scripts/seed-admin.mjs    One-time script to create the single admin user
 ```
@@ -73,8 +77,17 @@ scripts/seed-admin.mjs    One-time script to create the single admin user
 - Attachments store only metadata in Postgres (`lead_attachments`); the actual files live in the private `lead-attachments` Supabase Storage bucket, accessed only via short-lived signed URLs minted by the functions layer.
 - Duplicate detection (`POST /api/leads/check-duplicate`) is a warn-only check against company name / phone / email — it does not block saving, matching the spec.
 
+## Phase 2 additions
+
+- **Filters** (`GET /api/leads?filters=<json>`): priority, lead source, tags, any outreach status toggle, date-added range, has-website, has-social-profile. Join-based filters (status/tags/social profiles) resolve to a set of matching lead ids first, then intersect with the main query — this avoids PostgREST's embedded-resource filter quirks (see `resolveJoinFilteredIds` in `routes/leads.ts`).
+- **Bulk actions** (`POST /api/leads/bulk`, capped at 500 ids per call): mark a status field for many leads at once, add tags to many leads, or delete many leads.
+- **CSV import** (`POST /api/leads/import`): rows are parsed client-side (Papaparse) and sent in batches of 400 to stay within function payload/time limits.
+- **Google Sheets import** (`POST /api/leads/import/sheet`): the function fetches the sheet's CSV export server-side (sheet must be shared "Anyone with the link can view") and parses it with Papaparse. Capped at 500 rows per sheet — split larger sheets.
+- **CSV export** (`GET /api/leads/export`): respects the same `filters`/`search` params as the list view; fetches up to 5,000 matching rows in chunks of 1,000 and streams back a CSV.
+- **Dashboard** (`GET /api/dashboard/summary?granularity=day|week|month`): pulls all leads with their status once and aggregates outreach counts/percentages, reply sentiment, conversion rate, an outreach funnel, lead source/priority/status distributions, and a trend series in JS. Capped at 20,000 leads — fine for a single-admin CRM, but would need a real SQL aggregation (or a materialized view) well before that.
+- **Chart colors** (`src/lib/chartColors.ts`): a validated categorical palette (dataviz skill's `validate_palette.js`, dark mode) for lead-source distribution; status/priority/sentiment charts reuse the same tones as their Part 1 badges so a color's meaning never changes between a table badge and a chart slice.
+
 ## What's intentionally deferred to later phases
 
-- Dashboard analytics, Kanban board, reminders/templates, lead scoring
-- Advanced filtering, bulk actions, CSV/Sheets import
+- Kanban board, reminders/templates, lead scoring
 - Multi-user roles/permissions (schema already supports adding this)

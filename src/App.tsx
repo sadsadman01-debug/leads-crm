@@ -1,12 +1,19 @@
+import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { AppLayout } from '@/components/Layout/AppLayout'
 import { Login } from '@/pages/Login'
-import { Dashboard } from '@/pages/Dashboard'
 import { LeadsList } from '@/pages/Leads/LeadsList'
 import { LeadForm } from '@/pages/Leads/LeadForm'
 import { LeadDetail } from '@/pages/Leads/LeadDetail'
 import { Settings } from '@/pages/Settings'
+
+// Charting (recharts) is only needed here — code-split so it doesn't bloat every route.
+const Dashboard = lazy(() => import('@/pages/Dashboard').then((m) => ({ default: m.Dashboard })))
+
+function PageFallback() {
+  return <div className="p-12 text-center text-base-400">Loading…</div>
+}
 
 export default function App() {
   return (
@@ -16,7 +23,14 @@ export default function App() {
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
           <Route path="/" element={<Navigate to="/leads" replace />} />
-          <Route path="/dashboard" element={<Dashboard />} />
+          <Route
+            path="/dashboard"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <Dashboard />
+              </Suspense>
+            }
+          />
           <Route path="/leads" element={<LeadsList />} />
           <Route path="/leads/new" element={<LeadForm />} />
           <Route path="/leads/:id" element={<LeadDetail />} />

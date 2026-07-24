@@ -98,3 +98,51 @@ export interface LeadFormInput {
   tags: string[]
   social_profiles: SocialProfile[]
 }
+
+export const STATUS_TOGGLE_FIELDS: Array<{ field: keyof LeadStatus; label: string }> = [
+  { field: 'cold_email_sent', label: 'Cold Email Sent' },
+  { field: 'followup1_sent', label: '1st Follow-up Sent' },
+  { field: 'followup2_sent', label: '2nd Follow-up Sent' },
+  { field: 'followup3_sent', label: '3rd Follow-up Sent' },
+  { field: 'replied', label: 'Replied' },
+  { field: 'whatsapp_sent', label: 'WhatsApp Sent' },
+  { field: 'no_whatsapp', label: 'No WhatsApp Available' },
+  { field: 'email_invalid', label: 'Email Invalid' },
+  { field: 'phone_invalid', label: 'Phone Invalid' },
+  { field: 'converted', label: 'Converted to Client' },
+  { field: 'linkedin_sent', label: 'LinkedIn Sent' },
+  { field: 'sms_sent', label: 'SMS Sent' },
+  { field: 'cold_call_made', label: 'Cold Call Made' },
+]
+
+export interface LeadFilters {
+  priority?: Priority
+  leadSource?: LeadSource
+  tagIds?: string[]
+  statusChecks?: Array<{ field: string; value: boolean }>
+  dateFrom?: string
+  dateTo?: string
+  hasWebsite?: boolean
+  hasSocialProfile?: boolean
+}
+
+export interface DashboardSummary {
+  totals: { leads: number }
+  outreach: Record<string, { count: number; pct: number }>
+  replies: {
+    total: number
+    rate: number
+    sentiment: Record<ReplySentiment, number>
+  }
+  conversion: { count: number; rate: number }
+  funnel: Array<{ stage: string; count: number }>
+  distributions: {
+    leadSource: Array<{ label: string; count: number }>
+    priority: Array<{ label: string; count: number }>
+    status: Array<{ label: string; count: number }>
+  }
+  trend: {
+    granularity: 'day' | 'week' | 'month'
+    points: Array<{ date: string; leadsAdded: number; emailsSent: number }>
+  }
+}
