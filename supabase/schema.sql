@@ -406,6 +406,10 @@ create table if not exists public.deals (
   owner_id uuid references public.profiles(id) on delete set null,
   notes text,
   organization_id uuid references public.organizations(id) on delete cascade,
+  -- Locked-in exchange rates at the moment this deal closed, so historical
+  -- revenue reporting never silently shifts as live rates fluctuate. Null
+  -- while the deal is still open.
+  closed_exchange_rate_snapshot jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -618,6 +622,23 @@ end $$;
 -- writes to those go through the service-role key inside Netlify Functions,
 -- which independently re-checks the parent lead's organization/permission
 -- before writing.
+
+-- ----------------------------------------------------------------------------
+-- exchange_rates: platform-wide (not organization-scoped) cache of the free
+-- ExchangeRate-API open endpoint, refreshed by a Netlify Function whenever
+-- stale (>~20h old). Always exactly one row (id = 1).
+-- ----------------------------------------------------------------------------
+create table if not exists public.exchange_rates (
+  id smallint primary key default 1 check (id = 1),
+  base_currency text not null default 'USD',
+  rates jsonb not null default '{}'::jsonb,
+  fetched_at timestamptz not null default now()
+);
+
+alter table public.exchange_rates enable row level security;
+create policy "authenticated users can read exchange_rates"
+  on public.exchange_rates for select using (auth.role() = 'authenticated');
+-- No write policy: only the service-role key (inside the Netlify Function) ever writes this table.
 
 -- ============================================================================
 -- Storage bucket for note attachments (screenshots, PDFs, etc.)

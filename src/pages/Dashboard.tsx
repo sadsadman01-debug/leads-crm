@@ -42,6 +42,7 @@ export function Dashboard() {
   const [industryId, setIndustryId] = useState('')
   const [assignedTo, setAssignedTo] = useState('')
   const [closedRange, setClosedRange] = useState<RevenueSummary['closedRange']>('all')
+  const [displayCurrency, setDisplayCurrency] = useState('')
   const [accessDeniedDismissed, setAccessDeniedDismissed] = useState(false)
 
   // Users are always auto-scoped to their own stats; the selector is admin/super-admin only.
@@ -53,13 +54,14 @@ export function Dashboard() {
     placeholderData: (prev) => prev,
   })
 
+  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: settingsApi.get })
+  const effectiveDisplayCurrency = displayCurrency || settings?.default_currency || 'USD'
+
   const { data: revenue } = useQuery({
-    queryKey: ['revenue-summary', closedRange, industryId, effectiveAssignedTo],
-    queryFn: () => revenueApi.summary(closedRange, industryId || undefined, effectiveAssignedTo),
+    queryKey: ['revenue-summary', closedRange, industryId, effectiveAssignedTo, effectiveDisplayCurrency],
+    queryFn: () => revenueApi.summary(closedRange, industryId || undefined, effectiveAssignedTo, effectiveDisplayCurrency),
     placeholderData: (prev) => prev,
   })
-
-  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: settingsApi.get })
 
   const { data: industriesData } = useQuery({ queryKey: ['industries'], queryFn: industriesApi.list })
   const industries = industriesData?.industries ?? []
@@ -273,9 +275,10 @@ export function Dashboard() {
         {revenue && (
           <RevenueSection
             revenue={revenue}
-            currency={settings?.default_currency ?? 'USD'}
             closedRange={closedRange}
             onClosedRangeChange={setClosedRange}
+            displayCurrency={effectiveDisplayCurrency}
+            onDisplayCurrencyChange={setDisplayCurrency}
           />
         )}
       </div>

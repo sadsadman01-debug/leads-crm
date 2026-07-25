@@ -5,7 +5,7 @@ import { Modal } from '@/components/ui/Modal'
 import { dealsApi, leadsApi, settingsApi, teamApi } from '@/lib/api'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { useAuth, isAdminOrAbove } from '@/contexts/AuthContext'
-import { CURRENCIES } from '@/types/deal'
+import { CURRENCIES, currencyLabel } from '@/types/deal'
 import type { Deal } from '@/types/deal'
 
 interface DealFormState {
@@ -199,7 +199,7 @@ export function DealForm({
             <label className="label">Currency</label>
             <select className="input" value={form.currency} onChange={(e) => set('currency', e.target.value)}>
               {CURRENCIES.map((c) => (
-                <option key={c} value={c}>{c}</option>
+                <option key={c} value={c}>{currencyLabel(c)}</option>
               ))}
             </select>
           </div>

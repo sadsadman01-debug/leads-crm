@@ -2,6 +2,7 @@ import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
 import { logActivity } from '../lib/activities.js'
+import { getOrRefreshRates } from '../lib/exchangeRates.js'
 import type { AuthedUser } from '../lib/auth.js'
 import { requireCanModifyRecord, isAdminOrAbove, resolveOrganizationId, scopeToOrg } from '../lib/permissions.js'
 
@@ -241,9 +242,13 @@ export async function updateDealStage(id: string, event: HandlerEvent, user: Aut
   if (stage.is_closed) {
     update.outcome_reason = body.outcome_reason.trim()
     update.actual_close_date = body.actual_close_date || new Date().toISOString().slice(0, 10)
+    // Lock in the exchange rates at the moment of closing so historical revenue
+    // reporting never silently shifts as live rates fluctuate later.
+    update.closed_exchange_rate_snapshot = await getOrRefreshRates()
   } else {
     update.outcome_reason = null
     update.actual_close_date = null
+    update.closed_exchange_rate_snapshot = null
   }
 
   const { error } = await supabase.from('deals').update(update).eq('id', id)

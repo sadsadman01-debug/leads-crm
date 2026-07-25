@@ -374,10 +374,16 @@ export const dealsApi = {
 }
 
 export const revenueApi = {
-  summary: (closedRange: 'all' | 'month' | 'quarter' | 'year' = 'all', industryId?: string, assignedTo?: string) => {
+  summary: (
+    closedRange: 'all' | 'month' | 'quarter' | 'year' = 'all',
+    industryId?: string,
+    assignedTo?: string,
+    displayCurrency?: string
+  ) => {
     const qs = new URLSearchParams({ closedRange })
     if (industryId) qs.set('industryId', industryId)
     if (assignedTo) qs.set('assignedTo', assignedTo)
+    if (displayCurrency) qs.set('displayCurrency', displayCurrency)
     return request<RevenueSummary>(`/revenue/summary?${qs.toString()}`)
   },
 }

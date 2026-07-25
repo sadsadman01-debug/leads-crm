@@ -4,7 +4,10 @@ import { HttpError, json } from '../lib/http.js'
 import { requireAdminOrAbove, resolveOrganizationId } from '../lib/permissions.js'
 import type { AuthedUser } from '../lib/auth.js'
 
-const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'INR']
+const CURRENCIES = [
+  'USD', 'BDT', 'EUR', 'GBP', 'INR', 'AUD', 'CAD', 'AED', 'SGD',
+  'JPY', 'CNY', 'CHF', 'NZD', 'ZAR', 'BRL',
+]
 const SETTINGS_COLUMNS = 'id, follow_up_interval_days, default_currency'
 
 /** Every organization (and the Super Admin's personal scope) gets its own

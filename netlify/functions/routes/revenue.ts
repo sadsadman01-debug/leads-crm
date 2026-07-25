@@ -2,6 +2,7 @@ import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
 import { isAdminOrAbove, resolveOrganizationId, scopeToOrg } from '../lib/permissions.js'
+import { getOrRefreshRates, convertAmount } from '../lib/exchangeRates.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const MAX_DEALS_FOR_AGGREGATION = 20000
@@ -26,10 +27,13 @@ function monthKey(d: Date): string {
 }
 
 /**
- * Sums are raw numeric totals across whatever currencies deals happen to use —
- * there's no FX conversion (no paid external API), so mixing currencies across
- * deals will produce a misleading total. Fine for the common single-currency
- * case; documented as a known limitation for multi-currency shops.
+ * All aggregate sums are converted into a single `displayCurrency` (the
+ * organization's default, or an explicit ?displayCurrency= override) using the
+ * cached ExchangeRate-API rates — see lib/exchangeRates.ts. Open deals convert
+ * at the latest live rate (their value isn't finalized yet); closed deals use
+ * the rate snapshot locked in at close time, so historical figures don't shift
+ * as live rates move. Individual deals always keep their own original
+ * currency/amount as the source of truth — conversion is a display-only layer.
  */
 export async function getRevenueSummary(event: HandlerEvent, user: AuthedUser) {
   const supabase = getSupabaseAdmin()
@@ -51,7 +55,7 @@ export async function getRevenueSummary(event: HandlerEvent, user: AuthedUser) {
 
   let dealsQuery = supabase
     .from('deals')
-    .select('id, name, value, currency, stage_id, probability, expected_close_date, actual_close_date, outcome_reason, created_at, lead_id, owner_id, leads ( company_name, industry_id )')
+    .select('id, name, value, currency, stage_id, probability, expected_close_date, actual_close_date, outcome_reason, created_at, lead_id, owner_id, closed_exchange_rate_snapshot, leads ( company_name, industry_id )')
     .order('created_at', { ascending: true })
     .limit(MAX_DEALS_FOR_AGGREGATION)
   dealsQuery = scopeToOrg(dealsQuery as any, orgId) as any
@@ -62,6 +66,24 @@ export async function getRevenueSummary(event: HandlerEvent, user: AuthedUser) {
   let deals = industryId ? allDeals.filter((d) => d.industry_id === industryId) : allDeals
   if (assignedTo) deals = deals.filter((d) => d.owner_id === assignedTo)
 
+  // Display currency: defaults to the organization's configured default, but can
+  // be overridden for instant view-only conversion of every aggregate figure.
+  let settingsQuery = supabase.from('app_settings').select('default_currency')
+  settingsQuery = scopeToOrg(settingsQuery as any, orgId) as any
+  const { data: orgSettings } = await settingsQuery.maybeSingle()
+  const displayCurrency = params.displayCurrency || orgSettings?.default_currency || 'USD'
+
+  const liveRates = await getOrRefreshRates()
+
+  // Open deals haven't closed yet, so their value isn't finalized — always
+  // convert using the latest live rate. Closed deals use the rate snapshot
+  // locked in at close time (falling back to live rates for deals closed
+  // before this feature existed, i.e. no snapshot stored).
+  function convertedValue(d: any): number {
+    const rates = d.closed_exchange_rate_snapshot?.rates ?? liveRates.rates
+    return convertAmount(Number(d.value), d.currency, displayCurrency, rates)
+  }
+
   const stageById = new Map((stages ?? []).map((s) => [s.id, s]))
   const stageOf = (d: any) => stageById.get(d.stage_id)
 
@@ -69,19 +91,19 @@ export async function getRevenueSummary(event: HandlerEvent, user: AuthedUser) {
   const closedWonDeals = deals.filter((d) => stageOf(d)?.is_won)
   const closedLostDeals = deals.filter((d) => stageOf(d)?.is_closed && !stageOf(d)?.is_won)
 
-  const openPipelineValue = openDeals.reduce((sum, d) => sum + Number(d.value), 0)
-  const weightedPipelineValue = openDeals.reduce((sum, d) => sum + Number(d.value) * (d.probability / 100), 0)
+  const openPipelineValue = openDeals.reduce((sum, d) => sum + convertedValue(d), 0)
+  const weightedPipelineValue = openDeals.reduce((sum, d) => sum + convertedValue(d) * (d.probability / 100), 0)
 
   const start = rangeStart(closedRange)
   const closedWonInRange = start
     ? closedWonDeals.filter((d) => d.actual_close_date && new Date(d.actual_close_date) >= start)
     : closedWonDeals
-  const closedWonRevenue = closedWonInRange.reduce((sum, d) => sum + Number(d.value), 0)
+  const closedWonRevenue = closedWonInRange.reduce((sum, d) => sum + convertedValue(d), 0)
 
-  const closedLostValue = closedLostDeals.reduce((sum, d) => sum + Number(d.value), 0)
+  const closedLostValue = closedLostDeals.reduce((sum, d) => sum + convertedValue(d), 0)
 
   const winRate = pct(closedWonDeals.length, closedWonDeals.length + closedLostDeals.length)
-  const avgDealSize = closedWonDeals.length > 0 ? closedWonRevenueAllTime(closedWonDeals) / closedWonDeals.length : 0
+  const avgDealSize = closedWonDeals.length > 0 ? closedWonDeals.reduce((sum, d) => sum + convertedValue(d), 0) / closedWonDeals.length : 0
 
   // Compare calendar days, not full timestamps — created_at has a time-of-day component
   // while actual_close_date is a bare date, so a same-day close would otherwise read as
@@ -103,7 +125,7 @@ export async function getRevenueSummary(event: HandlerEvent, user: AuthedUser) {
     return {
       stage: s.name,
       count: stageDeals.length,
-      value: stageDeals.reduce((sum, d) => sum + Number(d.value), 0),
+      value: stageDeals.reduce((sum, d) => sum + convertedValue(d), 0),
     }
   })
 
@@ -116,7 +138,7 @@ export async function getRevenueSummary(event: HandlerEvent, user: AuthedUser) {
   for (const d of closedWonDeals) {
     if (!d.actual_close_date) continue
     const key = monthKey(new Date(d.actual_close_date))
-    if (revenueByMonth.has(key)) revenueByMonth.set(key, (revenueByMonth.get(key) ?? 0) + Number(d.value))
+    if (revenueByMonth.has(key)) revenueByMonth.set(key, (revenueByMonth.get(key) ?? 0) + convertedValue(d))
   }
   const trend = trendMonths.map((month) => ({ month, revenue: revenueByMonth.get(month) ?? 0 }))
 
@@ -163,9 +185,7 @@ export async function getRevenueSummary(event: HandlerEvent, user: AuthedUser) {
     trend,
     lossReasonBreakdown,
     dealsClosingThisMonth,
+    displayCurrency,
+    ratesUpdatedAt: liveRates.fetchedAt,
   })
-}
-
-function closedWonRevenueAllTime(closedWonDeals: any[]): number {
-  return closedWonDeals.reduce((sum, d) => sum + Number(d.value), 0)
 }

@@ -64,8 +64,21 @@ export interface DealFilters {
   assignedTo?: string
 }
 
-export const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'INR'] as const
+export const CURRENCIES = [
+  'USD', 'BDT', 'EUR', 'GBP', 'INR', 'AUD', 'CAD', 'AED', 'SGD',
+  'JPY', 'CNY', 'CHF', 'NZD', 'ZAR', 'BRL',
+] as const
 export type Currency = (typeof CURRENCIES)[number]
+
+export const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: '$', BDT: '৳', EUR: '€', GBP: '£', INR: '₹', AUD: 'A$', CAD: 'C$',
+  AED: 'د.إ', SGD: 'S$', JPY: '¥', CNY: '¥', CHF: 'CHF', NZD: 'NZ$', ZAR: 'R', BRL: 'R$',
+}
+
+export function currencyLabel(code: string): string {
+  const symbol = CURRENCY_SYMBOLS[code]
+  return symbol ? `${code} (${symbol})` : code
+}
 
 export interface RevenueTotals {
   openPipelineValue: number
@@ -95,4 +108,6 @@ export interface RevenueSummary {
     expected_close_date: string
     is_overdue: boolean
   }>
+  displayCurrency: string
+  ratesUpdatedAt: string
 }

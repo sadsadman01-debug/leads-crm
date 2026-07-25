@@ -4,7 +4,13 @@ import { format, parseISO } from 'date-fns'
 import { formatCurrency } from '@/lib/currency'
 import type { RevenueSummary } from '@/types/deal'
 
-export function DealsClosingWidget({ deals }: { deals: RevenueSummary['dealsClosingThisMonth'] }) {
+export function DealsClosingWidget({
+  deals,
+  displayCurrency,
+}: {
+  deals: RevenueSummary['dealsClosingThisMonth']
+  displayCurrency?: string
+}) {
   const navigate = useNavigate()
   const overdueCount = deals.filter((d) => d.is_overdue).length
 
@@ -37,6 +43,14 @@ export function DealsClosingWidget({ deals }: { deals: RevenueSummary['dealsClos
               </div>
               <span className="flex shrink-0 items-center gap-2 pl-4 text-xs sm:pl-0">
                 <span className="font-semibold text-accent-400">{formatCurrency(Number(deal.value), deal.currency)}</span>
+                {displayCurrency && deal.currency !== displayCurrency && (
+                  <span
+                    className="pill bg-base-800 text-base-400"
+                    title={`Entered in ${deal.currency} — aggregate totals above are converted to ${displayCurrency}`}
+                  >
+                    {deal.currency}
+                  </span>
+                )}
                 <span className={deal.is_overdue ? 'text-danger' : 'text-base-400'}>
                   {deal.is_overdue ? 'Overdue since ' : ''}
                   {format(parseISO(deal.expected_close_date), 'MMM d')}
