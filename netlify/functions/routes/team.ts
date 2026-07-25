@@ -1,7 +1,7 @@
 import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
-import { requireAdminOrAbove, requireSuperAdmin, isSuperAdmin } from '../lib/permissions.js'
+import { requireAdminOrAbove, requireSuperAdmin, isSuperAdmin, resolveOrganizationId, scopeToOrg } from '../lib/permissions.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const PROFILE_COLUMNS = 'id, email, nickname, role, is_active, created_at'
@@ -12,36 +12,45 @@ const PROFILE_COLUMNS = 'id, email, nickname, role, is_active, created_at'
 const BAN_DURATION = '876000h'
 
 export async function getMyProfile(user: AuthedUser) {
+  let organizationName: string | null = null
+  if (user.organization_id) {
+    const supabase = getSupabaseAdmin()
+    const { data } = await supabase.from('organizations').select('name').eq('id', user.organization_id).maybeSingle()
+    organizationName = data?.name ?? null
+  }
+
   return json(200, {
     id: user.id,
     email: user.email,
     nickname: user.nickname,
     role: user.role,
     is_active: user.is_active,
+    organization_id: user.organization_id,
+    organization_name: organizationName,
   })
 }
 
 /** Lightweight roster for assignment dropdowns/filters — any authenticated
- * team member can see who exists, without the admin-only management fields. */
-export async function listRoster() {
+ * team member can see who exists in their own organization, without the
+ * admin-only management fields. Never includes the Super Admin. */
+export async function listRoster(event: HandlerEvent, user: AuthedUser) {
   const supabase = getSupabaseAdmin()
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('id, nickname, email')
-    .eq('is_active', true)
-    .order('nickname', { ascending: true })
+  const orgId = resolveOrganizationId(user, event)
+  let query = supabase.from('profiles').select('id, nickname, email').eq('is_active', true).neq('role', 'super_admin')
+  query = scopeToOrg(query as any, orgId) as any
+  const { data, error } = await query.order('nickname', { ascending: true })
   if (error) throw new HttpError(500, error.message)
   return json(200, { members: data ?? [] })
 }
 
-export async function listTeamMembers(user: AuthedUser) {
+export async function listTeamMembers(event: HandlerEvent, user: AuthedUser) {
   requireAdminOrAbove(user)
   const supabase = getSupabaseAdmin()
+  const orgId = resolveOrganizationId(user, event)
 
-  const { data: profiles, error } = await supabase
-    .from('profiles')
-    .select(PROFILE_COLUMNS)
-    .order('created_at', { ascending: true })
+  let query = supabase.from('profiles').select(PROFILE_COLUMNS).neq('role', 'super_admin')
+  query = scopeToOrg(query as any, orgId) as any
+  const { data: profiles, error } = await query.order('created_at', { ascending: true })
   if (error) throw new HttpError(500, error.message)
 
   const { data: authList, error: authErr } = await supabase.auth.admin.listUsers({ perPage: 1000 })
@@ -53,23 +62,24 @@ export async function listTeamMembers(user: AuthedUser) {
   })
 }
 
+/** Admins (and a Super Admin drilled into a specific organization) can create
+ * User accounts within that same organization. Creating Admin accounts is a
+ * separate flow (organizations.ts) that also spins up a new organization —
+ * this endpoint always forces role='user', never trusting the client. */
 export async function createTeamMember(event: HandlerEvent, user: AuthedUser) {
   requireAdminOrAbove(user)
   const supabase = getSupabaseAdmin()
+  const orgId = resolveOrganizationId(user, event)
+  if (orgId === null) throw new HttpError(400, 'Select an organization before adding a team member')
   const body = JSON.parse(event.body || '{}')
 
   const email = (body.email ?? '').trim()
   const password = body.password ?? ''
   const nickname = (body.nickname ?? '').trim()
-  let role = body.role === 'admin' ? 'admin' : 'user'
 
   if (!email) throw new HttpError(400, 'email is required')
   if (!password || password.length < 8) throw new HttpError(400, 'password must be at least 8 characters')
   if (!nickname) throw new HttpError(400, 'nickname is required')
-
-  // Admins may only create Users — an Admin-role request is silently downgraded
-  // rather than trusted, since role is re-checked server-side, never from the client.
-  if (!isSuperAdmin(user)) role = 'user'
 
   const { data: created, error: createErr } = await supabase.auth.admin.createUser({
     email,
@@ -80,7 +90,7 @@ export async function createTeamMember(event: HandlerEvent, user: AuthedUser) {
 
   const { data: profile, error: profileErr } = await supabase
     .from('profiles')
-    .update({ nickname, role })
+    .update({ nickname, role: 'user', organization_id: orgId })
     .eq('id', created.user.id)
     .select(PROFILE_COLUMNS)
     .single()
@@ -89,11 +99,12 @@ export async function createTeamMember(event: HandlerEvent, user: AuthedUser) {
   return json(201, profile)
 }
 
-async function getTargetProfile(id: string) {
+async function getTargetProfile(id: string, orgId: string | null) {
   const supabase = getSupabaseAdmin()
-  const { data, error } = await supabase.from('profiles').select(PROFILE_COLUMNS).eq('id', id).maybeSingle()
+  const { data, error } = await supabase.from('profiles').select(`${PROFILE_COLUMNS}, organization_id`).eq('id', id).maybeSingle()
   if (error) throw new HttpError(500, error.message)
   if (!data) throw new HttpError(404, 'Team member not found')
+  if (data.role === 'super_admin' || data.organization_id !== orgId) throw new HttpError(404, 'Team member not found')
   return data
 }
 
@@ -111,29 +122,25 @@ async function reassignRecords(fromId: string, toId: string | null) {
 export async function updateTeamMember(id: string, event: HandlerEvent, user: AuthedUser) {
   requireAdminOrAbove(user)
   const supabase = getSupabaseAdmin()
+  const orgId = resolveOrganizationId(user, event)
   const body = JSON.parse(event.body || '{}')
-  const target = await getTargetProfile(id)
+  const target = await getTargetProfile(id, orgId)
 
   if (target.role !== 'user' && !isSuperAdmin(user)) {
     throw new HttpError(403, 'Only a Super Admin can edit an Admin account')
-  }
-  if (target.role === 'super_admin') {
-    throw new HttpError(403, 'The Super Admin account cannot be edited here')
   }
   if (target.id === user.id) {
     throw new HttpError(400, 'Use your own account settings to edit yourself')
   }
 
+  // Role changes aren't supported here: each organization has exactly one Admin
+  // (its owner, set at organization-creation time) — promoting/demoting would
+  // either create a second Admin or leave the organization without one.
   const update: Record<string, any> = {}
   if ('nickname' in body) {
     const nickname = (body.nickname ?? '').trim()
     if (!nickname) throw new HttpError(400, 'nickname cannot be empty')
     update.nickname = nickname
-  }
-  if ('role' in body) {
-    if (!isSuperAdmin(user)) throw new HttpError(403, 'Only a Super Admin can change roles')
-    if (!['admin', 'user'].includes(body.role)) throw new HttpError(400, 'role must be "admin" or "user"')
-    update.role = body.role
   }
   if ('is_active' in body) {
     const isActive = Boolean(body.is_active)
@@ -168,10 +175,10 @@ export async function updateTeamMember(id: string, event: HandlerEvent, user: Au
 export async function deleteTeamMember(id: string, event: HandlerEvent, user: AuthedUser) {
   requireSuperAdmin(user)
   const supabase = getSupabaseAdmin()
+  const orgId = resolveOrganizationId(user, event)
   const body = JSON.parse(event.body || '{}')
-  const target = await getTargetProfile(id)
+  const target = await getTargetProfile(id, orgId)
 
-  if (target.role === 'super_admin') throw new HttpError(400, 'The Super Admin account cannot be deleted')
   if (target.id === user.id) throw new HttpError(400, 'You cannot delete your own account')
   if ((body.confirm ?? '').trim().toLowerCase() !== target.email.toLowerCase()) {
     throw new HttpError(400, 'Confirmation text does not match this member\'s email')

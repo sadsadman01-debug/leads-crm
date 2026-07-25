@@ -9,6 +9,7 @@ export interface AuthedUser {
   role: Role
   nickname: string | null
   is_active: boolean
+  organization_id: string | null
 }
 
 /**
@@ -33,7 +34,7 @@ export async function requireUser(event: HandlerEvent): Promise<AuthedUser> {
 
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('role, nickname, is_active')
+    .select('role, nickname, is_active, organization_id')
     .eq('id', data.user.id)
     .single()
 
@@ -50,6 +51,7 @@ export async function requireUser(event: HandlerEvent): Promise<AuthedUser> {
     role: profile.role,
     nickname: profile.nickname,
     is_active: profile.is_active,
+    organization_id: profile.organization_id,
   }
 }
 

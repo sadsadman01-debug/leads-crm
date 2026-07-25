@@ -23,6 +23,8 @@ import type {
   WinLossReason,
 } from '@/types/deal'
 import type { TeamMember, Role } from '@/types/team'
+import type { Organization, OrganizationSummary } from '@/types/organization'
+import { withOrgScope } from './orgScope'
 
 class ApiError extends Error {
   status: number
@@ -46,7 +48,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     ...(options.headers ?? {}),
   }
 
-  const res = await fetch(`/api${path}`, { ...options, headers })
+  const res = await fetch(`/api${withOrgScope(path)}`, { ...options, headers })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new ApiError(res.status, body.error ?? `Request failed with status ${res.status}`)
@@ -168,7 +170,7 @@ export const exportApi = {
       qs.set('filters', JSON.stringify(params.filters))
     }
 
-    const res = await fetch(`/api/leads/export?${qs.toString()}`, { headers: await authHeader() })
+    const res = await fetch(`/api${withOrgScope(`/leads/export?${qs.toString()}`)}`, { headers: await authHeader() })
     if (!res.ok) throw new ApiError(res.status, 'Failed to export leads')
 
     const blob = await res.blob()
@@ -192,10 +194,34 @@ export const dashboardApi = {
   },
 }
 
+export const organizationsApi = {
+  list: () => request<{ organizations: OrganizationSummary[] }>('/organizations'),
+
+  get: (id: string) => request<Organization>(`/organizations/${id}`),
+
+  create: (payload: { organizationName: string; email: string; password: string; nickname: string }) =>
+    request<{ organization: Organization; admin: { id: string; email: string; nickname: string } }>('/organizations', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  updateStatus: (id: string, status: 'active' | 'suspended') =>
+    request<Organization>(`/organizations/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+
+  remove: (id: string, confirm: string) =>
+    request<{ success: true }>(`/organizations/${id}`, { method: 'DELETE', body: JSON.stringify({ confirm }) }),
+}
+
 export const teamApi = {
-  me: () => request<{ id: string; email: string; nickname: string | null; role: Role; is_active: boolean }>(
-    '/team-members/me'
-  ),
+  me: () => request<{
+    id: string
+    email: string
+    nickname: string | null
+    role: Role
+    is_active: boolean
+    organization_id: string | null
+    organization_name: string | null
+  }>('/team-members/me'),
 
   roster: () => request<{ members: Array<{ id: string; nickname: string | null; email: string }> }>(
     '/team-members/roster'

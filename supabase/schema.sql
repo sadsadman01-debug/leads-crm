@@ -6,6 +6,19 @@
 create extension if not exists "pgcrypto";
 
 -- ----------------------------------------------------------------------------
+-- organizations: one row per tenant/customer. The Super Admin belongs to none
+-- (their own leads/deals/settings use organization_id = null instead).
+-- Created before `profiles` for the FK below.
+-- ----------------------------------------------------------------------------
+create table if not exists public.organizations (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  created_by uuid,
+  status text not null default 'active' check (status in ('active', 'suspended')),
+  created_at timestamptz not null default now()
+);
+
+-- ----------------------------------------------------------------------------
 -- profiles: mirrors auth.users. Kept separate (rather than hardcoding a single
 -- admin id everywhere) so a future phase can add roles / multiple team members
 -- without a schema migration on leads.
@@ -17,8 +30,12 @@ create table if not exists public.profiles (
   nickname text,
   role text not null default 'user' check (role in ('super_admin', 'admin', 'user')),
   is_active boolean not null default true,
+  organization_id uuid references public.organizations(id) on delete cascade,
   created_at timestamptz not null default now()
 );
+
+alter table public.organizations add constraint organizations_created_by_fkey
+  foreign key (created_by) references public.profiles(id) on delete set null;
 
 -- Auto-create a profile row whenever a new auth user is created. New accounts
 -- default to 'user' — the Team Management "add member" function immediately
@@ -47,10 +64,11 @@ create table if not exists public.pipeline_stages (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   position int not null,
+  organization_id uuid references public.organizations(id) on delete cascade,
   created_at timestamptz not null default now()
 );
 
-create unique index if not exists pipeline_stages_position_idx on public.pipeline_stages (position);
+create unique index if not exists pipeline_stages_org_position_idx on public.pipeline_stages (organization_id, position);
 
 insert into public.pipeline_stages (name, position)
 select name, position from (
@@ -70,9 +88,12 @@ where not exists (select 1 from public.pipeline_stages);
 -- ----------------------------------------------------------------------------
 create table if not exists public.industries (
   id uuid primary key default gen_random_uuid(),
-  name text not null unique,
+  name text not null,
+  organization_id uuid references public.organizations(id) on delete cascade,
   created_at timestamptz not null default now()
 );
+
+create unique index if not exists industries_org_name_unique on public.industries (organization_id, name);
 
 -- ----------------------------------------------------------------------------
 -- leads
@@ -92,12 +113,14 @@ create table if not exists public.leads (
   industry_id uuid references public.industries(id) on delete set null,
   created_by uuid references public.profiles(id) on delete set null,
   assigned_to uuid references public.profiles(id) on delete set null,
+  organization_id uuid references public.organizations(id) on delete cascade,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 create index if not exists leads_industry_id_idx on public.leads (industry_id);
 create index if not exists leads_assigned_to_idx on public.leads (assigned_to);
+create index if not exists leads_organization_id_idx on public.leads (organization_id);
 
 create index if not exists leads_company_name_idx on public.leads using gin (to_tsvector('simple', company_name));
 create index if not exists leads_phone_idx on public.leads (phone);
@@ -151,9 +174,12 @@ create index if not exists lead_social_profiles_lead_id_idx on public.lead_socia
 -- ----------------------------------------------------------------------------
 create table if not exists public.tags (
   id uuid primary key default gen_random_uuid(),
-  name text not null unique,
+  name text not null,
+  organization_id uuid references public.organizations(id) on delete cascade,
   created_at timestamptz not null default now()
 );
+
+create unique index if not exists tags_org_name_unique on public.tags (organization_id, name);
 
 create table if not exists public.lead_tags (
   lead_id uuid not null references public.leads(id) on delete cascade,
@@ -251,17 +277,21 @@ create trigger on_lead_created
   for each row execute procedure public.handle_new_lead();
 
 -- ----------------------------------------------------------------------------
--- app_settings: singleton row (id is always 1) for app-wide configuration,
--- e.g. the follow-up reminder interval.
+-- app_settings: one row per organization, plus one row (organization_id null)
+-- for the Super Admin's personal scope — created on first access, not seeded here.
 -- ----------------------------------------------------------------------------
+create sequence if not exists app_settings_id_seq;
+
 create table if not exists public.app_settings (
-  id smallint primary key default 1 check (id = 1),
+  id integer primary key default nextval('app_settings_id_seq'),
+  organization_id uuid references public.organizations(id) on delete cascade,
   follow_up_interval_days int not null default 3 check (follow_up_interval_days > 0),
   default_currency text not null default 'USD',
   updated_at timestamptz not null default now()
 );
 
-insert into public.app_settings (id) values (1) on conflict (id) do nothing;
+create unique index if not exists app_settings_org_unique on public.app_settings (organization_id) where organization_id is not null;
+create unique index if not exists app_settings_personal_unique on public.app_settings ((organization_id is null)) where organization_id is null;
 
 drop trigger if exists app_settings_set_updated_at on public.app_settings;
 create trigger app_settings_set_updated_at
@@ -277,9 +307,12 @@ create table if not exists public.templates (
   name text not null,
   subject text not null default '',
   body text not null default '',
+  organization_id uuid references public.organizations(id) on delete cascade,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+create index if not exists templates_organization_id_idx on public.templates (organization_id);
 
 drop trigger if exists templates_set_updated_at on public.templates;
 create trigger templates_set_updated_at
@@ -313,10 +346,11 @@ create table if not exists public.deal_stages (
   default_probability int not null default 0 check (default_probability between 0 and 100),
   is_closed boolean not null default false,
   is_won boolean not null default false,
+  organization_id uuid references public.organizations(id) on delete cascade,
   created_at timestamptz not null default now()
 );
 
-create unique index if not exists deal_stages_position_idx on public.deal_stages (position);
+create unique index if not exists deal_stages_org_position_idx on public.deal_stages (organization_id, position);
 
 insert into public.deal_stages (name, position, default_probability, is_closed, is_won)
 select name, position, default_probability, is_closed, is_won from (
@@ -336,9 +370,12 @@ where not exists (select 1 from public.deal_stages);
 -- ----------------------------------------------------------------------------
 create table if not exists public.win_loss_reasons (
   id uuid primary key default gen_random_uuid(),
-  label text not null unique,
+  label text not null,
+  organization_id uuid references public.organizations(id) on delete cascade,
   created_at timestamptz not null default now()
 );
+
+create unique index if not exists win_loss_reasons_org_label_unique on public.win_loss_reasons (organization_id, label);
 
 insert into public.win_loss_reasons (label)
 select label from (
@@ -368,6 +405,7 @@ create table if not exists public.deals (
   outcome_reason text,
   owner_id uuid references public.profiles(id) on delete set null,
   notes text,
+  organization_id uuid references public.organizations(id) on delete cascade,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -376,6 +414,7 @@ create index if not exists deals_lead_id_idx on public.deals (lead_id);
 create index if not exists deals_stage_id_idx on public.deals (stage_id);
 create index if not exists deals_expected_close_date_idx on public.deals (expected_close_date);
 create index if not exists deals_owner_id_idx on public.deals (owner_id);
+create index if not exists deals_organization_id_idx on public.deals (organization_id);
 
 drop trigger if exists deals_set_updated_at on public.deals;
 create trigger deals_set_updated_at
@@ -428,44 +467,10 @@ alter table public.lead_activities enable row level security;
 alter table public.deal_stages enable row level security;
 alter table public.win_loss_reasons enable row level security;
 alter table public.deals enable row level security;
+alter table public.organizations enable row level security;
 
--- Every authenticated team member can read the full roster (needed to show
--- nicknames/roles/avatars on leads, deals, and the activity timeline).
-create policy "authenticated users can read profiles"
-  on public.profiles for select
-  using (auth.role() = 'authenticated');
-
-create policy "authenticated users can read leads"
-  on public.leads for select using (auth.role() = 'authenticated');
-create policy "authenticated users can read social profiles"
-  on public.lead_social_profiles for select using (auth.role() = 'authenticated');
-create policy "authenticated users can read tags"
-  on public.tags for select using (auth.role() = 'authenticated');
-create policy "authenticated users can read lead_tags"
-  on public.lead_tags for select using (auth.role() = 'authenticated');
-create policy "authenticated users can read attachments"
-  on public.lead_attachments for select using (auth.role() = 'authenticated');
-create policy "authenticated users can read lead_status"
-  on public.lead_status for select using (auth.role() = 'authenticated');
-create policy "authenticated users can read pipeline_stages"
-  on public.pipeline_stages for select using (auth.role() = 'authenticated');
-create policy "authenticated users can read app_settings"
-  on public.app_settings for select using (auth.role() = 'authenticated');
-create policy "authenticated users can read industries"
-  on public.industries for select using (auth.role() = 'authenticated');
-create policy "authenticated users can read templates"
-  on public.templates for select using (auth.role() = 'authenticated');
-create policy "authenticated users can read lead_activities"
-  on public.lead_activities for select using (auth.role() = 'authenticated');
-create policy "authenticated users can read deal_stages"
-  on public.deal_stages for select using (auth.role() = 'authenticated');
-create policy "authenticated users can read win_loss_reasons"
-  on public.win_loss_reasons for select using (auth.role() = 'authenticated');
-create policy "authenticated users can read deals"
-  on public.deals for select using (auth.role() = 'authenticated');
-
--- Role-check helper functions, used by write policies below and re-checked
--- independently server-side by every sensitive Netlify Function.
+-- Role-check / org-check helper functions, used by policies below and
+-- re-checked independently server-side by every sensitive Netlify Function.
 create or replace function public.current_user_role()
 returns text
 language sql stable security definer set search_path = public
@@ -480,21 +485,113 @@ as $$
   select coalesce((select role from public.profiles where id = auth.uid()) in ('admin', 'super_admin'), false);
 $$;
 
--- leads/deals: anyone authenticated can insert; update/delete restricted to
--- admins/super admins or the record's assigned owner/creator.
-create policy "leads insert by authenticated" on public.leads for insert with check (auth.role() = 'authenticated');
-create policy "leads update by owner or admin" on public.leads for update
-  using (public.is_admin_or_above() or assigned_to = auth.uid() or created_by = auth.uid());
-create policy "leads delete by owner or admin" on public.leads for delete
-  using (public.is_admin_or_above() or assigned_to = auth.uid() or created_by = auth.uid());
+create or replace function public.current_org_id()
+returns uuid
+language sql stable security definer set search_path = public
+as $$
+  select organization_id from public.profiles where id = auth.uid();
+$$;
 
-create policy "deals insert by authenticated" on public.deals for insert with check (auth.role() = 'authenticated');
-create policy "deals update by owner or admin" on public.deals for update
-  using (public.is_admin_or_above() or owner_id = auth.uid());
-create policy "deals delete by owner or admin" on public.deals for delete
-  using (public.is_admin_or_above() or owner_id = auth.uid());
+create or replace function public.is_super_admin()
+returns boolean
+language sql stable security definer set search_path = public
+as $$
+  select coalesce((select role from public.profiles where id = auth.uid()) = 'super_admin', false);
+$$;
 
--- Settings-type tables: readable by everyone (above), writable only by admins/super admins.
+-- organizations: only the Super Admin can read/write it.
+create policy "organizations super admin only"
+  on public.organizations for all
+  using (public.is_super_admin())
+  with check (public.is_super_admin());
+
+-- profiles: scoped to own organization; Super Admin sees everyone; everyone
+-- can always read their own row (needed for login/profile checks).
+create policy "profiles select scoped"
+  on public.profiles for select
+  using (
+    public.is_super_admin()
+    or id = auth.uid()
+    or (organization_id is not null and organization_id = public.current_org_id())
+  );
+
+-- Every org-scoped table: readable only within your own organization (Super Admin bypasses).
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['leads', 'deals', 'pipeline_stages', 'deal_stages', 'industries', 'templates', 'win_loss_reasons', 'tags', 'app_settings']
+  loop
+    execute format(
+      'create policy "%s select scoped" on public.%I for select using (public.is_super_admin() or organization_id = public.current_org_id())',
+      t, t
+    );
+  end loop;
+end $$;
+
+-- Lead-scoped sub-tables have no organization_id of their own — they inherit
+-- scope from their parent lead via a join.
+create policy "authenticated users can read social profiles"
+  on public.lead_social_profiles for select
+  using (exists (
+    select 1 from public.leads l where l.id = lead_id
+    and (public.is_super_admin() or l.organization_id = public.current_org_id())
+  ));
+create policy "authenticated users can read lead_tags"
+  on public.lead_tags for select
+  using (exists (
+    select 1 from public.leads l where l.id = lead_id
+    and (public.is_super_admin() or l.organization_id = public.current_org_id())
+  ));
+create policy "authenticated users can read attachments"
+  on public.lead_attachments for select
+  using (exists (
+    select 1 from public.leads l where l.id = lead_id
+    and (public.is_super_admin() or l.organization_id = public.current_org_id())
+  ));
+create policy "authenticated users can read lead_status"
+  on public.lead_status for select
+  using (exists (
+    select 1 from public.leads l where l.id = lead_id
+    and (public.is_super_admin() or l.organization_id = public.current_org_id())
+  ));
+create policy "authenticated users can read lead_activities"
+  on public.lead_activities for select
+  using (exists (
+    select 1 from public.leads l where l.id = lead_id
+    and (public.is_super_admin() or l.organization_id = public.current_org_id())
+  ));
+
+-- leads/deals: insert requires organization scoping; update/delete additionally
+-- require admin-or-above or being the record's assigned owner/creator.
+create policy "leads insert scoped" on public.leads for insert
+  with check (public.is_super_admin() or organization_id = public.current_org_id());
+create policy "leads update by owner or admin scoped" on public.leads for update
+  using (
+    (public.is_super_admin() or organization_id = public.current_org_id())
+    and (public.is_admin_or_above() or assigned_to = auth.uid() or created_by = auth.uid())
+  );
+create policy "leads delete by owner or admin scoped" on public.leads for delete
+  using (
+    (public.is_super_admin() or organization_id = public.current_org_id())
+    and (public.is_admin_or_above() or assigned_to = auth.uid() or created_by = auth.uid())
+  );
+
+create policy "deals insert scoped" on public.deals for insert
+  with check (public.is_super_admin() or organization_id = public.current_org_id());
+create policy "deals update by owner or admin scoped" on public.deals for update
+  using (
+    (public.is_super_admin() or organization_id = public.current_org_id())
+    and (public.is_admin_or_above() or owner_id = auth.uid())
+  );
+create policy "deals delete by owner or admin scoped" on public.deals for delete
+  using (
+    (public.is_super_admin() or organization_id = public.current_org_id())
+    and (public.is_admin_or_above() or owner_id = auth.uid())
+  );
+
+-- Settings-type tables: readable within your org (above), writable only by
+-- admins/super admins within that same organization.
 do $$
 declare
   t text;
@@ -502,13 +599,16 @@ begin
   foreach t in array array['pipeline_stages', 'industries', 'templates', 'deal_stages', 'win_loss_reasons', 'app_settings']
   loop
     execute format(
-      'create policy "%s insert admin" on public.%I for insert with check (public.is_admin_or_above())', t, t
+      'create policy "%s insert admin scoped" on public.%I for insert with check (public.is_super_admin() or (public.is_admin_or_above() and organization_id = public.current_org_id()))',
+      t, t
     );
     execute format(
-      'create policy "%s update admin" on public.%I for update using (public.is_admin_or_above())', t, t
+      'create policy "%s update admin scoped" on public.%I for update using (public.is_super_admin() or (public.is_admin_or_above() and organization_id = public.current_org_id()))',
+      t, t
     );
     execute format(
-      'create policy "%s delete admin" on public.%I for delete using (public.is_admin_or_above())', t, t
+      'create policy "%s delete admin scoped" on public.%I for delete using (public.is_super_admin() or (public.is_admin_or_above() and organization_id = public.current_org_id()))',
+      t, t
     );
   end loop;
 end $$;
@@ -516,7 +616,8 @@ end $$;
 -- No insert/update/delete policies are defined for the remaining lead-scoped
 -- sub-tables (social profiles, tags, attachments, status, activities): all
 -- writes to those go through the service-role key inside Netlify Functions,
--- which independently re-checks the parent lead's permission before writing.
+-- which independently re-checks the parent lead's organization/permission
+-- before writing.
 
 -- ============================================================================
 -- Storage bucket for note attachments (screenshots, PDFs, etc.)

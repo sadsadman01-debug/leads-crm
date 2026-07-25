@@ -1,12 +1,15 @@
 import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
-import { requireAdminOrAbove } from '../lib/permissions.js'
+import { requireAdminOrAbove, resolveOrganizationId, scopeToOrg, requireRowInOrgScope } from '../lib/permissions.js'
 import type { AuthedUser } from '../lib/auth.js'
 
-export async function listStages() {
+export async function listStages(event: HandlerEvent, user: AuthedUser) {
   const supabase = getSupabaseAdmin()
-  const { data, error } = await supabase.from('pipeline_stages').select('id, name, position').order('position', { ascending: true })
+  const orgId = resolveOrganizationId(user, event)
+  let query = supabase.from('pipeline_stages').select('id, name, position')
+  query = scopeToOrg(query as any, orgId) as any
+  const { data, error } = await query.order('position', { ascending: true })
   if (error) throw new HttpError(500, error.message)
   return json(200, { stages: data ?? [] })
 }
@@ -14,22 +17,20 @@ export async function listStages() {
 export async function createStage(event: HandlerEvent, user: AuthedUser) {
   requireAdminOrAbove(user)
   const supabase = getSupabaseAdmin()
+  const orgId = resolveOrganizationId(user, event)
   const body = JSON.parse(event.body || '{}')
   const name = (body.name ?? '').trim()
   if (!name) throw new HttpError(400, 'name is required')
 
-  const { data: maxRow } = await supabase
-    .from('pipeline_stages')
-    .select('position')
-    .order('position', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  let maxQuery = supabase.from('pipeline_stages').select('position')
+  maxQuery = scopeToOrg(maxQuery as any, orgId) as any
+  const { data: maxRow } = await maxQuery.order('position', { ascending: false }).limit(1).maybeSingle()
 
   const nextPosition = (maxRow?.position ?? -1) + 1
 
   const { data, error } = await supabase
     .from('pipeline_stages')
-    .insert({ name, position: nextPosition })
+    .insert({ name, position: nextPosition, organization_id: orgId })
     .select('id, name, position')
     .single()
 
@@ -40,6 +41,7 @@ export async function createStage(event: HandlerEvent, user: AuthedUser) {
 export async function renameStage(id: string, event: HandlerEvent, user: AuthedUser) {
   requireAdminOrAbove(user)
   const supabase = getSupabaseAdmin()
+  await requireRowInOrgScope('pipeline_stages', id, resolveOrganizationId(user, event))
   const body = JSON.parse(event.body || '{}')
   const name = (body.name ?? '').trim()
   if (!name) throw new HttpError(400, 'name is required')
@@ -59,12 +61,19 @@ export async function renameStage(id: string, event: HandlerEvent, user: AuthedU
 export async function reorderStages(event: HandlerEvent, user: AuthedUser) {
   requireAdminOrAbove(user)
   const supabase = getSupabaseAdmin()
+  const orgId = resolveOrganizationId(user, event)
   const body = JSON.parse(event.body || '{}')
   const orderedIds = body.orderedIds
 
   if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
     throw new HttpError(400, 'orderedIds must be a non-empty array')
   }
+
+  let ownedQuery = supabase.from('pipeline_stages').select('id', { count: 'exact', head: true }).in('id', orderedIds)
+  ownedQuery = scopeToOrg(ownedQuery as any, orgId) as any
+  const { count: ownedCount, error: ownedErr } = await ownedQuery
+  if (ownedErr) throw new HttpError(500, ownedErr.message)
+  if (ownedCount !== orderedIds.length) throw new HttpError(400, 'One or more stages are not in scope')
 
   // Shift everyone into a disjoint high range first so the unique position index
   // never collides mid-update (e.g. swapping stage A<->B's positions directly).
@@ -81,12 +90,13 @@ export async function reorderStages(event: HandlerEvent, user: AuthedUser) {
     if (error) throw new HttpError(500, error.message)
   }
 
-  return listStages()
+  return listStages(event, user)
 }
 
-export async function deleteStage(id: string, user: AuthedUser) {
+export async function deleteStage(id: string, event: HandlerEvent, user: AuthedUser) {
   requireAdminOrAbove(user)
   const supabase = getSupabaseAdmin()
+  await requireRowInOrgScope('pipeline_stages', id, resolveOrganizationId(user, event))
 
   const { count, error: countErr } = await supabase
     .from('leads')

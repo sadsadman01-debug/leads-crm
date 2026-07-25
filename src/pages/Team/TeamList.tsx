@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { Modal } from '@/components/ui/Modal'
 import { RoleBadge, Avatar } from '@/components/ui/RoleBadge'
 import { Badge } from '@/components/ui/Badge'
-import type { Role, TeamMember } from '@/types/team'
+import type { TeamMember } from '@/types/team'
 
 export function TeamList() {
   const { profile } = useAuth()
@@ -118,8 +118,8 @@ export function TeamList() {
         </div>
       )}
 
-      <AddMemberModal open={addOpen} onClose={() => setAddOpen(false)} isSuperAdmin={isSuperAdmin} onSaved={invalidate} />
-      <EditMemberModal member={editing} isSuperAdmin={isSuperAdmin} onClose={() => setEditing(null)} onSaved={invalidate} />
+      <AddMemberModal open={addOpen} onClose={() => setAddOpen(false)} onSaved={invalidate} />
+      <EditMemberModal key={editing?.id ?? 'none'} member={editing} onClose={() => setEditing(null)} onSaved={invalidate} />
       <DeactivateModal
         member={deactivating}
         members={members}
@@ -134,28 +134,24 @@ export function TeamList() {
 function AddMemberModal({
   open,
   onClose,
-  isSuperAdmin,
   onSaved,
 }: {
   open: boolean
   onClose: () => void
-  isSuperAdmin: boolean
   onSaved: () => void
 }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [nickname, setNickname] = useState('')
-  const [role, setRole] = useState<Role>('user')
 
   const mutation = useMutation({
-    mutationFn: () => teamApi.create({ email, password, nickname, role }),
+    mutationFn: () => teamApi.create({ email, password, nickname, role: 'user' }),
     onSuccess: () => {
       onSaved()
       onClose()
       setEmail('')
       setPassword('')
       setNickname('')
-      setRole('user')
     },
   })
 
@@ -187,15 +183,6 @@ function AddMemberModal({
           <label className="label">Nickname</label>
           <input required className="input" value={nickname} onChange={(e) => setNickname(e.target.value)} />
         </div>
-        {isSuperAdmin && (
-          <div>
-            <label className="label">Role</label>
-            <select className="input" value={role} onChange={(e) => setRole(e.target.value as Role)}>
-              <option value="user">User</option>
-              <option value="admin">Admin</option>
-            </select>
-          </div>
-        )}
         {mutation.isError && <p className="text-sm text-danger">{(mutation.error as Error).message}</p>}
         <div className="flex justify-end gap-3 border-t border-base-700/60 pt-4">
           <button type="button" className="btn-secondary" onClick={onClose}>
@@ -212,20 +199,17 @@ function AddMemberModal({
 
 function EditMemberModal({
   member,
-  isSuperAdmin,
   onClose,
   onSaved,
 }: {
   member: TeamMember | null
-  isSuperAdmin: boolean
   onClose: () => void
   onSaved: () => void
 }) {
-  const [nickname, setNickname] = useState('')
-  const [role, setRole] = useState<Role>('user')
+  const [nickname, setNickname] = useState(member?.nickname ?? '')
 
   const mutation = useMutation({
-    mutationFn: () => teamApi.update(member!.id, { nickname, role: isSuperAdmin ? role : undefined }),
+    mutationFn: () => teamApi.update(member!.id, { nickname }),
     onSuccess: () => {
       onSaved()
       onClose()
@@ -236,71 +220,28 @@ function EditMemberModal({
 
   return (
     <Modal open={Boolean(member)} onClose={onClose} title="Edit Team Member">
-      <EditMemberForm
-        member={member}
-        isSuperAdmin={isSuperAdmin}
-        onCancel={onClose}
-        onSubmit={(n, r) => {
-          setNickname(n)
-          setRole(r)
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
           mutation.mutate()
         }}
-        pending={mutation.isPending}
-        error={mutation.isError ? (mutation.error as Error).message : undefined}
-      />
-    </Modal>
-  )
-}
-
-function EditMemberForm({
-  member,
-  isSuperAdmin,
-  onCancel,
-  onSubmit,
-  pending,
-  error,
-}: {
-  member: TeamMember
-  isSuperAdmin: boolean
-  onCancel: () => void
-  onSubmit: (nickname: string, role: Role) => void
-  pending: boolean
-  error?: string
-}) {
-  const [nickname, setNickname] = useState(member.nickname ?? '')
-  const [role, setRole] = useState<Role>(member.role === 'admin' ? 'admin' : 'user')
-
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault()
-        onSubmit(nickname, role)
-      }}
-      className="space-y-4"
-    >
-      <div>
-        <label className="label">Nickname</label>
-        <input required className="input" value={nickname} onChange={(e) => setNickname(e.target.value)} />
-      </div>
-      {isSuperAdmin && (
+        className="space-y-4"
+      >
         <div>
-          <label className="label">Role</label>
-          <select className="input" value={role} onChange={(e) => setRole(e.target.value as Role)}>
-            <option value="user">User</option>
-            <option value="admin">Admin</option>
-          </select>
+          <label className="label">Nickname</label>
+          <input required className="input" value={nickname} onChange={(e) => setNickname(e.target.value)} />
         </div>
-      )}
-      {error && <p className="text-sm text-danger">{error}</p>}
-      <div className="flex justify-end gap-3 border-t border-base-700/60 pt-4">
-        <button type="button" className="btn-secondary" onClick={onCancel}>
-          Cancel
-        </button>
-        <button type="submit" className="btn-primary" disabled={pending}>
-          {pending ? 'Saving…' : 'Save Changes'}
-        </button>
-      </div>
-    </form>
+        {mutation.isError && <p className="text-sm text-danger">{(mutation.error as Error).message}</p>}
+        <div className="flex justify-end gap-3 border-t border-base-700/60 pt-4">
+          <button type="button" className="btn-secondary" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" className="btn-primary" disabled={mutation.isPending}>
+            {mutation.isPending ? 'Saving…' : 'Save Changes'}
+          </button>
+        </div>
+      </form>
+    </Modal>
   )
 }
 

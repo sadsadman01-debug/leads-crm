@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
 import { ensureTagIds } from '../lib/tags.js'
 import { logActivities } from '../lib/activities.js'
+import { resolveOrganizationId, scopeToOrg } from '../lib/permissions.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const LEAD_SOURCES = ['Google Maps', 'Referral', 'Manual Entry', 'Website', 'Other']
@@ -71,12 +72,19 @@ function normalizeRow(raw: Record<string, any>): ParsedLeadRow | null {
   }
 }
 
-async function insertRows(rows: ParsedLeadRow[], userId: string, defaultIndustryId?: string): Promise<number> {
+async function insertRows(
+  rows: ParsedLeadRow[],
+  userId: string,
+  organizationId: string | null,
+  defaultIndustryId?: string
+): Promise<number> {
   const supabase = getSupabaseAdmin()
 
   let industryIdByLowerName = new Map<string, string>()
   if (!defaultIndustryId && rows.some((r) => r.industryName)) {
-    const { data: industries } = await supabase.from('industries').select('id, name')
+    let industriesQuery = supabase.from('industries').select('id, name')
+    industriesQuery = scopeToOrg(industriesQuery as any, organizationId) as any
+    const { data: industries } = await industriesQuery
     industryIdByLowerName = new Map((industries ?? []).map((i) => [i.name.toLowerCase(), i.id]))
   }
 
@@ -100,6 +108,8 @@ async function insertRows(rows: ParsedLeadRow[], userId: string, defaultIndustry
         priority: r.priority,
         industry_id: resolveIndustryId(r),
         created_by: userId,
+        assigned_to: userId,
+        organization_id: organizationId,
       }))
     )
     .select('id')
@@ -108,7 +118,7 @@ async function insertRows(rows: ParsedLeadRow[], userId: string, defaultIndustry
 
   const allTagNames = [...new Set(rows.flatMap((r) => r.tags))]
   if (allTagNames.length > 0 && insertedLeads) {
-    const tagRecords = await ensureTagIds(allTagNames)
+    const tagRecords = await ensureTagIds(allTagNames, organizationId)
     const tagIdByName = new Map(tagRecords.map((t) => [t.name, t.id]))
 
     const lead_tags = rows.flatMap((row, i) =>
@@ -135,6 +145,7 @@ async function insertRows(rows: ParsedLeadRow[], userId: string, defaultIndustry
 
 /** POST /leads/import — body: { rows: Record<string,string>[] } (already parsed client-side, e.g. from a CSV file). */
 export async function importRows(event: HandlerEvent, user: AuthedUser) {
+  const orgId = resolveOrganizationId(user, event)
   const body = JSON.parse(event.body || '{}')
   const rawRows = body.rows
 
@@ -152,7 +163,7 @@ export async function importRows(event: HandlerEvent, user: AuthedUser) {
   const valid = parsed.filter((r): r is ParsedLeadRow => r !== null)
   const skipped = parsed.length - valid.length
 
-  const imported = valid.length > 0 ? await insertRows(valid, user.id, body.defaultIndustryId || undefined) : 0
+  const imported = valid.length > 0 ? await insertRows(valid, user.id, orgId, body.defaultIndustryId || undefined) : 0
 
   return json(200, { imported, skipped, total: rawRows.length })
 }
@@ -164,6 +175,7 @@ function extractSheetId(url: string): string | null {
 
 /** POST /leads/import/sheet — body: { sheetUrl: string }. Sheet must be shared "Anyone with the link can view". */
 export async function importFromSheet(event: HandlerEvent, user: AuthedUser) {
+  const orgId = resolveOrganizationId(user, event)
   const body = JSON.parse(event.body || '{}')
   const sheetUrl = body.sheetUrl as string | undefined
 
@@ -200,7 +212,7 @@ export async function importFromSheet(event: HandlerEvent, user: AuthedUser) {
   const valid = parsed.filter((r): r is ParsedLeadRow => r !== null)
   const skipped = parsed.length - valid.length
 
-  const imported = valid.length > 0 ? await insertRows(valid, user.id, body.defaultIndustryId || undefined) : 0
+  const imported = valid.length > 0 ? await insertRows(valid, user.id, orgId, body.defaultIndustryId || undefined) : 0
 
   return json(200, { imported, skipped, total: rawRows.length })
 }
@@ -233,12 +245,13 @@ const EXPORT_COLUMNS = [
 ]
 
 /** GET /leads/export?filters=...&search=... — streams a CSV of all leads matching the current list filters. */
-export async function exportLeads(event: HandlerEvent) {
+export async function exportLeads(event: HandlerEvent, user: AuthedUser) {
   // Imported lazily to avoid a require cycle at module init time.
   const { applyColumnFilters, resolveJoinFilteredIds, parseFilters, LEAD_SELECT, normalizeLead } = await import(
     './leads.js'
   )
   const supabase = getSupabaseAdmin()
+  const orgId = resolveOrganizationId(user, event)
   const params = event.queryStringParameters ?? {}
   const search = (params.search ?? '').trim()
   const filters = parseFilters(params)
@@ -251,6 +264,7 @@ export async function exportLeads(event: HandlerEvent) {
   const rows: any[] = []
   for (let offset = 0; offset < EXPORT_MAX_ROWS; offset += EXPORT_CHUNK_SIZE) {
     let query = supabase.from('leads').select(LEAD_SELECT)
+    query = scopeToOrg(query as any, orgId) as any
     query = applyColumnFilters(query as any, filters, search) as any
     if (allowedIds !== null) query = query.in('id', [...allowedIds])
 
@@ -263,7 +277,9 @@ export async function exportLeads(event: HandlerEvent) {
     if (!data || data.length < EXPORT_CHUNK_SIZE) break
   }
 
-  const { data: industries } = await supabase.from('industries').select('id, name')
+  let industriesQuery = supabase.from('industries').select('id, name')
+  industriesQuery = scopeToOrg(industriesQuery as any, orgId) as any
+  const { data: industries } = await industriesQuery
   const industryNameById = new Map((industries ?? []).map((i) => [i.id, i.name]))
 
   return csvResponse(rows, industryNameById)

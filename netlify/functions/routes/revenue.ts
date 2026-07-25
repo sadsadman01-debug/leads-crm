@@ -1,7 +1,7 @@
 import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
-import { isAdminOrAbove } from '../lib/permissions.js'
+import { isAdminOrAbove, resolveOrganizationId, scopeToOrg } from '../lib/permissions.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const MAX_DEALS_FOR_AGGREGATION = 20000
@@ -33,6 +33,7 @@ function monthKey(d: Date): string {
  */
 export async function getRevenueSummary(event: HandlerEvent, user: AuthedUser) {
   const supabase = getSupabaseAdmin()
+  const orgId = resolveOrganizationId(user, event)
   const params = event.queryStringParameters ?? {}
   const industryId = params.industryId || undefined
   // Users only ever see their own deals, regardless of what the client sends.
@@ -43,17 +44,18 @@ export async function getRevenueSummary(event: HandlerEvent, user: AuthedUser) {
     ? (params.closedRange as ClosedRange)
     : 'all'
 
-  const { data: stages, error: stagesErr } = await supabase
-    .from('deal_stages')
-    .select('id, name, position, is_closed, is_won')
-    .order('position', { ascending: true })
+  let stagesQuery = supabase.from('deal_stages').select('id, name, position, is_closed, is_won').order('position', { ascending: true })
+  stagesQuery = scopeToOrg(stagesQuery as any, orgId) as any
+  const { data: stages, error: stagesErr } = await stagesQuery
   if (stagesErr) throw new HttpError(500, stagesErr.message)
 
-  const { data: dealsRaw, error: dealsErr } = await supabase
+  let dealsQuery = supabase
     .from('deals')
     .select('id, name, value, currency, stage_id, probability, expected_close_date, actual_close_date, outcome_reason, created_at, lead_id, owner_id, leads ( company_name, industry_id )')
     .order('created_at', { ascending: true })
     .limit(MAX_DEALS_FOR_AGGREGATION)
+  dealsQuery = scopeToOrg(dealsQuery as any, orgId) as any
+  const { data: dealsRaw, error: dealsErr } = await dealsQuery
   if (dealsErr) throw new HttpError(500, dealsErr.message)
 
   const allDeals = (dealsRaw ?? []).map((d: any) => ({ ...d, company_name: d.leads?.company_name ?? '', industry_id: d.leads?.industry_id ?? null }))

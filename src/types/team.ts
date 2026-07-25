@@ -6,6 +6,7 @@ export interface Profile {
   nickname: string | null
   role: Role
   is_active: boolean
+  organization_id?: string | null
 }
 
 export interface TeamMember extends Profile {

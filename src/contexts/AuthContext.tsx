@@ -10,6 +10,8 @@ export interface CurrentProfile {
   nickname: string | null
   role: Role
   is_active: boolean
+  organization_id: string | null
+  organization_name: string | null
 }
 
 interface AuthContextValue {

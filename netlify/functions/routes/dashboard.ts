@@ -2,7 +2,7 @@ import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
 import { computeReminder } from '../lib/reminders.js'
-import { isAdminOrAbove } from '../lib/permissions.js'
+import { isAdminOrAbove, resolveOrganizationId, scopeToOrg } from '../lib/permissions.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const MAX_REMINDER_ITEMS = 50
@@ -83,6 +83,7 @@ function buildBucketRange(granularity: Granularity): string[] {
 
 export async function getDashboardSummary(event: HandlerEvent, user: AuthedUser) {
   const supabase = getSupabaseAdmin()
+  const orgId = resolveOrganizationId(user, event)
   const params = event.queryStringParameters ?? {}
   const granularity: Granularity = (['day', 'week', 'month'] as const).includes(params.granularity as Granularity)
     ? (params.granularity as Granularity)
@@ -93,11 +94,14 @@ export async function getDashboardSummary(event: HandlerEvent, user: AuthedUser)
   // re-derived server-side so a User can't request someone else's numbers.
   const assignedTo = isAdminOrAbove(user) ? params.assignedTo || undefined : user.id
 
-  const { data: leads, error } = await supabase
+  let leadsQuery = supabase
     .from('leads')
     .select('id, company_name, created_at, lead_source, priority, industry_id, assigned_to, lead_status(*)')
     .order('created_at', { ascending: true })
     .limit(MAX_LEADS_FOR_AGGREGATION)
+  leadsQuery = scopeToOrg(leadsQuery as any, orgId) as any
+
+  const { data: leads, error } = await leadsQuery
 
   if (error) throw new HttpError(500, error.message)
 
@@ -193,7 +197,9 @@ export async function getDashboardSummary(event: HandlerEvent, user: AuthedUser)
   const overdueCount = statuses.filter((s: any) => computeReminder(s).is_overdue).length
   const dueTodayCount = statuses.filter((s: any) => computeReminder(s).is_due_today).length
 
-  const { data: industries } = await supabase.from('industries').select('id, name')
+  let industriesQuery = supabase.from('industries').select('id, name')
+  industriesQuery = scopeToOrg(industriesQuery as any, orgId) as any
+  const { data: industries } = await industriesQuery
   const industryNameById = new Map((industries ?? []).map((i) => [i.id, i.name]))
 
   const byIndustry = new Map<string, any[]>()
@@ -226,14 +232,16 @@ export async function getDashboardSummary(event: HandlerEvent, user: AuthedUser)
 
   let teamPerformance: any[] | undefined
   if (isAdminOrAbove(user)) {
-    const { data: members } = await supabase
-      .from('profiles')
-      .select('id, nickname, email')
-      .eq('is_active', true)
-    const { data: deals } = await supabase
+    let membersQuery = supabase.from('profiles').select('id, nickname, email').eq('is_active', true)
+    membersQuery = scopeToOrg(membersQuery as any, orgId) as any
+    const { data: members } = await membersQuery
+
+    let dealsQuery = supabase
       .from('deals')
       .select('owner_id, value, currency, stage_id, deal_stages(is_closed, is_won)')
       .limit(MAX_LEADS_FOR_AGGREGATION)
+    dealsQuery = scopeToOrg(dealsQuery as any, orgId) as any
+    const { data: deals } = await dealsQuery
 
     teamPerformance = (members ?? []).map((m) => {
       const memberLeads = allRows.filter((r: any) => r.assigned_to === m.id)

@@ -3,11 +3,11 @@ import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
 import { logActivity } from '../lib/activities.js'
 import type { AuthedUser } from '../lib/auth.js'
-import { requireCanModifyRecord, isAdminOrAbove } from '../lib/permissions.js'
+import { requireCanModifyRecord, isAdminOrAbove, resolveOrganizationId, scopeToOrg } from '../lib/permissions.js'
 
 export const DEAL_SELECT = `
   id, lead_id, name, value, currency, stage_id, probability,
-  expected_close_date, actual_close_date, outcome_reason, notes, owner_id,
+  expected_close_date, actual_close_date, outcome_reason, notes, owner_id, organization_id,
   created_at, updated_at,
   leads ( id, company_name, industry_id )
 `
@@ -44,8 +44,9 @@ function parseFilters(params: Record<string, string | undefined>): DealFilters {
   }
 }
 
-export async function listDeals(event: HandlerEvent) {
+export async function listDeals(event: HandlerEvent, user: AuthedUser) {
   const supabase = getSupabaseAdmin()
+  const orgId = resolveOrganizationId(user, event)
   const params = event.queryStringParameters ?? {}
   const page = Math.max(1, parseInt(params.page ?? '1', 10) || 1)
   const pageSize = Math.min(100, Math.max(1, parseInt(params.pageSize ?? '20', 10) || 20))
@@ -56,19 +57,19 @@ export async function listDeals(event: HandlerEvent) {
   const filters = parseFilters(params)
 
   let query = supabase.from('deals').select(DEAL_SELECT, { count: 'exact' })
+  query = scopeToOrg(query as any, orgId) as any
 
   if (filters.leadId) query = query.eq('lead_id', filters.leadId)
   if (filters.stageId) query = query.eq('stage_id', filters.stageId)
-  if (filters.search) query = query.ilike('name', `%${filters.search}%`)
   if (filters.assignedTo) query = query.eq('owner_id', filters.assignedTo)
+  if (filters.search) query = query.ilike('name', `%${filters.search}%`)
 
   // Resolve industry -> lead ids first (same pattern as leads.ts's resolveJoinFilteredIds)
   // so the .in('lead_id', ...) constraint applies before pagination, not after.
   if (filters.industryId) {
-    const { data: leadRows, error: leadErr } = await supabase
-      .from('leads')
-      .select('id')
-      .eq('industry_id', filters.industryId)
+    let leadQuery = supabase.from('leads').select('id').eq('industry_id', filters.industryId)
+    leadQuery = scopeToOrg(leadQuery as any, orgId) as any
+    const { data: leadRows, error: leadErr } = await leadQuery
     if (leadErr) throw new HttpError(500, leadErr.message)
 
     const leadIds = (leadRows ?? []).map((l) => l.id)
@@ -85,30 +86,47 @@ export async function listDeals(event: HandlerEvent) {
   return json(200, { deals: (data ?? []).map(normalizeDeal), page, pageSize, total: count ?? 0 })
 }
 
-export async function getDeal(id: string) {
+export async function getDeal(id: string, organizationId: string | null, isSuperAdmin: boolean) {
   const supabase = getSupabaseAdmin()
   const { data, error } = await supabase.from('deals').select(DEAL_SELECT).eq('id', id).single()
-  if (error) throw new HttpError(404, 'Deal not found')
+  if (error || !data) throw new HttpError(404, 'Deal not found')
+  if (!isSuperAdmin && data.organization_id !== organizationId) throw new HttpError(404, 'Deal not found')
   return json(200, normalizeDeal(data))
 }
 
-async function resolveDefaultStage() {
+async function fetchDealInScope(id: string, user: AuthedUser, event: HandlerEvent, columns: string) {
   const supabase = getSupabaseAdmin()
-  const { data } = await supabase
-    .from('deal_stages')
-    .select('id, default_probability')
-    .order('position', { ascending: true })
-    .limit(1)
-    .maybeSingle()
+  const orgId = resolveOrganizationId(user, event)
+  const { data: existing, error: fetchErr } = await supabase.from('deals').select(columns).eq('id', id).single()
+  if (fetchErr || !existing) throw new HttpError(404, 'Deal not found')
+  if (user.role !== 'super_admin' && (existing as any).organization_id !== orgId) throw new HttpError(404, 'Deal not found')
+  return { existing: existing as any, orgId }
+}
+
+async function resolveDefaultStage(orgId: string | null) {
+  const supabase = getSupabaseAdmin()
+  let query = supabase.from('deal_stages').select('id, default_probability')
+  query = scopeToOrg(query as any, orgId) as any
+  const { data } = await query.order('position', { ascending: true }).limit(1).maybeSingle()
   return data
 }
 
 export async function createDeal(event: HandlerEvent, user: AuthedUser) {
   const supabase = getSupabaseAdmin()
+  const orgId = resolveOrganizationId(user, event)
   const body = JSON.parse(event.body || '{}')
 
   if (!body.lead_id) throw new HttpError(400, 'lead_id is required')
   if (!body.name?.trim()) throw new HttpError(400, 'name is required')
+
+  // The linked lead must belong to the same organization scope this deal is being created in.
+  const { data: lead, error: leadErr } = await supabase
+    .from('leads')
+    .select('id, organization_id')
+    .eq('id', body.lead_id)
+    .single()
+  if (leadErr || !lead) throw new HttpError(404, 'Lead not found')
+  if (lead.organization_id !== orgId) throw new HttpError(400, 'That lead does not belong to this organization')
 
   // New deals auto-assign to the creator; explicit owner_id is only honored for admins/super admins.
   const ownerId = isAdminOrAbove(user) && body.owner_id ? body.owner_id : user.id
@@ -117,7 +135,7 @@ export async function createDeal(event: HandlerEvent, user: AuthedUser) {
   let probability = body.probability
 
   if (!stageId) {
-    const defaultStage = await resolveDefaultStage()
+    const defaultStage = await resolveDefaultStage(orgId)
     stageId = defaultStage?.id ?? null
     if (probability === undefined) probability = defaultStage?.default_probability ?? 0
   }
@@ -125,7 +143,9 @@ export async function createDeal(event: HandlerEvent, user: AuthedUser) {
 
   let currency = body.currency
   if (!currency) {
-    const { data: settings } = await supabase.from('app_settings').select('default_currency').eq('id', 1).single()
+    let settingsQuery = supabase.from('app_settings').select('default_currency')
+    settingsQuery = scopeToOrg(settingsQuery as any, orgId) as any
+    const { data: settings } = await settingsQuery.maybeSingle()
     currency = settings?.default_currency ?? 'USD'
   }
 
@@ -141,6 +161,7 @@ export async function createDeal(event: HandlerEvent, user: AuthedUser) {
       expected_close_date: body.expected_close_date || null,
       notes: body.notes ?? null,
       owner_id: ownerId,
+      organization_id: orgId,
     })
     .select('id, name, value, currency')
     .single()
@@ -154,15 +175,14 @@ export async function createDeal(event: HandlerEvent, user: AuthedUser) {
     user.id
   )
 
-  return getDeal(data.id)
+  return getDeal(data.id, orgId, user.role === 'super_admin')
 }
 
 export async function updateDeal(id: string, event: HandlerEvent, user: AuthedUser) {
   const supabase = getSupabaseAdmin()
   const body = JSON.parse(event.body || '{}')
 
-  const { data: existing, error: fetchErr } = await supabase.from('deals').select('id, owner_id').eq('id', id).single()
-  if (fetchErr) throw new HttpError(404, 'Deal not found')
+  const { existing, orgId } = await fetchDealInScope(id, user, event, 'id, owner_id, organization_id')
   requireCanModifyRecord(user, existing)
 
   const updatable: Record<string, any> = {}
@@ -184,7 +204,7 @@ export async function updateDeal(id: string, event: HandlerEvent, user: AuthedUs
   const { error } = await supabase.from('deals').update(updatable).eq('id', id)
   if (error) throw new HttpError(500, error.message)
 
-  return getDeal(id)
+  return getDeal(id, orgId, user.role === 'super_admin')
 }
 
 /** Body: { stage_id, probability?, outcome_reason?, actual_close_date? } */
@@ -194,12 +214,12 @@ export async function updateDealStage(id: string, event: HandlerEvent, user: Aut
   const stageId = body.stage_id
   if (!stageId) throw new HttpError(400, 'stage_id is required')
 
-  const { data: deal, error: dealErr } = await supabase
-    .from('deals')
-    .select('id, name, lead_id, value, currency, owner_id')
-    .eq('id', id)
-    .single()
-  if (dealErr) throw new HttpError(404, 'Deal not found')
+  const { existing: deal, orgId } = await fetchDealInScope(
+    id,
+    user,
+    event,
+    'id, name, lead_id, value, currency, owner_id, organization_id'
+  )
   requireCanModifyRecord(user, deal)
 
   const { data: stage, error: stageErr } = await supabase
@@ -236,24 +256,18 @@ export async function updateDealStage(id: string, event: HandlerEvent, user: Aut
     : `Deal "${deal.name}" moved to ${stage.name}`
   await logActivity(deal.lead_id, 'deal', message, user.id)
 
-  return getDeal(id)
+  return getDeal(id, orgId, user.role === 'super_admin')
 }
 
-export async function deleteDeal(id: string, user: AuthedUser) {
+export async function deleteDeal(id: string, event: HandlerEvent, user: AuthedUser) {
   const supabase = getSupabaseAdmin()
-
-  const { data: deal, error: fetchErr } = await supabase
-    .from('deals')
-    .select('name, lead_id, owner_id')
-    .eq('id', id)
-    .single()
-  if (fetchErr) throw new HttpError(404, 'Deal not found')
+  const { existing: deal } = await fetchDealInScope(id, user, event, 'id, name, lead_id, owner_id, organization_id')
   requireCanModifyRecord(user, deal)
 
   const { error } = await supabase.from('deals').delete().eq('id', id)
   if (error) throw new HttpError(500, error.message)
 
-  if (deal) await logActivity(deal.lead_id, 'deal', `Deal "${deal.name}" deleted`, user.id)
+  await logActivity(deal.lead_id, 'deal', `Deal "${deal.name}" deleted`, user.id)
 
   return json(200, { success: true })
 }
@@ -264,16 +278,20 @@ const KANBAN_SELECT = `
 `
 const KANBAN_MAX_DEALS = 1000
 
-export async function getDealsKanban(event: HandlerEvent) {
+export async function getDealsKanban(event: HandlerEvent, user: AuthedUser) {
   const supabase = getSupabaseAdmin()
+  const orgId = resolveOrganizationId(user, event)
   const industryId = event.queryStringParameters?.industryId
   const assignedTo = event.queryStringParameters?.assignedTo
 
   let query = supabase.from('deals').select(KANBAN_SELECT)
+  query = scopeToOrg(query as any, orgId) as any
   if (assignedTo) query = query.eq('owner_id', assignedTo)
 
   if (industryId) {
-    const { data: leadRows, error: leadErr } = await supabase.from('leads').select('id').eq('industry_id', industryId)
+    let leadQuery = supabase.from('leads').select('id').eq('industry_id', industryId)
+    leadQuery = scopeToOrg(leadQuery as any, orgId) as any
+    const { data: leadRows, error: leadErr } = await leadQuery
     if (leadErr) throw new HttpError(500, leadErr.message)
 
     const leadIds = (leadRows ?? []).map((l) => l.id)

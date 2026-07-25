@@ -39,3 +39,28 @@ export function RequireAdmin() {
 
   return <Outlet />
 }
+
+/** Gates a route to the Super Admin only (the Organizations platform view). */
+export function RequireSuperAdmin() {
+  const { profile, loading } = useAuth()
+
+  if (loading || !profile) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-base-950">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent-500 border-t-transparent" />
+      </div>
+    )
+  }
+
+  if (profile.role !== 'super_admin') {
+    return <Navigate to="/dashboard" state={{ accessDenied: true }} replace />
+  }
+
+  return <Outlet />
+}
+
+/** Sends the Super Admin to the Organizations Overview by default; everyone else to Leads. */
+export function DefaultLanding() {
+  const { profile } = useAuth()
+  return <Navigate to={profile?.role === 'super_admin' ? '/organizations' : '/leads'} replace />
+}

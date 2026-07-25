@@ -1,7 +1,8 @@
-import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Users, UserPlus, Settings as SettingsIcon, LogOut, Target, X, Handshake, UsersRound } from 'lucide-react'
+import { NavLink, useNavigate } from 'react-router-dom'
+import { LayoutDashboard, Users, UserPlus, Settings as SettingsIcon, LogOut, Target, X, Handshake, UsersRound, Building2, ArrowLeftRight } from 'lucide-react'
 import clsx from 'clsx'
 import { useAuth } from '@/contexts/AuthContext'
+import { useOrg } from '@/contexts/OrgContext'
 import { RoleBadge, Avatar } from '@/components/ui/RoleBadge'
 
 const NAV_ITEMS = [
@@ -14,10 +15,19 @@ const NAV_ITEMS = [
 
 export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { session, profile, signOut } = useAuth()
+  const { viewingOrgId, viewingOrgName, exitToOrganizations } = useOrg()
+  const navigate = useNavigate()
+  const isSuperAdmin = profile?.role === 'super_admin'
   const navItems =
     profile && (profile.role === 'admin' || profile.role === 'super_admin')
       ? [...NAV_ITEMS.slice(0, 4), { to: '/team', label: 'Team', icon: UsersRound }, NAV_ITEMS[4]]
       : NAV_ITEMS
+
+  const workspaceLabel = isSuperAdmin
+    ? viewingOrgId === undefined
+      ? null
+      : viewingOrgName
+    : profile?.organization_name
 
   return (
     <>
@@ -38,19 +48,56 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           open ? 'translate-x-0' : '-translate-x-full'
         )}
       >
-        <div className="flex items-center justify-between px-6 py-6">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-500 shadow-glow">
-              <Target size={18} className="text-white" />
+        <div className="px-6 py-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-500 shadow-glow">
+                <Target size={18} className="text-white" />
+              </div>
+              <span className="text-base font-semibold tracking-tight text-base-100">Leads CRM</span>
             </div>
-            <span className="text-base font-semibold tracking-tight text-base-100">Leads CRM</span>
+            <button onClick={onClose} className="btn-ghost -mr-2 h-11 w-11 px-0 md:hidden" aria-label="Close menu">
+              <X size={20} />
+            </button>
           </div>
-          <button onClick={onClose} className="btn-ghost -mr-2 h-11 w-11 px-0 md:hidden" aria-label="Close menu">
-            <X size={20} />
-          </button>
+          {workspaceLabel && (
+            <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-base-800/60 px-2.5 py-1.5 text-xs text-base-300">
+              <Building2 size={13} className="shrink-0 text-base-400" />
+              <span className="truncate">{workspaceLabel}</span>
+            </div>
+          )}
+          {isSuperAdmin && viewingOrgId !== undefined && (
+            <button
+              className="mt-1.5 flex items-center gap-1.5 text-xs text-accent-400 hover:underline"
+              onClick={() => {
+                exitToOrganizations()
+                navigate('/organizations')
+              }}
+            >
+              <ArrowLeftRight size={12} />
+              Switch organization
+            </button>
+          )}
         </div>
 
         <nav className="flex-1 space-y-1 px-3">
+          {isSuperAdmin && (
+            <NavLink
+              to="/organizations"
+              onClick={onClose}
+              className={({ isActive }) =>
+                clsx(
+                  'group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150',
+                  isActive
+                    ? 'bg-accent-500/15 text-accent-400 shadow-[inset_0_0_0_1px_rgba(91,108,240,0.35)]'
+                    : 'text-base-300 hover:bg-base-800 hover:text-base-100'
+                )
+              }
+            >
+              <Building2 size={18} strokeWidth={2} />
+              Organizations
+            </NavLink>
+          )}
           {navItems.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
