@@ -14,16 +14,21 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text not null,
   full_name text,
-  role text not null default 'admin' check (role in ('admin', 'member')),
+  nickname text,
+  role text not null default 'user' check (role in ('super_admin', 'admin', 'user')),
+  is_active boolean not null default true,
   created_at timestamptz not null default now()
 );
 
--- Auto-create a profile row whenever a new auth user is created.
+-- Auto-create a profile row whenever a new auth user is created. New accounts
+-- default to 'user' — the Team Management "add member" function immediately
+-- updates role/nickname right after this trigger runs. The single Super Admin
+-- is seeded separately (scripts/seed-admin.mjs) and promoted manually.
 create or replace function public.handle_new_user()
 returns trigger as $$
 begin
   insert into public.profiles (id, email, role)
-  values (new.id, new.email, 'admin')
+  values (new.id, new.email, 'user')
   on conflict (id) do nothing;
   return new;
 end;
@@ -86,11 +91,13 @@ create table if not exists public.leads (
   stage_id uuid references public.pipeline_stages(id) on delete set null,
   industry_id uuid references public.industries(id) on delete set null,
   created_by uuid references public.profiles(id) on delete set null,
+  assigned_to uuid references public.profiles(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 create index if not exists leads_industry_id_idx on public.leads (industry_id);
+create index if not exists leads_assigned_to_idx on public.leads (assigned_to);
 
 create index if not exists leads_company_name_idx on public.leads using gin (to_tsvector('simple', company_name));
 create index if not exists leads_phone_idx on public.leads (phone);
@@ -368,6 +375,7 @@ create table if not exists public.deals (
 create index if not exists deals_lead_id_idx on public.deals (lead_id);
 create index if not exists deals_stage_id_idx on public.deals (stage_id);
 create index if not exists deals_expected_close_date_idx on public.deals (expected_close_date);
+create index if not exists deals_owner_id_idx on public.deals (owner_id);
 
 drop trigger if exists deals_set_updated_at on public.deals;
 create trigger deals_set_updated_at
@@ -421,9 +429,11 @@ alter table public.deal_stages enable row level security;
 alter table public.win_loss_reasons enable row level security;
 alter table public.deals enable row level security;
 
-create policy "authenticated users can read their own profile"
+-- Every authenticated team member can read the full roster (needed to show
+-- nicknames/roles/avatars on leads, deals, and the activity timeline).
+create policy "authenticated users can read profiles"
   on public.profiles for select
-  using (auth.uid() = id);
+  using (auth.role() = 'authenticated');
 
 create policy "authenticated users can read leads"
   on public.leads for select using (auth.role() = 'authenticated');
@@ -454,8 +464,59 @@ create policy "authenticated users can read win_loss_reasons"
 create policy "authenticated users can read deals"
   on public.deals for select using (auth.role() = 'authenticated');
 
--- No insert/update/delete policies are defined for the anon/authenticated
--- roles: all writes go through the service-role key inside Netlify Functions.
+-- Role-check helper functions, used by write policies below and re-checked
+-- independently server-side by every sensitive Netlify Function.
+create or replace function public.current_user_role()
+returns text
+language sql stable security definer set search_path = public
+as $$
+  select role from public.profiles where id = auth.uid();
+$$;
+
+create or replace function public.is_admin_or_above()
+returns boolean
+language sql stable security definer set search_path = public
+as $$
+  select coalesce((select role from public.profiles where id = auth.uid()) in ('admin', 'super_admin'), false);
+$$;
+
+-- leads/deals: anyone authenticated can insert; update/delete restricted to
+-- admins/super admins or the record's assigned owner/creator.
+create policy "leads insert by authenticated" on public.leads for insert with check (auth.role() = 'authenticated');
+create policy "leads update by owner or admin" on public.leads for update
+  using (public.is_admin_or_above() or assigned_to = auth.uid() or created_by = auth.uid());
+create policy "leads delete by owner or admin" on public.leads for delete
+  using (public.is_admin_or_above() or assigned_to = auth.uid() or created_by = auth.uid());
+
+create policy "deals insert by authenticated" on public.deals for insert with check (auth.role() = 'authenticated');
+create policy "deals update by owner or admin" on public.deals for update
+  using (public.is_admin_or_above() or owner_id = auth.uid());
+create policy "deals delete by owner or admin" on public.deals for delete
+  using (public.is_admin_or_above() or owner_id = auth.uid());
+
+-- Settings-type tables: readable by everyone (above), writable only by admins/super admins.
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['pipeline_stages', 'industries', 'templates', 'deal_stages', 'win_loss_reasons', 'app_settings']
+  loop
+    execute format(
+      'create policy "%s insert admin" on public.%I for insert with check (public.is_admin_or_above())', t, t
+    );
+    execute format(
+      'create policy "%s update admin" on public.%I for update using (public.is_admin_or_above())', t, t
+    );
+    execute format(
+      'create policy "%s delete admin" on public.%I for delete using (public.is_admin_or_above())', t, t
+    );
+  end loop;
+end $$;
+
+-- No insert/update/delete policies are defined for the remaining lead-scoped
+-- sub-tables (social profiles, tags, attachments, status, activities): all
+-- writes to those go through the service-role key inside Netlify Functions,
+-- which independently re-checks the parent lead's permission before writing.
 
 -- ============================================================================
 -- Storage bucket for note attachments (screenshots, PDFs, etc.)

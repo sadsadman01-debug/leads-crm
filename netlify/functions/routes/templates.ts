@@ -1,6 +1,8 @@
 import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
+import { requireAdminOrAbove } from '../lib/permissions.js'
+import type { AuthedUser } from '../lib/auth.js'
 
 export async function listTemplates() {
   const supabase = getSupabaseAdmin()
@@ -12,7 +14,8 @@ export async function listTemplates() {
   return json(200, { templates: data ?? [] })
 }
 
-export async function createTemplate(event: HandlerEvent) {
+export async function createTemplate(event: HandlerEvent, user: AuthedUser) {
+  requireAdminOrAbove(user)
   const supabase = getSupabaseAdmin()
   const body = JSON.parse(event.body || '{}')
   const name = (body.name ?? '').trim()
@@ -28,7 +31,8 @@ export async function createTemplate(event: HandlerEvent) {
   return json(201, data)
 }
 
-export async function updateTemplate(id: string, event: HandlerEvent) {
+export async function updateTemplate(id: string, event: HandlerEvent, user: AuthedUser) {
+  requireAdminOrAbove(user)
   const supabase = getSupabaseAdmin()
   const body = JSON.parse(event.body || '{}')
 
@@ -54,7 +58,8 @@ export async function updateTemplate(id: string, event: HandlerEvent) {
   return json(200, data)
 }
 
-export async function deleteTemplate(id: string) {
+export async function deleteTemplate(id: string, user: AuthedUser) {
+  requireAdminOrAbove(user)
   const supabase = getSupabaseAdmin()
   const { error } = await supabase.from('templates').delete().eq('id', id)
   if (error) throw new HttpError(500, error.message)

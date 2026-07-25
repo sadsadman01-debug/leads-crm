@@ -45,6 +45,7 @@ export interface KanbanDeal {
   probability: number
   expected_close_date: string | null
   lead_id: string
+  owner_id: string | null
   company_name: string
 }
 
@@ -60,6 +61,7 @@ export interface DealFilters {
   stageId?: string
   industryId?: string
   search?: string
+  assignedTo?: string
 }
 
 export const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'INR'] as const

@@ -1,6 +1,8 @@
 import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
+import { requireAdminOrAbove } from '../lib/permissions.js'
+import type { AuthedUser } from '../lib/auth.js'
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'INR']
 
@@ -15,7 +17,8 @@ export async function getSettings() {
   return json(200, data)
 }
 
-export async function updateSettings(event: HandlerEvent) {
+export async function updateSettings(event: HandlerEvent, user: AuthedUser) {
+  requireAdminOrAbove(user)
   const supabase = getSupabaseAdmin()
   const body = JSON.parse(event.body || '{}')
 

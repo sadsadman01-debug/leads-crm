@@ -2,6 +2,8 @@ import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
 import { computeReminder } from '../lib/reminders.js'
+import { isAdminOrAbove } from '../lib/permissions.js'
+import type { AuthedUser } from '../lib/auth.js'
 
 const MAX_REMINDER_ITEMS = 50
 
@@ -79,7 +81,7 @@ function buildBucketRange(granularity: Granularity): string[] {
   return [...new Set(keys)]
 }
 
-export async function getDashboardSummary(event: HandlerEvent) {
+export async function getDashboardSummary(event: HandlerEvent, user: AuthedUser) {
   const supabase = getSupabaseAdmin()
   const params = event.queryStringParameters ?? {}
   const granularity: Granularity = (['day', 'week', 'month'] as const).includes(params.granularity as Granularity)
@@ -87,17 +89,21 @@ export async function getDashboardSummary(event: HandlerEvent) {
     : 'day'
 
   const industryId = params.industryId || undefined
+  // Users only ever see their own stats, regardless of what the client sends —
+  // re-derived server-side so a User can't request someone else's numbers.
+  const assignedTo = isAdminOrAbove(user) ? params.assignedTo || undefined : user.id
 
   const { data: leads, error } = await supabase
     .from('leads')
-    .select('id, company_name, created_at, lead_source, priority, industry_id, lead_status(*)')
+    .select('id, company_name, created_at, lead_source, priority, industry_id, assigned_to, lead_status(*)')
     .order('created_at', { ascending: true })
     .limit(MAX_LEADS_FOR_AGGREGATION)
 
   if (error) throw new HttpError(500, error.message)
 
   const allRows = leads ?? []
-  const rows = industryId ? allRows.filter((r: any) => r.industry_id === industryId) : allRows
+  let rows = industryId ? allRows.filter((r: any) => r.industry_id === industryId) : allRows
+  if (assignedTo) rows = rows.filter((r: any) => r.assigned_to === assignedTo)
   const totalLeads = rows.length
 
   const statuses = rows.map((r: any) => (Array.isArray(r.lead_status) ? r.lead_status[0] : r.lead_status))
@@ -218,6 +224,44 @@ export async function getDashboardSummary(event: HandlerEvent) {
     })
     .sort((a, b) => b.totalLeads - a.totalLeads)
 
+  let teamPerformance: any[] | undefined
+  if (isAdminOrAbove(user)) {
+    const { data: members } = await supabase
+      .from('profiles')
+      .select('id, nickname, email')
+      .eq('is_active', true)
+    const { data: deals } = await supabase
+      .from('deals')
+      .select('owner_id, value, currency, stage_id, deal_stages(is_closed, is_won)')
+      .limit(MAX_LEADS_FOR_AGGREGATION)
+
+    teamPerformance = (members ?? []).map((m) => {
+      const memberLeads = allRows.filter((r: any) => r.assigned_to === m.id)
+      const memberStatuses = memberLeads.map((l: any) => (Array.isArray(l.lead_status) ? l.lead_status[0] : l.lead_status))
+      const coldEmailCount = memberStatuses.filter((s: any) => s?.cold_email_sent).length
+      const repliedCount = memberStatuses.filter((s: any) => s?.replied).length
+      const convertedCountMember = memberStatuses.filter((s: any) => s?.converted).length
+
+      const memberDeals = (deals ?? []).filter((d: any) => d.owner_id === m.id)
+      const wonDeals = memberDeals.filter((d: any) => d.deal_stages?.is_won)
+      const closedDeals = memberDeals.filter((d: any) => d.deal_stages?.is_closed)
+      const revenueClosed = wonDeals.reduce((sum: number, d: any) => sum + Number(d.value), 0)
+
+      return {
+        id: m.id,
+        name: m.nickname || m.email,
+        totalLeads: memberLeads.length,
+        coldEmailsSent: coldEmailCount,
+        replyRate: pct(repliedCount, memberLeads.length),
+        conversionRate: pct(convertedCountMember, memberLeads.length),
+        totalDeals: memberDeals.length,
+        dealsWon: wonDeals.length,
+        revenueClosed,
+        winRate: pct(wonDeals.length, closedDeals.length),
+      }
+    })
+  }
+
   return json(200, {
     reminders: { overdueCount, dueTodayCount, items: reminderItems },
     totals: { leads: totalLeads },
@@ -236,5 +280,6 @@ export async function getDashboardSummary(event: HandlerEvent) {
     },
     trend,
     industryComparison,
+    teamPerformance,
   })
 }

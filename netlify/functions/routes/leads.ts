@@ -7,10 +7,11 @@ import { computeLeadScore } from '../lib/scoring.js'
 import { logActivity, logActivities } from '../lib/activities.js'
 import { getFollowUpIntervalDays } from './settings.js'
 import type { AuthedUser } from '../lib/auth.js'
+import { requireCanModifyRecord, isAdminOrAbove } from '../lib/permissions.js'
 
 export const LEAD_SELECT = `
   id, company_name, address, phone, email, website, notes, lead_source, priority,
-  stage_id, industry_id, created_at, updated_at,
+  stage_id, industry_id, created_by, assigned_to, created_at, updated_at,
   lead_status ( * ),
   lead_tags ( tags ( id, name ) ),
   lead_social_profiles ( id, platform, url )
@@ -39,6 +40,7 @@ export interface LeadFilters {
   hasWebsite?: boolean
   hasSocialProfile?: boolean
   industryId?: string
+  assignedTo?: string
 }
 
 export function parseFilters(params: Record<string, string | undefined>): LeadFilters {
@@ -109,6 +111,7 @@ export function applyColumnFilters<T extends { eq: any; not: any; gte: any; lte:
   if (filters.priority) q = q.eq('priority', filters.priority)
   if (filters.leadSource) q = q.eq('lead_source', filters.leadSource)
   if (filters.industryId) q = q.eq('industry_id', filters.industryId)
+  if (filters.assignedTo) q = q.eq('assigned_to', filters.assignedTo)
   if (filters.dateFrom) q = q.gte('created_at', filters.dateFrom)
   if (filters.dateTo) q = q.lte('created_at', filters.dateTo)
   if (filters.hasWebsite) {
@@ -217,6 +220,10 @@ export async function createLead(event: HandlerEvent, user: AuthedUser) {
     throw new HttpError(400, 'company_name is required')
   }
 
+  // New leads auto-assign to the creator; reassigning at creation time is
+  // restricted to admins/super admins (a User can only ever create leads for themselves).
+  const assignedTo = isAdminOrAbove(user) && body.assigned_to ? body.assigned_to : user.id
+
   const { data, error } = await supabase
     .from('leads')
     .insert({
@@ -230,6 +237,7 @@ export async function createLead(event: HandlerEvent, user: AuthedUser) {
       priority: body.priority ?? 'Medium',
       industry_id: body.industry_id ?? null,
       created_by: user.id,
+      assigned_to: assignedTo,
     })
     .select('id')
     .single()
@@ -265,9 +273,26 @@ export async function updateLead(id: string, event: HandlerEvent, user: AuthedUs
   const supabase = getSupabaseAdmin()
   const body = JSON.parse(event.body || '{}')
 
+  const { data: existing, error: fetchErr } = await supabase
+    .from('leads')
+    .select('id, assigned_to, created_by')
+    .eq('id', id)
+    .single()
+  if (fetchErr) throw new HttpError(404, 'Lead not found')
+  requireCanModifyRecord(user, existing)
+
   const updatable: Record<string, any> = {}
   for (const key of ['company_name', 'address', 'phone', 'email', 'website', 'notes', 'lead_source', 'priority', 'industry_id']) {
     if (key in body) updatable[key] = body[key]
+  }
+
+  // Reassignment is restricted to admins/super admins, or the current owner
+  // handing the lead off to someone else.
+  if ('assigned_to' in body) {
+    if (!isAdminOrAbove(user) && existing.assigned_to !== user.id) {
+      throw new HttpError(403, 'Only an admin or the current owner can reassign this lead')
+    }
+    updatable.assigned_to = body.assigned_to || null
   }
 
   if (Object.keys(updatable).length > 0) {
@@ -275,6 +300,7 @@ export async function updateLead(id: string, event: HandlerEvent, user: AuthedUs
     if (error) throw new HttpError(500, error.message)
   }
 
+  if ('assigned_to' in body) await logActivity(id, 'assignment', 'Assigned owner changed', user.id)
   if ('tags' in body) {
     await replaceTags(id, body.tags ?? [])
     const tagNames = (body.tags ?? []) as string[]
@@ -291,8 +317,17 @@ export async function updateLead(id: string, event: HandlerEvent, user: AuthedUs
   return getLead(id)
 }
 
-export async function deleteLead(id: string) {
+export async function deleteLead(id: string, user: AuthedUser) {
   const supabase = getSupabaseAdmin()
+
+  const { data: existing, error: fetchErr } = await supabase
+    .from('leads')
+    .select('id, assigned_to, created_by')
+    .eq('id', id)
+    .single()
+  if (fetchErr) throw new HttpError(404, 'Lead not found')
+  requireCanModifyRecord(user, existing)
+
   const { error } = await supabase.from('leads').delete().eq('id', id)
   if (error) throw new HttpError(500, error.message)
   return json(200, { success: true })
@@ -317,6 +352,14 @@ export const STATUS_FIELDS: Record<string, { flagField: string; tsField: string;
 export async function updateLeadStatus(id: string, event: HandlerEvent, user: AuthedUser) {
   const supabase = getSupabaseAdmin()
   const body = JSON.parse(event.body || '{}')
+
+  const { data: existing, error: fetchErr } = await supabase
+    .from('leads')
+    .select('id, assigned_to, created_by')
+    .eq('id', id)
+    .single()
+  if (fetchErr) throw new HttpError(404, 'Lead not found')
+  requireCanModifyRecord(user, existing)
 
   const update: Record<string, any> = {}
   const activityMessages: string[] = []
@@ -377,6 +420,14 @@ export async function updateLeadStage(id: string, event: HandlerEvent, user: Aut
 
   if (!stageId) throw new HttpError(400, 'stage_id is required')
 
+  const { data: existing, error: fetchErr } = await supabase
+    .from('leads')
+    .select('id, assigned_to, created_by')
+    .eq('id', id)
+    .single()
+  if (fetchErr) throw new HttpError(404, 'Lead not found')
+  requireCanModifyRecord(user, existing)
+
   const { error } = await supabase.from('leads').update({ stage_id: stageId }).eq('id', id)
   if (error) throw new HttpError(500, error.message)
 
@@ -390,17 +441,21 @@ export async function getLeadActivities(id: string) {
   const supabase = getSupabaseAdmin()
   const { data, error } = await supabase
     .from('lead_activities')
-    .select('id, type, message, created_at')
+    .select('id, type, message, created_at, created_by, profiles ( nickname, email )')
     .eq('lead_id', id)
     .order('created_at', { ascending: false })
     .limit(200)
 
   if (error) throw new HttpError(500, error.message)
-  return json(200, { activities: data ?? [] })
+  const activities = (data ?? []).map((row: any) => {
+    const { profiles, ...rest } = row
+    return { ...rest, actor_name: profiles?.nickname || profiles?.email || null }
+  })
+  return json(200, { activities })
 }
 
 const KANBAN_SELECT = `
-  id, company_name, priority, stage_id,
+  id, company_name, priority, stage_id, assigned_to,
   lead_status ( cold_email_sent, followup1_sent, followup2_sent, followup3_sent,
     whatsapp_sent, linkedin_sent, sms_sent, replied, converted,
     followup1_due_at, followup2_due_at, followup3_due_at )
@@ -410,9 +465,11 @@ const KANBAN_MAX_LEADS = 1000
 export async function getKanbanLeads(event: HandlerEvent) {
   const supabase = getSupabaseAdmin()
   const industryId = event.queryStringParameters?.industryId
+  const assignedTo = event.queryStringParameters?.assignedTo
 
   let query = supabase.from('leads').select(KANBAN_SELECT)
   if (industryId) query = query.eq('industry_id', industryId)
+  if (assignedTo) query = query.eq('assigned_to', assignedTo)
 
   const { data, error } = await query.order('created_at', { ascending: false }).limit(KANBAN_MAX_LEADS)
 
@@ -425,6 +482,7 @@ export async function getKanbanLeads(event: HandlerEvent) {
       company_name: row.company_name,
       priority: row.priority,
       stage_id: row.stage_id,
+      assigned_to: row.assigned_to,
       status: status ? { ...status, ...computeReminder(status) } : status,
       ...computeLeadScore(status, row.priority),
     }
@@ -446,13 +504,28 @@ function requireIds(body: any): string[] {
   return ids
 }
 
+/** Non-admins can only bulk-act on records they own — silently narrows the id
+ * list to ones they're actually allowed to modify rather than rejecting the whole batch. */
+async function restrictIdsToPermitted(ids: string[], user: AuthedUser): Promise<string[]> {
+  if (isAdminOrAbove(user)) return ids
+  const supabase = getSupabaseAdmin()
+  const { data, error } = await supabase
+    .from('leads')
+    .select('id')
+    .in('id', ids)
+    .or(`assigned_to.eq.${user.id},created_by.eq.${user.id}`)
+  if (error) throw new HttpError(500, error.message)
+  return (data ?? []).map((r) => r.id)
+}
+
 export async function bulkAction(event: HandlerEvent, user: AuthedUser) {
   const supabase = getSupabaseAdmin()
   const body = JSON.parse(event.body || '{}')
   const type = body.type
 
   if (type === 'status') {
-    const ids = requireIds(body)
+    const ids = await restrictIdsToPermitted(requireIds(body), user)
+    if (ids.length === 0) return json(200, { success: true, updated: 0 })
     const { field, value } = body
     if (!(field in STATUS_FIELDS)) throw new HttpError(400, `Unknown status field: ${field}`)
     const { tsField, flagField, label } = STATUS_FIELDS[field]
@@ -478,7 +551,8 @@ export async function bulkAction(event: HandlerEvent, user: AuthedUser) {
   }
 
   if (type === 'tags') {
-    const ids = requireIds(body)
+    const ids = await restrictIdsToPermitted(requireIds(body), user)
+    if (ids.length === 0) return json(200, { success: true, updated: 0 })
     const tagNames = (body.tagNames ?? []) as string[]
     if (tagNames.filter((t) => t.trim()).length === 0) {
       throw new HttpError(400, 'tagNames must be a non-empty array')
@@ -503,7 +577,7 @@ export async function bulkAction(event: HandlerEvent, user: AuthedUser) {
   }
 
   if (type === 'delete') {
-    const ids = requireIds(body)
+    const ids = await restrictIdsToPermitted(requireIds(body), user)
     const { error } = await supabase.from('leads').delete().in('id', ids)
     if (error) throw new HttpError(500, error.message)
     return json(200, { success: true, deleted: ids.length })

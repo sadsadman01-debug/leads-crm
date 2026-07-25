@@ -1,6 +1,8 @@
 import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
+import { requireAdminOrAbove } from '../lib/permissions.js'
+import type { AuthedUser } from '../lib/auth.js'
 
 const STAGE_COLUMNS = 'id, name, position, default_probability, is_closed, is_won'
 
@@ -11,7 +13,8 @@ export async function listDealStages() {
   return json(200, { stages: data ?? [] })
 }
 
-export async function createDealStage(event: HandlerEvent) {
+export async function createDealStage(event: HandlerEvent, user: AuthedUser) {
+  requireAdminOrAbove(user)
   const supabase = getSupabaseAdmin()
   const body = JSON.parse(event.body || '{}')
   const name = (body.name ?? '').trim()
@@ -48,7 +51,8 @@ function clampProbability(value: any, fallback: number): number {
   return Math.max(0, Math.min(100, Math.round(n)))
 }
 
-export async function updateDealStage(id: string, event: HandlerEvent) {
+export async function updateDealStage(id: string, event: HandlerEvent, user: AuthedUser) {
+  requireAdminOrAbove(user)
   const supabase = getSupabaseAdmin()
   const body = JSON.parse(event.body || '{}')
 
@@ -76,7 +80,8 @@ export async function updateDealStage(id: string, event: HandlerEvent) {
 }
 
 /** Body: { orderedIds: string[] } — full ordering, position becomes each id's index. */
-export async function reorderDealStages(event: HandlerEvent) {
+export async function reorderDealStages(event: HandlerEvent, user: AuthedUser) {
+  requireAdminOrAbove(user)
   const supabase = getSupabaseAdmin()
   const body = JSON.parse(event.body || '{}')
   const orderedIds = body.orderedIds
@@ -98,7 +103,8 @@ export async function reorderDealStages(event: HandlerEvent) {
   return listDealStages()
 }
 
-export async function deleteDealStage(id: string) {
+export async function deleteDealStage(id: string, user: AuthedUser) {
+  requireAdminOrAbove(user)
   const supabase = getSupabaseAdmin()
 
   const { count, error: countErr } = await supabase

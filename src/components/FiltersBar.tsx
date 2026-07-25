@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Filter, X, ChevronDown } from 'lucide-react'
-import { tagsApi, isFiltersEmpty } from '@/lib/api'
+import { tagsApi, teamApi, isFiltersEmpty } from '@/lib/api'
+import { useAuth } from '@/contexts/AuthContext'
 import { LEAD_SOURCES, PRIORITIES, STATUS_TOGGLE_FIELDS, type LeadFilters } from '@/types/lead'
 
 export function FiltersBar({
@@ -11,9 +12,12 @@ export function FiltersBar({
   filters: LeadFilters
   onChange: (filters: LeadFilters) => void
 }) {
+  const { profile } = useAuth()
   const [open, setOpen] = useState(false)
   const { data: tagsData } = useQuery({ queryKey: ['tags'], queryFn: tagsApi.list })
   const tags = tagsData?.tags ?? []
+  const { data: rosterData } = useQuery({ queryKey: ['team-roster'], queryFn: teamApi.roster })
+  const roster = rosterData?.members ?? []
 
   function set<K extends keyof LeadFilters>(key: K, value: LeadFilters[K]) {
     onChange({ ...filters, [key]: value })
@@ -43,10 +47,23 @@ export function FiltersBar({
     filters.dateTo,
     filters.hasWebsite,
     filters.hasSocialProfile,
+    filters.assignedTo,
   ].filter(Boolean).length
 
   return (
-    <div className="relative">
+    <div className="relative flex items-center gap-2">
+      {profile && (
+        <button
+          className={`pill border transition-colors ${
+            filters.assignedTo === profile.id
+              ? 'border-accent-500 bg-accent-500/15 text-accent-400'
+              : 'border-base-600 bg-base-800 text-base-300 hover:bg-base-700'
+          }`}
+          onClick={() => set('assignedTo', filters.assignedTo === profile.id ? undefined : profile.id)}
+        >
+          My Leads
+        </button>
+      )}
       <button className="btn-secondary" onClick={() => setOpen((o) => !o)}>
         <Filter size={16} />
         Filters
@@ -72,6 +89,20 @@ export function FiltersBar({
             </div>
 
             <div className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
+              <div>
+                <label className="label">Assigned To</label>
+                <select
+                  className="input"
+                  value={filters.assignedTo ?? ''}
+                  onChange={(e) => set('assignedTo', e.target.value || undefined)}
+                >
+                  <option value="">Everyone</option>
+                  {roster.map((m) => (
+                    <option key={m.id} value={m.id}>{m.nickname || m.email}</option>
+                  ))}
+                </select>
+              </div>
+
               <div>
                 <label className="label">Outreach Status</label>
                 <select

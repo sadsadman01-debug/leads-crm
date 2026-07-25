@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
-import { Mail, Tag as TagIcon, Columns3, Paperclip, Sparkles, History } from 'lucide-react'
+import { Mail, Tag as TagIcon, Columns3, Paperclip, Sparkles, History, UserCog } from 'lucide-react'
 import { leadsApi } from '@/lib/api'
+import { Avatar } from '@/components/ui/RoleBadge'
 import type { LeadActivity } from '@/types/lead'
 
 const TYPE_ICON: Record<string, typeof History> = {
@@ -11,6 +12,7 @@ const TYPE_ICON: Record<string, typeof History> = {
   tags: TagIcon,
   industry: TagIcon,
   attachment: Paperclip,
+  assignment: UserCog,
 }
 
 export function LeadTimeline({ leadId }: { leadId: string }) {
@@ -43,9 +45,16 @@ export function LeadTimeline({ leadId }: { leadId: string }) {
                 </div>
                 <div className="pb-1">
                   <p className="text-sm text-base-200">{a.message}</p>
-                  <p className="text-xs text-base-500">
-                    {formatDistanceToNow(new Date(a.created_at), { addSuffix: true })}
-                  </p>
+                  <div className="mt-0.5 flex items-center gap-1.5 text-xs text-base-500">
+                    {a.actor_name && (
+                      <>
+                        <Avatar name={a.actor_name} size={4} />
+                        <span>{a.actor_name}</span>
+                        <span>·</span>
+                      </>
+                    )}
+                    <span>{formatDistanceToNow(new Date(a.created_at), { addSuffix: true })}</span>
+                  </div>
                 </div>
               </li>
             )

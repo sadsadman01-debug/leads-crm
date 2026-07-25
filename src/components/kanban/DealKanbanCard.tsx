@@ -3,6 +3,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { MoveRight, CalendarClock } from 'lucide-react'
 import clsx from 'clsx'
 import { formatCurrency } from '@/lib/currency'
+import { Avatar } from '@/components/ui/RoleBadge'
 import type { KanbanDeal } from '@/types/deal'
 import type { DealStage } from '@/types/deal'
 
@@ -23,12 +24,14 @@ export function DealKanbanCard({
   onOpen,
   onMoveToStage,
   dragging,
+  ownerName,
 }: {
   deal: KanbanDeal
   stages: DealStage[]
   onOpen: () => void
   onMoveToStage: (stageId: string) => void
   dragging?: boolean
+  ownerName?: string
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: deal.id,
@@ -56,7 +59,10 @@ export function DealKanbanCard({
         <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-warn ring-2 ring-base-950" title="Closing within 7 days" />
       )}
 
-      <p className="mb-0.5 truncate text-sm font-medium text-base-100">{deal.name}</p>
+      <div className="mb-0.5 flex items-center justify-between gap-2">
+        <p className="truncate text-sm font-medium text-base-100">{deal.name}</p>
+        {ownerName && <Avatar name={ownerName} size={5} />}
+      </div>
       <p className="mb-2 truncate text-xs text-base-400">{deal.company_name}</p>
 
       <div className="mb-2 flex items-center justify-between">

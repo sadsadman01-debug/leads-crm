@@ -13,8 +13,9 @@ import {
   Rows3,
   Columns3,
 } from 'lucide-react'
-import { bulkApi, exportApi, industriesApi, leadsApi, pipelineStagesApi } from '@/lib/api'
+import { bulkApi, exportApi, industriesApi, leadsApi, pipelineStagesApi, teamApi } from '@/lib/api'
 import { PriorityBadge, ScoreBadge, TagPill, Badge } from '@/components/ui/Badge'
+import { Avatar } from '@/components/ui/RoleBadge'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { FiltersBar } from '@/components/FiltersBar'
 import { BulkActionsBar } from '@/components/BulkActionsBar'
@@ -59,6 +60,9 @@ export function LeadsList() {
   const { data: industriesData } = useQuery({ queryKey: ['industries'], queryFn: industriesApi.list })
   const industries = industriesData?.industries ?? []
   const selectedIndustryId = filters.industryId
+
+  const { data: rosterData } = useQuery({ queryKey: ['team-roster'], queryFn: teamApi.roster })
+  const assigneeNameById = new Map((rosterData?.members ?? []).map((m) => [m.id, m.nickname || m.email]))
 
   function selectIndustry(industryId: string | undefined) {
     setFilters((prev) => ({ ...prev, industryId }))
@@ -219,7 +223,7 @@ export function LeadsList() {
       )}
 
       {view === 'kanban' ? (
-        <KanbanBoard industryId={selectedIndustryId} />
+        <KanbanBoard industryId={selectedIndustryId} assignedTo={filters.assignedTo} />
       ) : (
         <>
       <div className="card mb-4 flex flex-wrap items-center gap-3 p-4">
@@ -306,6 +310,7 @@ export function LeadsList() {
                   <th className="px-5 py-3 font-medium">Tags</th>
                   <th className="px-5 py-3 font-medium">Priority</th>
                   <th className="px-5 py-3 font-medium">Status</th>
+                  <th className="px-5 py-3 font-medium">Assigned To</th>
                   <th className="px-5 py-3 font-medium">Updated</th>
                 </tr>
               </thead>
@@ -364,6 +369,18 @@ export function LeadsList() {
                       </div>
                     </td>
                     <td className="px-5 py-3.5">{statusSummary(lead)}</td>
+                    <td className="px-5 py-3.5">
+                      {lead.assigned_to && assigneeNameById.has(lead.assigned_to) ? (
+                        <div className="flex items-center gap-1.5">
+                          <Avatar name={assigneeNameById.get(lead.assigned_to)} size={5} />
+                          <span className="truncate text-xs text-base-300">
+                            {assigneeNameById.get(lead.assigned_to)}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-base-400">—</span>
+                      )}
+                    </td>
                     <td className="px-5 py-3.5 text-base-400">
                       {new Date(lead.updated_at).toLocaleDateString()}
                     </td>

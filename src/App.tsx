@@ -1,12 +1,13 @@
 import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { ProtectedRoute } from '@/components/ProtectedRoute'
+import { ProtectedRoute, RequireAdmin } from '@/components/ProtectedRoute'
 import { AppLayout } from '@/components/Layout/AppLayout'
 import { Login } from '@/pages/Login'
 import { LeadsList } from '@/pages/Leads/LeadsList'
 import { LeadForm } from '@/pages/Leads/LeadForm'
 import { LeadDetail } from '@/pages/Leads/LeadDetail'
 import { Settings } from '@/pages/Settings'
+import { TeamList } from '@/pages/Team/TeamList'
 
 // Charting (recharts) is only needed here — code-split so it doesn't bloat every route.
 const Dashboard = lazy(() => import('@/pages/Dashboard').then((m) => ({ default: m.Dashboard })))
@@ -45,6 +46,9 @@ export default function App() {
             }
           />
           <Route path="/settings" element={<Settings />} />
+          <Route element={<RequireAdmin />}>
+            <Route path="/team" element={<TeamList />} />
+          </Route>
         </Route>
       </Route>
 

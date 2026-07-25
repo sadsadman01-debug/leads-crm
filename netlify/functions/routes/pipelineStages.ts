@@ -1,6 +1,8 @@
 import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
+import { requireAdminOrAbove } from '../lib/permissions.js'
+import type { AuthedUser } from '../lib/auth.js'
 
 export async function listStages() {
   const supabase = getSupabaseAdmin()
@@ -9,7 +11,8 @@ export async function listStages() {
   return json(200, { stages: data ?? [] })
 }
 
-export async function createStage(event: HandlerEvent) {
+export async function createStage(event: HandlerEvent, user: AuthedUser) {
+  requireAdminOrAbove(user)
   const supabase = getSupabaseAdmin()
   const body = JSON.parse(event.body || '{}')
   const name = (body.name ?? '').trim()
@@ -34,7 +37,8 @@ export async function createStage(event: HandlerEvent) {
   return json(201, data)
 }
 
-export async function renameStage(id: string, event: HandlerEvent) {
+export async function renameStage(id: string, event: HandlerEvent, user: AuthedUser) {
+  requireAdminOrAbove(user)
   const supabase = getSupabaseAdmin()
   const body = JSON.parse(event.body || '{}')
   const name = (body.name ?? '').trim()
@@ -52,7 +56,8 @@ export async function renameStage(id: string, event: HandlerEvent) {
 }
 
 /** Body: { orderedIds: string[] } — full ordering, position becomes each id's index. */
-export async function reorderStages(event: HandlerEvent) {
+export async function reorderStages(event: HandlerEvent, user: AuthedUser) {
+  requireAdminOrAbove(user)
   const supabase = getSupabaseAdmin()
   const body = JSON.parse(event.body || '{}')
   const orderedIds = body.orderedIds
@@ -79,7 +84,8 @@ export async function reorderStages(event: HandlerEvent) {
   return listStages()
 }
 
-export async function deleteStage(id: string) {
+export async function deleteStage(id: string, user: AuthedUser) {
+  requireAdminOrAbove(user)
   const supabase = getSupabaseAdmin()
 
   const { count, error: countErr } = await supabase

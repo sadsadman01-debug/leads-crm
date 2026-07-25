@@ -2,12 +2,12 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core'
-import { leadsApi, pipelineStagesApi } from '@/lib/api'
+import { leadsApi, pipelineStagesApi, teamApi } from '@/lib/api'
 import { KanbanColumn } from './KanbanColumn'
 import { KanbanCard } from './KanbanCard'
 import type { KanbanLead } from '@/types/lead'
 
-export function KanbanBoard({ industryId }: { industryId?: string }) {
+export function KanbanBoard({ industryId, assignedTo }: { industryId?: string; assignedTo?: string }) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [activeLead, setActiveLead] = useState<KanbanLead | null>(null)
@@ -17,9 +17,11 @@ export function KanbanBoard({ industryId }: { industryId?: string }) {
     queryFn: pipelineStagesApi.list,
   })
   const { data: kanbanData, isLoading: leadsLoading } = useQuery({
-    queryKey: ['leads-kanban', industryId],
-    queryFn: () => leadsApi.kanban(industryId),
+    queryKey: ['leads-kanban', industryId, assignedTo],
+    queryFn: () => leadsApi.kanban(industryId, assignedTo),
   })
+  const { data: rosterData } = useQuery({ queryKey: ['team-roster'], queryFn: teamApi.roster })
+  const nameById = new Map((rosterData?.members ?? []).map((m) => [m.id, m.nickname || m.email]))
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
@@ -46,7 +48,7 @@ export function KanbanBoard({ industryId }: { industryId?: string }) {
     const lead = leads.find((l) => l.id === leadId)
     if (!lead || lead.stage_id === newStageId) return
 
-    queryClient.setQueryData(['leads-kanban', industryId], (prev: any) =>
+    queryClient.setQueryData(['leads-kanban', industryId, assignedTo], (prev: any) =>
       prev
         ? { ...prev, leads: prev.leads.map((l: KanbanLead) => (l.id === leadId ? { ...l, stage_id: newStageId } : l)) }
         : prev
@@ -75,6 +77,7 @@ export function KanbanBoard({ industryId }: { industryId?: string }) {
                   stages={stages}
                   onOpen={() => navigate(`/leads/${lead.id}`)}
                   onMoveToStage={(stageId) => moveLeadToStage(lead.id, stageId)}
+                  assigneeName={lead.assigned_to ? nameById.get(lead.assigned_to) : undefined}
                 />
               ))}
             </KanbanColumn>

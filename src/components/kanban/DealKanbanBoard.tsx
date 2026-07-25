@@ -1,13 +1,21 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core'
-import { dealsApi, dealStagesApi } from '@/lib/api'
+import { dealsApi, dealStagesApi, teamApi } from '@/lib/api'
 import { KanbanColumn } from './KanbanColumn'
 import { DealKanbanCard } from './DealKanbanCard'
 import { CloseDealModal } from '@/components/CloseDealModal'
 import type { KanbanDeal, DealStage } from '@/types/deal'
 
-export function DealKanbanBoard({ industryId, onOpenDeal }: { industryId?: string; onOpenDeal: (dealId: string) => void }) {
+export function DealKanbanBoard({
+  industryId,
+  assignedTo,
+  onOpenDeal,
+}: {
+  industryId?: string
+  assignedTo?: string
+  onOpenDeal: (dealId: string) => void
+}) {
   const queryClient = useQueryClient()
   const [activeDeal, setActiveDeal] = useState<KanbanDeal | null>(null)
   const [pendingClose, setPendingClose] = useState<{ dealId: string; dealName: string; stage: DealStage } | null>(null)
@@ -17,9 +25,11 @@ export function DealKanbanBoard({ industryId, onOpenDeal }: { industryId?: strin
     queryFn: dealStagesApi.list,
   })
   const { data: kanbanData, isLoading: dealsLoading } = useQuery({
-    queryKey: ['deals-kanban', industryId],
-    queryFn: () => dealsApi.kanban(industryId),
+    queryKey: ['deals-kanban', industryId, assignedTo],
+    queryFn: () => dealsApi.kanban(industryId, assignedTo),
   })
+  const { data: rosterData } = useQuery({ queryKey: ['team-roster'], queryFn: teamApi.roster })
+  const nameById = new Map((rosterData?.members ?? []).map((m) => [m.id, m.nickname || m.email]))
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
@@ -60,7 +70,7 @@ export function DealKanbanBoard({ industryId, onOpenDeal }: { industryId?: strin
       return
     }
 
-    queryClient.setQueryData(['deals-kanban', industryId], (prev: any) =>
+    queryClient.setQueryData(['deals-kanban', industryId, assignedTo], (prev: any) =>
       prev
         ? { ...prev, deals: prev.deals.map((d: KanbanDeal) => (d.id === dealId ? { ...d, stage_id: newStageId } : d)) }
         : prev
@@ -90,6 +100,7 @@ export function DealKanbanBoard({ industryId, onOpenDeal }: { industryId?: strin
                     stages={stages}
                     onOpen={() => onOpenDeal(deal.id)}
                     onMoveToStage={(stageId) => moveDealToStage(deal.id, stageId)}
+                    ownerName={deal.owner_id ? nameById.get(deal.owner_id) : undefined}
                   />
                 ))}
               </KanbanColumn>

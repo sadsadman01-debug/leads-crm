@@ -1,0 +1,404 @@
+import { useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Plus, UsersRound } from 'lucide-react'
+import { teamApi } from '@/lib/api'
+import { useAuth } from '@/contexts/AuthContext'
+import { Modal } from '@/components/ui/Modal'
+import { RoleBadge, Avatar } from '@/components/ui/RoleBadge'
+import { Badge } from '@/components/ui/Badge'
+import type { Role, TeamMember } from '@/types/team'
+
+export function TeamList() {
+  const { profile } = useAuth()
+  const queryClient = useQueryClient()
+  const [addOpen, setAddOpen] = useState(false)
+  const [editing, setEditing] = useState<TeamMember | null>(null)
+  const [deactivating, setDeactivating] = useState<TeamMember | null>(null)
+  const [deleting, setDeleting] = useState<TeamMember | null>(null)
+
+  const { data, isLoading } = useQuery({ queryKey: ['team-members'], queryFn: teamApi.list })
+  const members = data?.members ?? []
+  const isSuperAdmin = profile?.role === 'super_admin'
+
+  function invalidate() {
+    queryClient.invalidateQueries({ queryKey: ['team-members'] })
+  }
+
+  const reactivateMutation = useMutation({
+    mutationFn: (id: string) => teamApi.update(id, { is_active: true }),
+    onSuccess: invalidate,
+  })
+
+  return (
+    <div>
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-base-100">Team</h1>
+          <p className="mt-1 text-sm text-base-400">{members.length} member{members.length === 1 ? '' : 's'}</p>
+        </div>
+        <button className="btn-primary" onClick={() => setAddOpen(true)}>
+          <Plus size={16} />
+          Add Team Member
+        </button>
+      </div>
+
+      {isLoading ? (
+        <div className="card p-12 text-center text-base-400">Loading team…</div>
+      ) : members.length === 0 ? (
+        <div className="card flex flex-col items-center gap-3 p-16 text-center">
+          <UsersRound size={32} className="text-base-500" />
+          <p className="text-base-300">No team members yet.</p>
+        </div>
+      ) : (
+        <div className="card overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-base-700/60 text-xs uppercase tracking-wide text-base-400">
+                <th className="px-5 py-3 font-medium">Nickname</th>
+                <th className="px-5 py-3 font-medium">Email</th>
+                <th className="px-5 py-3 font-medium">Role</th>
+                <th className="px-5 py-3 font-medium">Status</th>
+                <th className="px-5 py-3 font-medium">Date Added</th>
+                <th className="px-5 py-3 font-medium">Last Login</th>
+                <th className="px-5 py-3 font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {members.map((m) => {
+                const canManage = m.role !== 'super_admin' && m.id !== profile?.id && (isSuperAdmin || m.role === 'user')
+                return (
+                  <tr key={m.id} className="border-b border-base-800">
+                    <td className="px-5 py-3.5">
+                      <div className="flex items-center gap-2.5">
+                        <Avatar name={m.nickname || m.email} />
+                        <span className="font-medium text-base-100">{m.nickname || '—'}</span>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3.5 text-base-300">{m.email}</td>
+                    <td className="px-5 py-3.5"><RoleBadge role={m.role} /></td>
+                    <td className="px-5 py-3.5">
+                      <Badge tone={m.is_active ? 'success' : 'neutral'}>{m.is_active ? 'Active' : 'Deactivated'}</Badge>
+                    </td>
+                    <td className="px-5 py-3.5 text-base-400">{new Date(m.created_at).toLocaleDateString()}</td>
+                    <td className="px-5 py-3.5 text-base-400">
+                      {m.last_login_at ? new Date(m.last_login_at).toLocaleDateString() : 'Never'}
+                    </td>
+                    <td className="px-5 py-3.5">
+                      {canManage && (
+                        <div className="flex flex-wrap gap-2">
+                          <button className="btn-ghost px-2 text-accent-400" onClick={() => setEditing(m)}>
+                            Edit
+                          </button>
+                          {m.is_active ? (
+                            <button className="btn-ghost px-2 text-warn" onClick={() => setDeactivating(m)}>
+                              Deactivate
+                            </button>
+                          ) : (
+                            <button
+                              className="btn-ghost px-2 text-success"
+                              disabled={reactivateMutation.isPending}
+                              onClick={() => reactivateMutation.mutate(m.id)}
+                            >
+                              Reactivate
+                            </button>
+                          )}
+                          {isSuperAdmin && (
+                            <button className="btn-ghost px-2 text-danger" onClick={() => setDeleting(m)}>
+                              Delete
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <AddMemberModal open={addOpen} onClose={() => setAddOpen(false)} isSuperAdmin={isSuperAdmin} onSaved={invalidate} />
+      <EditMemberModal member={editing} isSuperAdmin={isSuperAdmin} onClose={() => setEditing(null)} onSaved={invalidate} />
+      <DeactivateModal
+        member={deactivating}
+        members={members}
+        onClose={() => setDeactivating(null)}
+        onSaved={invalidate}
+      />
+      <DeleteModal member={deleting} onClose={() => setDeleting(null)} onSaved={invalidate} />
+    </div>
+  )
+}
+
+function AddMemberModal({
+  open,
+  onClose,
+  isSuperAdmin,
+  onSaved,
+}: {
+  open: boolean
+  onClose: () => void
+  isSuperAdmin: boolean
+  onSaved: () => void
+}) {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [nickname, setNickname] = useState('')
+  const [role, setRole] = useState<Role>('user')
+
+  const mutation = useMutation({
+    mutationFn: () => teamApi.create({ email, password, nickname, role }),
+    onSuccess: () => {
+      onSaved()
+      onClose()
+      setEmail('')
+      setPassword('')
+      setNickname('')
+      setRole('user')
+    },
+  })
+
+  return (
+    <Modal open={open} onClose={onClose} title="Add Team Member">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          mutation.mutate()
+        }}
+        className="space-y-4"
+      >
+        <div>
+          <label className="label">Email</label>
+          <input type="email" required className="input" value={email} onChange={(e) => setEmail(e.target.value)} />
+        </div>
+        <div>
+          <label className="label">Password</label>
+          <input
+            type="password"
+            required
+            minLength={8}
+            className="input"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="label">Nickname</label>
+          <input required className="input" value={nickname} onChange={(e) => setNickname(e.target.value)} />
+        </div>
+        {isSuperAdmin && (
+          <div>
+            <label className="label">Role</label>
+            <select className="input" value={role} onChange={(e) => setRole(e.target.value as Role)}>
+              <option value="user">User</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+        )}
+        {mutation.isError && <p className="text-sm text-danger">{(mutation.error as Error).message}</p>}
+        <div className="flex justify-end gap-3 border-t border-base-700/60 pt-4">
+          <button type="button" className="btn-secondary" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" className="btn-primary" disabled={mutation.isPending}>
+            {mutation.isPending ? 'Creating…' : 'Create Member'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+function EditMemberModal({
+  member,
+  isSuperAdmin,
+  onClose,
+  onSaved,
+}: {
+  member: TeamMember | null
+  isSuperAdmin: boolean
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [nickname, setNickname] = useState('')
+  const [role, setRole] = useState<Role>('user')
+
+  const mutation = useMutation({
+    mutationFn: () => teamApi.update(member!.id, { nickname, role: isSuperAdmin ? role : undefined }),
+    onSuccess: () => {
+      onSaved()
+      onClose()
+    },
+  })
+
+  if (!member) return null
+
+  return (
+    <Modal open={Boolean(member)} onClose={onClose} title="Edit Team Member">
+      <EditMemberForm
+        member={member}
+        isSuperAdmin={isSuperAdmin}
+        onCancel={onClose}
+        onSubmit={(n, r) => {
+          setNickname(n)
+          setRole(r)
+          mutation.mutate()
+        }}
+        pending={mutation.isPending}
+        error={mutation.isError ? (mutation.error as Error).message : undefined}
+      />
+    </Modal>
+  )
+}
+
+function EditMemberForm({
+  member,
+  isSuperAdmin,
+  onCancel,
+  onSubmit,
+  pending,
+  error,
+}: {
+  member: TeamMember
+  isSuperAdmin: boolean
+  onCancel: () => void
+  onSubmit: (nickname: string, role: Role) => void
+  pending: boolean
+  error?: string
+}) {
+  const [nickname, setNickname] = useState(member.nickname ?? '')
+  const [role, setRole] = useState<Role>(member.role === 'admin' ? 'admin' : 'user')
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault()
+        onSubmit(nickname, role)
+      }}
+      className="space-y-4"
+    >
+      <div>
+        <label className="label">Nickname</label>
+        <input required className="input" value={nickname} onChange={(e) => setNickname(e.target.value)} />
+      </div>
+      {isSuperAdmin && (
+        <div>
+          <label className="label">Role</label>
+          <select className="input" value={role} onChange={(e) => setRole(e.target.value as Role)}>
+            <option value="user">User</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+      )}
+      {error && <p className="text-sm text-danger">{error}</p>}
+      <div className="flex justify-end gap-3 border-t border-base-700/60 pt-4">
+        <button type="button" className="btn-secondary" onClick={onCancel}>
+          Cancel
+        </button>
+        <button type="submit" className="btn-primary" disabled={pending}>
+          {pending ? 'Saving…' : 'Save Changes'}
+        </button>
+      </div>
+    </form>
+  )
+}
+
+function DeactivateModal({
+  member,
+  members,
+  onClose,
+  onSaved,
+}: {
+  member: TeamMember | null
+  members: TeamMember[]
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [reassignTo, setReassignTo] = useState('')
+
+  const mutation = useMutation({
+    mutationFn: () => teamApi.update(member!.id, { is_active: false, reassignTo: reassignTo || null }),
+    onSuccess: () => {
+      onSaved()
+      onClose()
+      setReassignTo('')
+    },
+  })
+
+  if (!member) return null
+  const others = members.filter((m) => m.id !== member.id && m.is_active)
+
+  return (
+    <Modal open={Boolean(member)} onClose={onClose} title={`Deactivate ${member.nickname || member.email}?`}>
+      <p className="mb-4 text-sm text-base-300">
+        They will no longer be able to log in. Their leads and deals stay attributed to them historically, but you
+        can optionally reassign their currently-assigned records to another active member now.
+      </p>
+      <div className="mb-4">
+        <label className="label">Reassign their leads/deals to</label>
+        <select className="input" value={reassignTo} onChange={(e) => setReassignTo(e.target.value)}>
+          <option value="">Leave unassigned</option>
+          {others.map((m) => (
+            <option key={m.id} value={m.id}>{m.nickname || m.email}</option>
+          ))}
+        </select>
+      </div>
+      {mutation.isError && <p className="mb-3 text-sm text-danger">{(mutation.error as Error).message}</p>}
+      <div className="flex justify-end gap-3 border-t border-base-700/60 pt-4">
+        <button className="btn-secondary" onClick={onClose}>
+          Cancel
+        </button>
+        <button className="btn-danger" disabled={mutation.isPending} onClick={() => mutation.mutate()}>
+          {mutation.isPending ? 'Deactivating…' : 'Deactivate'}
+        </button>
+      </div>
+    </Modal>
+  )
+}
+
+function DeleteModal({
+  member,
+  onClose,
+  onSaved,
+}: {
+  member: TeamMember | null
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [confirm, setConfirm] = useState('')
+
+  const mutation = useMutation({
+    mutationFn: () => teamApi.remove(member!.id, confirm),
+    onSuccess: () => {
+      onSaved()
+      onClose()
+      setConfirm('')
+    },
+  })
+
+  if (!member) return null
+
+  return (
+    <Modal open={Boolean(member)} onClose={onClose} title="Permanently delete this member?">
+      <p className="mb-4 text-sm text-base-300">
+        This cannot be undone. Their leads and deals will be reassigned to you. Type{' '}
+        <strong>{member.email}</strong> to confirm.
+      </p>
+      <input className="input mb-4" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder={member.email} />
+      {mutation.isError && <p className="mb-3 text-sm text-danger">{(mutation.error as Error).message}</p>}
+      <div className="flex justify-end gap-3 border-t border-base-700/60 pt-4">
+        <button className="btn-secondary" onClick={onClose}>
+          Cancel
+        </button>
+        <button
+          className="btn-danger"
+          disabled={mutation.isPending || confirm.toLowerCase() !== member.email.toLowerCase()}
+          onClick={() => mutation.mutate()}
+        >
+          {mutation.isPending ? 'Deleting…' : 'Delete Permanently'}
+        </button>
+      </div>
+    </Modal>
+  )
+}

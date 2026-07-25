@@ -1,7 +1,8 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Users, UserPlus, Settings as SettingsIcon, LogOut, Target, X, Handshake } from 'lucide-react'
+import { LayoutDashboard, Users, UserPlus, Settings as SettingsIcon, LogOut, Target, X, Handshake, UsersRound } from 'lucide-react'
 import clsx from 'clsx'
 import { useAuth } from '@/contexts/AuthContext'
+import { RoleBadge, Avatar } from '@/components/ui/RoleBadge'
 
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -12,7 +13,11 @@ const NAV_ITEMS = [
 ]
 
 export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { session, signOut } = useAuth()
+  const { session, profile, signOut } = useAuth()
+  const navItems =
+    profile && (profile.role === 'admin' || profile.role === 'super_admin')
+      ? [...NAV_ITEMS.slice(0, 4), { to: '/team', label: 'Team', icon: UsersRound }, NAV_ITEMS[4]]
+      : NAV_ITEMS
 
   return (
     <>
@@ -46,7 +51,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
         </div>
 
         <nav className="flex-1 space-y-1 px-3">
-          {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+          {navItems.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}
@@ -69,12 +74,12 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
 
         <div className="border-t border-base-700/60 p-3">
           <div className="mb-2 flex items-center gap-2.5 rounded-lg px-3 py-2">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-base-700 text-xs font-semibold text-base-200">
-              {session?.user.email?.[0]?.toUpperCase() ?? 'A'}
-            </div>
+            <Avatar name={profile?.nickname || session?.user.email} />
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-base-100">{session?.user.email}</p>
-              <p className="text-xs text-base-400">Admin</p>
+              <p className="truncate text-sm font-medium text-base-100">
+                {profile?.nickname || session?.user.email}
+              </p>
+              {profile && <RoleBadge role={profile.role} />}
             </div>
           </div>
           <button onClick={() => signOut()} className="btn-ghost w-full justify-start">

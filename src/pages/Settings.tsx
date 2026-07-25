@@ -1,5 +1,6 @@
-import { Settings as SettingsIcon } from 'lucide-react'
+import { AlertCircle } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { RoleBadge } from '@/components/ui/RoleBadge'
 import { PipelineStagesSettings } from '@/components/PipelineStagesSettings'
 import { FollowUpIntervalSettings } from '@/components/FollowUpIntervalSettings'
 import { IndustriesSettings } from '@/components/IndustriesSettings'
@@ -9,7 +10,8 @@ import { WinLossReasonsSettings } from '@/components/WinLossReasonsSettings'
 import { DefaultCurrencySettings } from '@/components/DefaultCurrencySettings'
 
 export function Settings() {
-  const { session } = useAuth()
+  const { session, profile } = useAuth()
+  const readOnly = profile?.role === 'user'
 
   return (
     <div className="space-y-6">
@@ -18,21 +20,25 @@ export function Settings() {
       <div className="card p-6">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-base-300">Account</h2>
         <p className="text-sm text-base-200">{session?.user.email}</p>
-        <p className="text-xs text-base-400">Single-admin account</p>
+        {profile && <div className="mt-1"><RoleBadge role={profile.role} /></div>}
       </div>
 
-      <PipelineStagesSettings />
-      <FollowUpIntervalSettings />
-      <IndustriesSettings />
-      <TemplatesSettings />
-      <DealStagesSettings />
-      <WinLossReasonsSettings />
-      <DefaultCurrencySettings />
+      {readOnly && (
+        <div className="flex items-center gap-2.5 rounded-lg bg-warn-bg px-4 py-3 text-sm text-warn">
+          <AlertCircle size={16} className="shrink-0" />
+          View only — contact your admin to change this.
+        </div>
+      )}
 
-      <div className="card flex flex-col items-center gap-3 p-16 text-center">
-        <SettingsIcon size={32} className="text-base-500" />
-        <p className="text-base-300">Team management is coming in a future phase.</p>
-      </div>
+      <fieldset disabled={readOnly} className={readOnly ? 'space-y-6 opacity-60' : 'space-y-6'}>
+        <PipelineStagesSettings />
+        <FollowUpIntervalSettings />
+        <IndustriesSettings />
+        <TemplatesSettings />
+        <DealStagesSettings />
+        <WinLossReasonsSettings />
+        <DefaultCurrencySettings />
+      </fieldset>
     </div>
   )
 }

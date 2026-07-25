@@ -1,6 +1,8 @@
 import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
+import { requireAdminOrAbove } from '../lib/permissions.js'
+import type { AuthedUser } from '../lib/auth.js'
 
 export async function listWinLossReasons() {
   const supabase = getSupabaseAdmin()
@@ -9,7 +11,8 @@ export async function listWinLossReasons() {
   return json(200, { reasons: data ?? [] })
 }
 
-export async function createWinLossReason(event: HandlerEvent) {
+export async function createWinLossReason(event: HandlerEvent, user: AuthedUser) {
+  requireAdminOrAbove(user)
   const supabase = getSupabaseAdmin()
   const body = JSON.parse(event.body || '{}')
   const label = (body.label ?? '').trim()
@@ -24,7 +27,8 @@ export async function createWinLossReason(event: HandlerEvent) {
   return json(201, data)
 }
 
-export async function renameWinLossReason(id: string, event: HandlerEvent) {
+export async function renameWinLossReason(id: string, event: HandlerEvent, user: AuthedUser) {
+  requireAdminOrAbove(user)
   const supabase = getSupabaseAdmin()
   const body = JSON.parse(event.body || '{}')
   const label = (body.label ?? '').trim()
@@ -44,7 +48,8 @@ export async function renameWinLossReason(id: string, event: HandlerEvent) {
   return json(200, data)
 }
 
-export async function deleteWinLossReason(id: string) {
+export async function deleteWinLossReason(id: string, user: AuthedUser) {
+  requireAdminOrAbove(user)
   const supabase = getSupabaseAdmin()
   const { error } = await supabase.from('win_loss_reasons').delete().eq('id', id)
   if (error) throw new HttpError(500, error.message)

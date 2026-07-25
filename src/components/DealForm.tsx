@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Search } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
-import { dealsApi, leadsApi, settingsApi } from '@/lib/api'
+import { dealsApi, leadsApi, settingsApi, teamApi } from '@/lib/api'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
+import { useAuth, isAdminOrAbove } from '@/contexts/AuthContext'
 import { CURRENCIES } from '@/types/deal'
 import type { Deal } from '@/types/deal'
 
@@ -15,6 +16,7 @@ interface DealFormState {
   currency: string
   expected_close_date: string
   notes: string
+  owner_id: string
 }
 
 const EMPTY: DealFormState = {
@@ -25,6 +27,7 @@ const EMPTY: DealFormState = {
   currency: 'USD',
   expected_close_date: '',
   notes: '',
+  owner_id: '',
 }
 
 export function DealForm({
@@ -45,12 +48,16 @@ export function DealForm({
   onSaved?: (deal: Deal) => void
 }) {
   const queryClient = useQueryClient()
+  const { profile } = useAuth()
   const isEdit = Boolean(deal)
   const [form, setForm] = useState<DealFormState>(EMPTY)
   const [leadSearch, setLeadSearch] = useState('')
   const debouncedLeadSearch = useDebouncedValue(leadSearch, 300)
 
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: settingsApi.get })
+  const canReassign = isAdminOrAbove(profile?.role) || !isEdit || deal?.owner_id === profile?.id
+  const { data: rosterData } = useQuery({ queryKey: ['team-roster'], queryFn: teamApi.roster, enabled: canReassign })
+  const roster = rosterData?.members ?? []
 
   const { data: leadResults } = useQuery({
     queryKey: ['lead-search', debouncedLeadSearch],
@@ -69,6 +76,7 @@ export function DealForm({
         currency: deal.currency,
         expected_close_date: deal.expected_close_date ?? '',
         notes: deal.notes ?? '',
+        owner_id: deal.owner_id ?? '',
       })
     } else {
       setForm({
@@ -77,10 +85,11 @@ export function DealForm({
         company_name: leadCompanyName ?? '',
         name: leadCompanyName ? `${leadCompanyName} - New Deal` : '',
         currency: settings?.default_currency ?? 'USD',
+        owner_id: profile?.id ?? '',
       })
       setLeadSearch('')
     }
-  }, [open, deal, leadId, leadCompanyName, settings?.default_currency])
+  }, [open, deal, leadId, leadCompanyName, settings?.default_currency, profile?.id])
 
   function set<K extends keyof DealFormState>(key: K, value: DealFormState[K]) {
     setForm((f) => ({ ...f, [key]: value }))
@@ -95,6 +104,7 @@ export function DealForm({
           currency: form.currency,
           expected_close_date: form.expected_close_date || null,
           notes: form.notes || null,
+          owner_id: form.owner_id || null,
         })
       }
       return dealsApi.create({
@@ -104,6 +114,7 @@ export function DealForm({
         currency: form.currency,
         expected_close_date: form.expected_close_date || undefined,
         notes: form.notes || undefined,
+        owner_id: form.owner_id || undefined,
       })
     },
     onSuccess: (savedDeal) => {
@@ -212,6 +223,17 @@ export function DealForm({
             onChange={(e) => set('notes', e.target.value)}
           />
         </div>
+
+        {canReassign && (
+          <div>
+            <label className="label">Assigned To (Deal Owner)</label>
+            <select className="input" value={form.owner_id} onChange={(e) => set('owner_id', e.target.value)}>
+              {roster.map((m) => (
+                <option key={m.id} value={m.id}>{m.nickname || m.email}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       <div className="mt-5 flex justify-end gap-3">

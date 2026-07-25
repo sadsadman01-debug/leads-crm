@@ -83,6 +83,8 @@ export interface Lead {
   updated_at: string
   stage_id: string | null
   industry_id: string | null
+  created_by: string | null
+  assigned_to: string | null
   score: number
   band: ScoreBand
   status?: LeadStatus
@@ -110,6 +112,8 @@ export interface LeadActivity {
   type: string
   message: string
   created_at: string
+  created_by: string | null
+  actor_name: string | null
 }
 
 export interface PipelineStage {
@@ -123,6 +127,7 @@ export interface KanbanLead {
   company_name: string
   priority: Priority
   stage_id: string | null
+  assigned_to: string | null
   score: number
   band: ScoreBand
   status: Pick<
@@ -172,6 +177,7 @@ export interface LeadFormInput {
   lead_source: LeadSource
   priority: Priority
   industry_id: string
+  assigned_to: string
   tags: string[]
   social_profiles: SocialProfile[]
 }
@@ -202,6 +208,20 @@ export interface LeadFilters {
   hasWebsite?: boolean
   hasSocialProfile?: boolean
   industryId?: string
+  assignedTo?: string
+}
+
+export interface TeamPerformanceRow {
+  id: string
+  name: string
+  totalLeads: number
+  coldEmailsSent: number
+  replyRate: number
+  conversionRate: number
+  totalDeals: number
+  dealsWon: number
+  revenueClosed: number
+  winRate: number
 }
 
 export interface DashboardSummary {
@@ -236,4 +256,5 @@ export interface DashboardSummary {
     replyRate: number
     conversionRate: number
   }>
+  teamPerformance?: TeamPerformanceRow[]
 }

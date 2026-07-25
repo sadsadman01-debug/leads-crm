@@ -1,17 +1,20 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Plus, Rows3, Columns3, ChevronLeft, ChevronRight, Handshake } from 'lucide-react'
-import { dealsApi, industriesApi, dealStagesApi } from '@/lib/api'
+import { dealsApi, industriesApi, dealStagesApi, teamApi } from '@/lib/api'
 import { formatCurrency } from '@/lib/currency'
 import { Badge } from '@/components/ui/Badge'
+import { Avatar } from '@/components/ui/RoleBadge'
 import { DealForm } from '@/components/DealForm'
 import { DealKanbanBoard } from '@/components/kanban/DealKanbanBoard'
+import { useAuth } from '@/contexts/AuthContext'
 import type { Deal, DealFilters } from '@/types/deal'
 
 const PAGE_SIZE = 20
 type View = 'table' | 'kanban'
 
 export function DealsList() {
+  const { profile } = useAuth()
   const [view, setView] = useState<View>('table')
   const [page, setPage] = useState(1)
   const [filters, setFilters] = useState<DealFilters>({})
@@ -31,6 +34,10 @@ export function DealsList() {
 
   const { data: industriesData } = useQuery({ queryKey: ['industries'], queryFn: industriesApi.list })
   const industries = industriesData?.industries ?? []
+
+  const { data: rosterData } = useQuery({ queryKey: ['team-roster'], queryFn: teamApi.roster })
+  const roster = rosterData?.members ?? []
+  const nameById = new Map(roster.map((m) => [m.id, m.nickname || m.email]))
 
   const total = data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
@@ -81,6 +88,38 @@ export function DealsList() {
         </div>
       </div>
 
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        {profile && (
+          <button
+            className={`pill border transition-colors ${
+              filters.assignedTo === profile.id
+                ? 'border-accent-500 bg-accent-500/15 text-accent-400'
+                : 'border-base-600 bg-base-800 text-base-300 hover:bg-base-700'
+            }`}
+            onClick={() =>
+              setFilters((prev) => ({
+                ...prev,
+                assignedTo: prev.assignedTo === profile.id ? undefined : profile.id,
+              }))
+            }
+          >
+            My Deals
+          </button>
+        )}
+        {roster.length > 0 && (
+          <select
+            className="input w-auto"
+            value={filters.assignedTo ?? ''}
+            onChange={(e) => setFilters((prev) => ({ ...prev, assignedTo: e.target.value || undefined }))}
+          >
+            <option value="">Everyone</option>
+            {roster.map((m) => (
+              <option key={m.id} value={m.id}>{m.nickname || m.email}</option>
+            ))}
+          </select>
+        )}
+      </div>
+
       {industries.length > 0 && (
         <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
           <button
@@ -112,6 +151,7 @@ export function DealsList() {
       {view === 'kanban' ? (
         <DealKanbanBoard
           industryId={filters.industryId}
+          assignedTo={filters.assignedTo}
           onOpenDeal={async (dealId) => {
             const deal = await dealsApi.get(dealId)
             setEditingDeal(deal)
@@ -143,6 +183,7 @@ export function DealsList() {
                   <th className="px-5 py-3 font-medium">Value</th>
                   <th className="px-5 py-3 font-medium">Stage</th>
                   <th className="px-5 py-3 font-medium">Probability</th>
+                  <th className="px-5 py-3 font-medium">Owner</th>
                   <th className="px-5 py-3 font-medium">Expected Close</th>
                 </tr>
               </thead>
@@ -167,6 +208,16 @@ export function DealsList() {
                       </Badge>
                     </td>
                     <td className="px-5 py-3.5 text-base-300">{deal.probability}%</td>
+                    <td className="px-5 py-3.5">
+                      {deal.owner_id && nameById.has(deal.owner_id) ? (
+                        <div className="flex items-center gap-1.5">
+                          <Avatar name={nameById.get(deal.owner_id)} size={5} />
+                          <span className="truncate text-xs text-base-300">{nameById.get(deal.owner_id)}</span>
+                        </div>
+                      ) : (
+                        <span className="text-base-400">—</span>
+                      )}
+                    </td>
                     <td className="px-5 py-3.5 text-base-400">
                       {deal.expected_close_date ? new Date(deal.expected_close_date).toLocaleDateString() : '—'}
                     </td>

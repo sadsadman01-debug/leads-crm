@@ -40,7 +40,7 @@ const TONE_TEXT: Record<ToggleTone, string> = {
   warn: 'text-warn',
 }
 
-export function StatusPanel({ lead }: { lead: Lead }) {
+export function StatusPanel({ lead, readOnly }: { lead: Lead; readOnly?: boolean }) {
   const queryClient = useQueryClient()
   const status = lead.status
 
@@ -57,6 +57,7 @@ export function StatusPanel({ lead }: { lead: Lead }) {
         Outreach Status
       </h2>
 
+      <fieldset disabled={readOnly} className={readOnly ? 'opacity-60' : ''}>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {TOGGLES.map(({ key, tsKey, label, tone }) => {
           const checked = Boolean(status[key])
@@ -151,6 +152,7 @@ export function StatusPanel({ lead }: { lead: Lead }) {
           )}
         </div>
       </div>
+      </fieldset>
     </div>
   )
 }

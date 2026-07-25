@@ -17,7 +17,7 @@ import {
   Clock,
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
-import { leadsApi, pipelineStagesApi, industriesApi, dealsApi } from '@/lib/api'
+import { leadsApi, pipelineStagesApi, industriesApi, dealsApi, teamApi } from '@/lib/api'
 import { PriorityBadge, TagPill, Badge, ScoreBadge } from '@/components/ui/Badge'
 import { StatusPanel } from '@/components/StatusPanel'
 import { AttachmentsPanel } from '@/components/AttachmentsPanel'
@@ -27,6 +27,7 @@ import { LeadDealsPanel } from '@/components/LeadDealsPanel'
 import { DealForm } from '@/components/DealForm'
 import { Modal } from '@/components/ui/Modal'
 import { Handshake } from 'lucide-react'
+import { useAuth, isAdminOrAbove } from '@/contexts/AuthContext'
 
 const PLATFORM_ICON: Record<string, typeof Globe> = {
   Facebook,
@@ -38,6 +39,7 @@ export function LeadDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { profile } = useAuth()
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   const { data: lead, isLoading } = useQuery({
@@ -48,6 +50,8 @@ export function LeadDetail() {
 
   const { data: stagesData } = useQuery({ queryKey: ['pipeline-stages'], queryFn: pipelineStagesApi.list })
   const { data: industriesData } = useQuery({ queryKey: ['industries'], queryFn: industriesApi.list })
+  const { data: rosterData } = useQuery({ queryKey: ['team-roster'], queryFn: teamApi.roster })
+  const roster = rosterData?.members ?? []
   const { data: leadDeals } = useQuery({
     queryKey: ['deals', { leadId: id }],
     queryFn: () => dealsApi.list({ filters: { leadId: id } }),
@@ -81,9 +85,22 @@ export function LeadDetail() {
     },
   })
 
+  const assignMutation = useMutation({
+    mutationFn: (assignedTo: string) => leadsApi.update(id!, { assigned_to: assignedTo || null } as any),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['lead', id] })
+      queryClient.invalidateQueries({ queryKey: ['leads'] })
+      queryClient.invalidateQueries({ queryKey: ['lead-activities', id] })
+    },
+  })
+
   if (isLoading || !lead) {
     return <div className="p-12 text-center text-base-400">Loading lead…</div>
   }
+
+  const canEdit =
+    isAdminOrAbove(profile?.role) || lead.assigned_to === profile?.id || lead.created_by === profile?.id
+  const canReassign = isAdminOrAbove(profile?.role) || lead.assigned_to === profile?.id
 
   return (
     <div>
@@ -106,16 +123,18 @@ export function LeadDetail() {
             <Badge tone="neutral">{lead.lead_source}</Badge>
           </div>
         </div>
-        <div className="flex shrink-0 gap-2">
-          <button className="btn-secondary" onClick={() => navigate(`/leads/${lead.id}/edit`)}>
-            <Pencil size={16} />
-            Edit
-          </button>
-          <button className="btn-danger" onClick={() => setConfirmDelete(true)}>
-            <Trash2 size={16} />
-            Delete
-          </button>
-        </div>
+        {canEdit && (
+          <div className="flex shrink-0 gap-2">
+            <button className="btn-secondary" onClick={() => navigate(`/leads/${lead.id}/edit`)}>
+              <Pencil size={16} />
+              Edit
+            </button>
+            <button className="btn-danger" onClick={() => setConfirmDelete(true)}>
+              <Trash2 size={16} />
+              Delete
+            </button>
+          </div>
+        )}
       </div>
 
       {lead.status?.next_follow_up_due_at && (
@@ -154,7 +173,7 @@ export function LeadDetail() {
             <select
               className="input"
               value={lead.stage_id ?? ''}
-              disabled={stageMutation.isPending}
+              disabled={!canEdit || stageMutation.isPending}
               onChange={(e) => stageMutation.mutate(e.target.value)}
             >
               {(stagesData?.stages ?? []).map((s) => (
@@ -170,12 +189,29 @@ export function LeadDetail() {
             <select
               className="input"
               value={lead.industry_id ?? ''}
-              disabled={industryMutation.isPending}
+              disabled={!canEdit || industryMutation.isPending}
               onChange={(e) => industryMutation.mutate(e.target.value)}
             >
               <option value="">Unassigned</option>
               {(industriesData?.industries ?? []).map((i) => (
                 <option key={i.id} value={i.id}>{i.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="card space-y-3 p-6">
+            <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-base-300">
+              Assigned To
+            </h2>
+            <select
+              className="input"
+              value={lead.assigned_to ?? ''}
+              disabled={!canReassign || assignMutation.isPending}
+              onChange={(e) => assignMutation.mutate(e.target.value)}
+            >
+              <option value="">Unassigned</option>
+              {roster.map((m) => (
+                <option key={m.id} value={m.id}>{m.nickname || m.email}</option>
               ))}
             </select>
           </div>
@@ -234,7 +270,7 @@ export function LeadDetail() {
         </div>
 
         <div className="space-y-6 lg:col-span-2">
-          <StatusPanel lead={lead} />
+          <StatusPanel lead={lead} readOnly={!canEdit} />
           <LeadDealsPanel leadId={lead.id} companyName={lead.company_name} />
           <LeadTimeline leadId={lead.id} />
         </div>

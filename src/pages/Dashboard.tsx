@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   Users,
@@ -12,16 +13,19 @@ import {
   PhoneMissed,
   Reply,
   Trophy,
+  ShieldAlert,
 } from 'lucide-react'
-import { dashboardApi, industriesApi, revenueApi, settingsApi } from '@/lib/api'
+import { dashboardApi, industriesApi, revenueApi, settingsApi, teamApi } from '@/lib/api'
 import { StatTile } from '@/components/charts/StatTile'
 import { FunnelChart } from '@/components/charts/FunnelChart'
 import { TrendChart } from '@/components/charts/TrendChart'
 import { DonutChart } from '@/components/charts/DonutChart'
 import { RemindersWidget } from '@/components/RemindersWidget'
 import { IndustryComparisonTable } from '@/components/IndustryComparisonTable'
+import { TeamPerformanceTable } from '@/components/TeamPerformanceTable'
 import { RevenueSection } from '@/components/RevenueSection'
 import { LEAD_SOURCE_COLORS, PRIORITY_COLORS, SENTIMENT_COLORS, STATUS_DIST_COLORS } from '@/lib/chartColors'
+import { useAuth, isAdminOrAbove } from '@/contexts/AuthContext'
 import type { RevenueSummary } from '@/types/deal'
 
 const GRANULARITIES: Array<{ value: 'day' | 'week' | 'month'; label: string }> = [
@@ -31,19 +35,27 @@ const GRANULARITIES: Array<{ value: 'day' | 'week' | 'month'; label: string }> =
 ]
 
 export function Dashboard() {
+  const { profile } = useAuth()
+  const location = useLocation()
+  const isAdmin = isAdminOrAbove(profile?.role)
   const [granularity, setGranularity] = useState<'day' | 'week' | 'month'>('day')
   const [industryId, setIndustryId] = useState('')
+  const [assignedTo, setAssignedTo] = useState('')
   const [closedRange, setClosedRange] = useState<RevenueSummary['closedRange']>('all')
+  const [accessDeniedDismissed, setAccessDeniedDismissed] = useState(false)
+
+  // Users are always auto-scoped to their own stats; the selector is admin/super-admin only.
+  const effectiveAssignedTo = isAdmin ? assignedTo || undefined : profile?.id
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['dashboard-summary', granularity, industryId],
-    queryFn: () => dashboardApi.summary(granularity, industryId || undefined),
+    queryKey: ['dashboard-summary', granularity, industryId, effectiveAssignedTo],
+    queryFn: () => dashboardApi.summary(granularity, industryId || undefined, effectiveAssignedTo),
     placeholderData: (prev) => prev,
   })
 
   const { data: revenue } = useQuery({
-    queryKey: ['revenue-summary', closedRange, industryId],
-    queryFn: () => revenueApi.summary(closedRange, industryId || undefined),
+    queryKey: ['revenue-summary', closedRange, industryId, effectiveAssignedTo],
+    queryFn: () => revenueApi.summary(closedRange, industryId || undefined, effectiveAssignedTo),
     placeholderData: (prev) => prev,
   })
 
@@ -51,6 +63,11 @@ export function Dashboard() {
 
   const { data: industriesData } = useQuery({ queryKey: ['industries'], queryFn: industriesApi.list })
   const industries = industriesData?.industries ?? []
+
+  const { data: teamData } = useQuery({ queryKey: ['team-members'], queryFn: teamApi.list, enabled: isAdmin })
+  const members = teamData?.members.filter((m) => m.is_active) ?? []
+
+  const accessDenied = Boolean((location.state as any)?.accessDenied) && !accessDeniedDismissed
 
   if (isLoading && !data) {
     return <div className="p-12 text-center text-base-400">Loading dashboard…</div>
@@ -63,12 +80,34 @@ export function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {accessDenied && (
+        <div className="flex items-center gap-2.5 rounded-lg bg-warn-bg px-4 py-3 text-sm text-warn">
+          <ShieldAlert size={16} className="shrink-0" />
+          <span className="flex-1">You don't have access to that section.</span>
+          <button className="text-warn/70 hover:text-warn" onClick={() => setAccessDeniedDismissed(true)}>
+            Dismiss
+          </button>
+        </div>
+      )}
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-base-100">Dashboard</h1>
           <p className="mt-1 text-sm text-base-400">Outreach performance at a glance</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {isAdmin && members.length > 0 && (
+            <select
+              className="input w-full sm:w-auto"
+              value={assignedTo}
+              onChange={(e) => setAssignedTo(e.target.value)}
+            >
+              <option value="">All Team Members</option>
+              {members.map((m) => (
+                <option key={m.id} value={m.id}>{m.nickname || m.email}</option>
+              ))}
+            </select>
+          )}
           {industries.length > 0 && (
             <select
               className="input w-full sm:w-auto"
@@ -225,6 +264,10 @@ export function Dashboard() {
       </div>
 
       {data.industryComparison.length > 0 && <IndustryComparisonTable rows={data.industryComparison} />}
+
+      {isAdmin && data.teamPerformance && data.teamPerformance.length > 0 && (
+        <TeamPerformanceTable rows={data.teamPerformance} currency={settings?.default_currency ?? 'USD'} />
+      )}
 
       <div className="border-t border-base-700/60 pt-6">
         {revenue && (

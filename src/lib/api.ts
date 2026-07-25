@@ -22,6 +22,7 @@ import type {
   RevenueSummary,
   WinLossReason,
 } from '@/types/deal'
+import type { TeamMember, Role } from '@/types/team'
 
 class ApiError extends Error {
   status: number
@@ -108,10 +109,13 @@ export const leadsApi = {
   updateStage: (id: string, stageId: string) =>
     request<Lead>(`/leads/${id}/stage`, { method: 'PATCH', body: JSON.stringify({ stage_id: stageId }) }),
 
-  kanban: (industryId?: string) =>
-    request<{ leads: KanbanLead[]; truncated: boolean }>(
-      `/leads/kanban${industryId ? `?industryId=${industryId}` : ''}`
-    ),
+  kanban: (industryId?: string, assignedTo?: string) => {
+    const qs = new URLSearchParams()
+    if (industryId) qs.set('industryId', industryId)
+    if (assignedTo) qs.set('assignedTo', assignedTo)
+    const suffix = qs.toString()
+    return request<{ leads: KanbanLead[]; truncated: boolean }>(`/leads/kanban${suffix ? `?${suffix}` : ''}`)
+  },
 
   activities: (id: string) => request<{ activities: LeadActivity[] }>(`/leads/${id}/activities`),
 }
@@ -180,11 +184,33 @@ export const exportApi = {
 }
 
 export const dashboardApi = {
-  summary: (granularity: 'day' | 'week' | 'month' = 'day', industryId?: string) => {
+  summary: (granularity: 'day' | 'week' | 'month' = 'day', industryId?: string, assignedTo?: string) => {
     const qs = new URLSearchParams({ granularity })
     if (industryId) qs.set('industryId', industryId)
+    if (assignedTo) qs.set('assignedTo', assignedTo)
     return request<DashboardSummary>(`/dashboard/summary?${qs.toString()}`)
   },
+}
+
+export const teamApi = {
+  me: () => request<{ id: string; email: string; nickname: string | null; role: Role; is_active: boolean }>(
+    '/team-members/me'
+  ),
+
+  roster: () => request<{ members: Array<{ id: string; nickname: string | null; email: string }> }>(
+    '/team-members/roster'
+  ),
+
+  list: () => request<{ members: TeamMember[] }>('/team-members'),
+
+  create: (payload: { email: string; password: string; nickname: string; role: Role }) =>
+    request<TeamMember>('/team-members', { method: 'POST', body: JSON.stringify(payload) }),
+
+  update: (id: string, payload: Partial<{ nickname: string; role: Role; is_active: boolean; reassignTo: string | null }>) =>
+    request<TeamMember>(`/team-members/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+
+  remove: (id: string, confirm: string) =>
+    request<{ success: true }>(`/team-members/${id}`, { method: 'DELETE', body: JSON.stringify({ confirm }) }),
 }
 
 export const tagsApi = {
@@ -297,11 +323,12 @@ export const dealsApi = {
     currency?: string
     expected_close_date?: string | null
     notes?: string | null
+    owner_id?: string
   }) => request<Deal>('/deals', { method: 'POST', body: JSON.stringify(payload) }),
 
   update: (
     id: string,
-    payload: Partial<Pick<Deal, 'name' | 'value' | 'currency' | 'probability' | 'expected_close_date' | 'notes'>>
+    payload: Partial<Pick<Deal, 'name' | 'value' | 'currency' | 'probability' | 'expected_close_date' | 'notes' | 'owner_id'>>
   ) => request<Deal>(`/deals/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
 
   updateStage: (
@@ -311,14 +338,20 @@ export const dealsApi = {
 
   remove: (id: string) => request<{ success: true }>(`/deals/${id}`, { method: 'DELETE' }),
 
-  kanban: (industryId?: string) =>
-    request<{ deals: KanbanDeal[]; truncated: boolean }>(`/deals/kanban${industryId ? `?industryId=${industryId}` : ''}`),
+  kanban: (industryId?: string, assignedTo?: string) => {
+    const qs = new URLSearchParams()
+    if (industryId) qs.set('industryId', industryId)
+    if (assignedTo) qs.set('assignedTo', assignedTo)
+    const suffix = qs.toString()
+    return request<{ deals: KanbanDeal[]; truncated: boolean }>(`/deals/kanban${suffix ? `?${suffix}` : ''}`)
+  },
 }
 
 export const revenueApi = {
-  summary: (closedRange: 'all' | 'month' | 'quarter' | 'year' = 'all', industryId?: string) => {
+  summary: (closedRange: 'all' | 'month' | 'quarter' | 'year' = 'all', industryId?: string, assignedTo?: string) => {
     const qs = new URLSearchParams({ closedRange })
     if (industryId) qs.set('industryId', industryId)
+    if (assignedTo) qs.set('assignedTo', assignedTo)
     return request<RevenueSummary>(`/revenue/summary?${qs.toString()}`)
   },
 }

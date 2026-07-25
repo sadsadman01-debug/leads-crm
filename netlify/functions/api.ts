@@ -50,6 +50,7 @@ import {
   getDealsKanban,
 } from './routes/deals.js'
 import { getRevenueSummary } from './routes/revenue.js'
+import { getMyProfile, listRoster, listTeamMembers, createTeamMember, updateTeamMember, deleteTeamMember } from './routes/team.js'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -113,7 +114,24 @@ export const handler: Handler = async (event) => {
       } else {
         if (method === 'GET') response = await getLead(id)
         else if (method === 'PUT') response = await updateLead(id, event, user)
-        else if (method === 'DELETE') response = await deleteLead(id)
+        else if (method === 'DELETE') response = await deleteLead(id, user)
+        else throw new HttpError(405, 'Method not allowed')
+      }
+    } else if (resource === 'team-members') {
+      const user = await requireUser(event)
+      if (!id) {
+        if (method === 'GET') response = await listTeamMembers(user)
+        else if (method === 'POST') response = await createTeamMember(event, user)
+        else throw new HttpError(405, 'Method not allowed')
+      } else if (id === 'me') {
+        if (method === 'GET') response = await getMyProfile(user)
+        else throw new HttpError(405, 'Method not allowed')
+      } else if (id === 'roster') {
+        if (method === 'GET') response = await listRoster()
+        else throw new HttpError(405, 'Method not allowed')
+      } else {
+        if (method === 'PUT') response = await updateTeamMember(id, event, user)
+        else if (method === 'DELETE') response = await deleteTeamMember(id, event, user)
         else throw new HttpError(405, 'Method not allowed')
       }
     } else if (resource === 'tags') {
@@ -121,73 +139,73 @@ export const handler: Handler = async (event) => {
       if (method === 'GET') response = await listTags()
       else throw new HttpError(405, 'Method not allowed')
     } else if (resource === 'dashboard') {
-      await requireUser(event)
-      if (id === 'summary' && method === 'GET') response = await getDashboardSummary(event)
+      const user = await requireUser(event)
+      if (id === 'summary' && method === 'GET') response = await getDashboardSummary(event, user)
       else throw new HttpError(404, 'Not found')
     } else if (resource === 'pipeline-stages') {
-      await requireUser(event)
+      const user = await requireUser(event)
       if (!id) {
         if (method === 'GET') response = await listStages()
-        else if (method === 'POST') response = await createStage(event)
+        else if (method === 'POST') response = await createStage(event, user)
         else throw new HttpError(405, 'Method not allowed')
       } else if (id === 'reorder') {
-        if (method === 'PATCH') response = await reorderStages(event)
+        if (method === 'PATCH') response = await reorderStages(event, user)
         else throw new HttpError(405, 'Method not allowed')
       } else {
-        if (method === 'PUT') response = await renameStage(id, event)
-        else if (method === 'DELETE') response = await deleteStage(id)
+        if (method === 'PUT') response = await renameStage(id, event, user)
+        else if (method === 'DELETE') response = await deleteStage(id, user)
         else throw new HttpError(405, 'Method not allowed')
       }
     } else if (resource === 'settings') {
-      await requireUser(event)
+      const user = await requireUser(event)
       if (method === 'GET') response = await getSettings()
-      else if (method === 'PUT') response = await updateSettings(event)
+      else if (method === 'PUT') response = await updateSettings(event, user)
       else throw new HttpError(405, 'Method not allowed')
     } else if (resource === 'templates') {
-      await requireUser(event)
+      const user = await requireUser(event)
       if (!id) {
         if (method === 'GET') response = await listTemplates()
-        else if (method === 'POST') response = await createTemplate(event)
+        else if (method === 'POST') response = await createTemplate(event, user)
         else throw new HttpError(405, 'Method not allowed')
       } else {
-        if (method === 'PUT') response = await updateTemplate(id, event)
-        else if (method === 'DELETE') response = await deleteTemplate(id)
+        if (method === 'PUT') response = await updateTemplate(id, event, user)
+        else if (method === 'DELETE') response = await deleteTemplate(id, user)
         else throw new HttpError(405, 'Method not allowed')
       }
     } else if (resource === 'industries') {
-      await requireUser(event)
+      const user = await requireUser(event)
       if (!id) {
         if (method === 'GET') response = await listIndustries()
-        else if (method === 'POST') response = await createIndustry(event)
+        else if (method === 'POST') response = await createIndustry(event, user)
         else throw new HttpError(405, 'Method not allowed')
       } else {
-        if (method === 'PUT') response = await renameIndustry(id, event)
-        else if (method === 'DELETE') response = await deleteIndustry(id)
+        if (method === 'PUT') response = await renameIndustry(id, event, user)
+        else if (method === 'DELETE') response = await deleteIndustry(id, user)
         else throw new HttpError(405, 'Method not allowed')
       }
     } else if (resource === 'deal-stages') {
-      await requireUser(event)
+      const user = await requireUser(event)
       if (!id) {
         if (method === 'GET') response = await listDealStages()
-        else if (method === 'POST') response = await createDealStage(event)
+        else if (method === 'POST') response = await createDealStage(event, user)
         else throw new HttpError(405, 'Method not allowed')
       } else if (id === 'reorder') {
-        if (method === 'PATCH') response = await reorderDealStages(event)
+        if (method === 'PATCH') response = await reorderDealStages(event, user)
         else throw new HttpError(405, 'Method not allowed')
       } else {
-        if (method === 'PUT') response = await updateDealStageConfig(id, event)
-        else if (method === 'DELETE') response = await deleteDealStage(id)
+        if (method === 'PUT') response = await updateDealStageConfig(id, event, user)
+        else if (method === 'DELETE') response = await deleteDealStage(id, user)
         else throw new HttpError(405, 'Method not allowed')
       }
     } else if (resource === 'win-loss-reasons') {
-      await requireUser(event)
+      const user = await requireUser(event)
       if (!id) {
         if (method === 'GET') response = await listWinLossReasons()
-        else if (method === 'POST') response = await createWinLossReason(event)
+        else if (method === 'POST') response = await createWinLossReason(event, user)
         else throw new HttpError(405, 'Method not allowed')
       } else {
-        if (method === 'PUT') response = await renameWinLossReason(id, event)
-        else if (method === 'DELETE') response = await deleteWinLossReason(id)
+        if (method === 'PUT') response = await renameWinLossReason(id, event, user)
+        else if (method === 'DELETE') response = await deleteWinLossReason(id, user)
         else throw new HttpError(405, 'Method not allowed')
       }
     } else if (resource === 'deals') {
@@ -205,13 +223,13 @@ export const handler: Handler = async (event) => {
         else throw new HttpError(405, 'Method not allowed')
       } else {
         if (method === 'GET') response = await getDeal(id)
-        else if (method === 'PUT') response = await updateDeal(id, event)
-        else if (method === 'DELETE') response = await deleteDeal(id)
+        else if (method === 'PUT') response = await updateDeal(id, event, user)
+        else if (method === 'DELETE') response = await deleteDeal(id, user)
         else throw new HttpError(405, 'Method not allowed')
       }
     } else if (resource === 'revenue') {
-      await requireUser(event)
-      if (id === 'summary' && method === 'GET') response = await getRevenueSummary(event)
+      const user = await requireUser(event)
+      if (id === 'summary' && method === 'GET') response = await getRevenueSummary(event, user)
       else throw new HttpError(404, 'Not found')
     } else if (resource === 'attachments') {
       const user = await requireUser(event)

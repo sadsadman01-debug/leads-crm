@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, ArrowLeft } from 'lucide-react'
-import { industriesApi, leadsApi } from '@/lib/api'
+import { industriesApi, leadsApi, teamApi } from '@/lib/api'
 import { LEAD_SOURCES, PRIORITIES, type LeadFormInput, type SocialProfile } from '@/types/lead'
 import { TagInput } from '@/components/TagInput'
 import { SocialProfilesEditor } from '@/components/SocialProfilesEditor'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
+import { useAuth, isAdminOrAbove } from '@/contexts/AuthContext'
 
 const EMPTY_FORM: LeadFormInput = {
   company_name: '',
@@ -18,6 +19,7 @@ const EMPTY_FORM: LeadFormInput = {
   lead_source: 'Manual Entry',
   priority: 'Medium',
   industry_id: '',
+  assigned_to: '',
   tags: [],
   social_profiles: [],
 }
@@ -27,8 +29,10 @@ export function LeadForm() {
   const isEdit = Boolean(id)
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { profile } = useAuth()
+  const canReassign = isAdminOrAbove(profile?.role)
 
-  const [form, setForm] = useState<LeadFormInput>(EMPTY_FORM)
+  const [form, setForm] = useState<LeadFormInput>({ ...EMPTY_FORM, assigned_to: profile?.id ?? '' })
   const [initialized, setInitialized] = useState(!isEdit)
 
   const { data: existingLead } = useQuery({
@@ -49,6 +53,7 @@ export function LeadForm() {
         lead_source: existingLead.lead_source,
         priority: existingLead.priority,
         industry_id: existingLead.industry_id ?? '',
+        assigned_to: existingLead.assigned_to ?? '',
         tags: existingLead.tags.map((t) => t.name),
         social_profiles: existingLead.social_profiles,
       })
@@ -75,6 +80,8 @@ export function LeadForm() {
   const duplicates = duplicateResult?.matches ?? []
 
   const { data: industriesData } = useQuery({ queryKey: ['industries'], queryFn: industriesApi.list })
+  const { data: rosterData } = useQuery({ queryKey: ['team-roster'], queryFn: teamApi.roster, enabled: canReassign })
+  const roster = rosterData?.members ?? []
 
   const saveMutation = useMutation({
     mutationFn: () => {
@@ -211,6 +218,17 @@ export function LeadForm() {
               ))}
             </select>
           </div>
+
+          {canReassign && (
+            <div className="sm:col-span-2">
+              <label className="label">Assigned To</label>
+              <select className="input" value={form.assigned_to} onChange={(e) => set('assigned_to', e.target.value)}>
+                {roster.map((m) => (
+                  <option key={m.id} value={m.id}>{m.nickname || m.email}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         <div>

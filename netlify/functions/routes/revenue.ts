@@ -1,6 +1,8 @@
 import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
+import { isAdminOrAbove } from '../lib/permissions.js'
+import type { AuthedUser } from '../lib/auth.js'
 
 const MAX_DEALS_FOR_AGGREGATION = 20000
 
@@ -29,10 +31,12 @@ function monthKey(d: Date): string {
  * deals will produce a misleading total. Fine for the common single-currency
  * case; documented as a known limitation for multi-currency shops.
  */
-export async function getRevenueSummary(event: HandlerEvent) {
+export async function getRevenueSummary(event: HandlerEvent, user: AuthedUser) {
   const supabase = getSupabaseAdmin()
   const params = event.queryStringParameters ?? {}
   const industryId = params.industryId || undefined
+  // Users only ever see their own deals, regardless of what the client sends.
+  const assignedTo = isAdminOrAbove(user) ? params.assignedTo || undefined : user.id
   const closedRange: ClosedRange = (['all', 'month', 'quarter', 'year'] as const).includes(
     params.closedRange as ClosedRange
   )
@@ -47,13 +51,14 @@ export async function getRevenueSummary(event: HandlerEvent) {
 
   const { data: dealsRaw, error: dealsErr } = await supabase
     .from('deals')
-    .select('id, name, value, currency, stage_id, probability, expected_close_date, actual_close_date, outcome_reason, created_at, lead_id, leads ( company_name, industry_id )')
+    .select('id, name, value, currency, stage_id, probability, expected_close_date, actual_close_date, outcome_reason, created_at, lead_id, owner_id, leads ( company_name, industry_id )')
     .order('created_at', { ascending: true })
     .limit(MAX_DEALS_FOR_AGGREGATION)
   if (dealsErr) throw new HttpError(500, dealsErr.message)
 
   const allDeals = (dealsRaw ?? []).map((d: any) => ({ ...d, company_name: d.leads?.company_name ?? '', industry_id: d.leads?.industry_id ?? null }))
-  const deals = industryId ? allDeals.filter((d) => d.industry_id === industryId) : allDeals
+  let deals = industryId ? allDeals.filter((d) => d.industry_id === industryId) : allDeals
+  if (assignedTo) deals = deals.filter((d) => d.owner_id === assignedTo)
 
   const stageById = new Map((stages ?? []).map((s) => [s.id, s]))
   const stageOf = (d: any) => stageById.get(d.stage_id)

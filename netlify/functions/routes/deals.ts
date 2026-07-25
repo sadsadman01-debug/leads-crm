@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
 import { logActivity } from '../lib/activities.js'
 import type { AuthedUser } from '../lib/auth.js'
+import { requireCanModifyRecord, isAdminOrAbove } from '../lib/permissions.js'
 
 export const DEAL_SELECT = `
   id, lead_id, name, value, currency, stage_id, probability,
@@ -30,6 +31,7 @@ export interface DealFilters {
   stageId?: string
   industryId?: string
   search?: string
+  assignedTo?: string
 }
 
 function parseFilters(params: Record<string, string | undefined>): DealFilters {
@@ -58,6 +60,7 @@ export async function listDeals(event: HandlerEvent) {
   if (filters.leadId) query = query.eq('lead_id', filters.leadId)
   if (filters.stageId) query = query.eq('stage_id', filters.stageId)
   if (filters.search) query = query.ilike('name', `%${filters.search}%`)
+  if (filters.assignedTo) query = query.eq('owner_id', filters.assignedTo)
 
   // Resolve industry -> lead ids first (same pattern as leads.ts's resolveJoinFilteredIds)
   // so the .in('lead_id', ...) constraint applies before pagination, not after.
@@ -107,6 +110,9 @@ export async function createDeal(event: HandlerEvent, user: AuthedUser) {
   if (!body.lead_id) throw new HttpError(400, 'lead_id is required')
   if (!body.name?.trim()) throw new HttpError(400, 'name is required')
 
+  // New deals auto-assign to the creator; explicit owner_id is only honored for admins/super admins.
+  const ownerId = isAdminOrAbove(user) && body.owner_id ? body.owner_id : user.id
+
   let stageId = body.stage_id ?? null
   let probability = body.probability
 
@@ -134,7 +140,7 @@ export async function createDeal(event: HandlerEvent, user: AuthedUser) {
       probability,
       expected_close_date: body.expected_close_date || null,
       notes: body.notes ?? null,
-      owner_id: user.id,
+      owner_id: ownerId,
     })
     .select('id, name, value, currency')
     .single()
@@ -151,13 +157,26 @@ export async function createDeal(event: HandlerEvent, user: AuthedUser) {
   return getDeal(data.id)
 }
 
-export async function updateDeal(id: string, event: HandlerEvent) {
+export async function updateDeal(id: string, event: HandlerEvent, user: AuthedUser) {
   const supabase = getSupabaseAdmin()
   const body = JSON.parse(event.body || '{}')
+
+  const { data: existing, error: fetchErr } = await supabase.from('deals').select('id, owner_id').eq('id', id).single()
+  if (fetchErr) throw new HttpError(404, 'Deal not found')
+  requireCanModifyRecord(user, existing)
 
   const updatable: Record<string, any> = {}
   for (const key of ['name', 'value', 'currency', 'probability', 'expected_close_date', 'notes']) {
     if (key in body) updatable[key] = body[key]
+  }
+
+  // Reassignment is restricted to admins/super admins, or the current owner
+  // handing the deal off to someone else.
+  if ('owner_id' in body) {
+    if (!isAdminOrAbove(user) && existing.owner_id !== user.id) {
+      throw new HttpError(403, 'Only an admin or the current owner can reassign this deal')
+    }
+    updatable.owner_id = body.owner_id || null
   }
 
   if (Object.keys(updatable).length === 0) throw new HttpError(400, 'Nothing to update')
@@ -177,10 +196,11 @@ export async function updateDealStage(id: string, event: HandlerEvent, user: Aut
 
   const { data: deal, error: dealErr } = await supabase
     .from('deals')
-    .select('id, name, lead_id, value, currency')
+    .select('id, name, lead_id, value, currency, owner_id')
     .eq('id', id)
     .single()
   if (dealErr) throw new HttpError(404, 'Deal not found')
+  requireCanModifyRecord(user, deal)
 
   const { data: stage, error: stageErr } = await supabase
     .from('deal_stages')
@@ -219,21 +239,27 @@ export async function updateDealStage(id: string, event: HandlerEvent, user: Aut
   return getDeal(id)
 }
 
-export async function deleteDeal(id: string) {
+export async function deleteDeal(id: string, user: AuthedUser) {
   const supabase = getSupabaseAdmin()
 
-  const { data: deal } = await supabase.from('deals').select('name, lead_id').eq('id', id).single()
+  const { data: deal, error: fetchErr } = await supabase
+    .from('deals')
+    .select('name, lead_id, owner_id')
+    .eq('id', id)
+    .single()
+  if (fetchErr) throw new HttpError(404, 'Deal not found')
+  requireCanModifyRecord(user, deal)
 
   const { error } = await supabase.from('deals').delete().eq('id', id)
   if (error) throw new HttpError(500, error.message)
 
-  if (deal) await logActivity(deal.lead_id, 'deal', `Deal "${deal.name}" deleted`)
+  if (deal) await logActivity(deal.lead_id, 'deal', `Deal "${deal.name}" deleted`, user.id)
 
   return json(200, { success: true })
 }
 
 const KANBAN_SELECT = `
-  id, name, value, currency, stage_id, probability, expected_close_date, lead_id,
+  id, name, value, currency, stage_id, probability, expected_close_date, lead_id, owner_id,
   leads ( company_name )
 `
 const KANBAN_MAX_DEALS = 1000
@@ -241,8 +267,10 @@ const KANBAN_MAX_DEALS = 1000
 export async function getDealsKanban(event: HandlerEvent) {
   const supabase = getSupabaseAdmin()
   const industryId = event.queryStringParameters?.industryId
+  const assignedTo = event.queryStringParameters?.assignedTo
 
   let query = supabase.from('deals').select(KANBAN_SELECT)
+  if (assignedTo) query = query.eq('owner_id', assignedTo)
 
   if (industryId) {
     const { data: leadRows, error: leadErr } = await supabase.from('leads').select('id').eq('industry_id', industryId)
@@ -265,6 +293,7 @@ export async function getDealsKanban(event: HandlerEvent) {
     probability: row.probability,
     expected_close_date: row.expected_close_date,
     lead_id: row.lead_id,
+    owner_id: row.owner_id,
     company_name: row.leads?.company_name ?? '',
   }))
 
