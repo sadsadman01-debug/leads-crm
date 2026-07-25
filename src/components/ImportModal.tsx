@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react'
 import Papa from 'papaparse'
+import { useQuery } from '@tanstack/react-query'
 import { Upload, FileSpreadsheet, Link as LinkIcon, CheckCircle2, AlertCircle } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
-import { importApi, type ImportResult } from '@/lib/api'
+import { importApi, industriesApi, type ImportResult } from '@/lib/api'
 
 const BATCH_SIZE = 400
 
@@ -16,7 +17,11 @@ export function ImportModal({ open, onClose, onImported }: { open: boolean; onCl
   const [result, setResult] = useState<ImportResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [defaultIndustryId, setDefaultIndustryId] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+
+  const { data: industriesData } = useQuery({ queryKey: ['industries'], queryFn: industriesApi.list })
+  const industries = industriesData?.industries ?? []
 
   function reset() {
     setFile(null)
@@ -24,6 +29,7 @@ export function ImportModal({ open, onClose, onImported }: { open: boolean; onCl
     setProgress(null)
     setResult(null)
     setError(null)
+    setDefaultIndustryId('')
   }
 
   function handleClose() {
@@ -61,7 +67,7 @@ export function ImportModal({ open, onClose, onImported }: { open: boolean; onCl
       setProgress({ done: 0, total: rows.length })
 
       for (const batch of batches) {
-        const res = await importApi.rows(batch)
+        const res = await importApi.rows(batch, defaultIndustryId || undefined)
         imported += res.imported
         skipped += res.skipped
         setProgress((p) => ({ done: (p?.done ?? 0) + batch.length, total: rows.length }))
@@ -82,7 +88,7 @@ export function ImportModal({ open, onClose, onImported }: { open: boolean; onCl
     setError(null)
     setResult(null)
     try {
-      const res = await importApi.googleSheet(sheetUrl.trim())
+      const res = await importApi.googleSheet(sheetUrl.trim(), defaultIndustryId || undefined)
       setResult(res)
       onImported()
     } catch (e) {
@@ -117,7 +123,7 @@ export function ImportModal({ open, onClose, onImported }: { open: boolean; onCl
         <div className="space-y-3">
           <p className="text-xs text-base-400">
             Expected columns: Company Name (required), Address, Phone, Email, Website, Lead Source, Priority,
-            Tags (comma-separated), Notes.
+            Industry, Tags (comma-separated), Notes.
           </p>
           <button
             className="btn-secondary w-full"
@@ -150,6 +156,25 @@ export function ImportModal({ open, onClose, onImported }: { open: boolean; onCl
               onChange={(e) => setSheetUrl(e.target.value)}
             />
           </div>
+        </div>
+      )}
+
+      {industries.length > 0 && !result && (
+        <div className="mt-3">
+          <label className="label">Default Industry (optional)</label>
+          <select
+            className="input"
+            value={defaultIndustryId}
+            onChange={(e) => setDefaultIndustryId(e.target.value)}
+          >
+            <option value="">Use each row's Industry column, if present</option>
+            {industries.map((i) => (
+              <option key={i.id} value={i.id}>{i.name}</option>
+            ))}
+          </select>
+          <p className="mt-1.5 text-xs text-base-400">
+            Selecting an industry here applies it to every lead in this import, overriding any Industry column.
+          </p>
         </div>
       )}
 

@@ -11,6 +11,7 @@ import {
   updateLeadStatus,
   updateLeadStage,
   getKanbanLeads,
+  getLeadActivities,
   bulkAction,
 } from './routes/leads.js'
 import { listTags } from './routes/tags.js'
@@ -24,6 +25,8 @@ import { importRows, importFromSheet, exportLeads } from './routes/importExport.
 import { getDashboardSummary } from './routes/dashboard.js'
 import { listStages, createStage, renameStage, reorderStages, deleteStage } from './routes/pipelineStages.js'
 import { getSettings, updateSettings } from './routes/settings.js'
+import { listTemplates, createTemplate, updateTemplate, deleteTemplate } from './routes/templates.js'
+import { listIndustries, createIndustry, renameIndustry, deleteIndustry } from './routes/industries.js'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -54,42 +57,39 @@ export const handler: Handler = async (event) => {
     let response
 
     if (resource === 'leads') {
+      const user = await requireUser(event)
+
       if (!id) {
-        await requireUser(event)
         if (method === 'GET') response = await listLeads(event)
-        else if (method === 'POST') response = await createLead(event, await requireUser(event))
+        else if (method === 'POST') response = await createLead(event, user)
         else throw new HttpError(405, 'Method not allowed')
       } else if (id === 'check-duplicate') {
-        await requireUser(event)
         response = await checkDuplicate(event)
       } else if (id === 'bulk') {
-        await requireUser(event)
-        if (method === 'POST') response = await bulkAction(event)
+        if (method === 'POST') response = await bulkAction(event, user)
         else throw new HttpError(405, 'Method not allowed')
       } else if (id === 'import' && sub === 'sheet') {
-        response = await importFromSheet(event, await requireUser(event))
+        response = await importFromSheet(event, user)
       } else if (id === 'import') {
-        response = await importRows(event, await requireUser(event))
+        response = await importRows(event, user)
       } else if (id === 'export') {
-        await requireUser(event)
         if (method === 'GET') response = await exportLeads(event)
         else throw new HttpError(405, 'Method not allowed')
       } else if (id === 'kanban') {
-        await requireUser(event)
-        if (method === 'GET') response = await getKanbanLeads()
+        if (method === 'GET') response = await getKanbanLeads(event)
         else throw new HttpError(405, 'Method not allowed')
       } else if (sub === 'status') {
-        await requireUser(event)
-        if (method === 'PATCH') response = await updateLeadStatus(id, event)
+        if (method === 'PATCH') response = await updateLeadStatus(id, event, user)
         else throw new HttpError(405, 'Method not allowed')
       } else if (sub === 'stage') {
-        await requireUser(event)
-        if (method === 'PATCH') response = await updateLeadStage(id, event)
+        if (method === 'PATCH') response = await updateLeadStage(id, event, user)
+        else throw new HttpError(405, 'Method not allowed')
+      } else if (sub === 'activities') {
+        if (method === 'GET') response = await getLeadActivities(id)
         else throw new HttpError(405, 'Method not allowed')
       } else {
-        await requireUser(event)
         if (method === 'GET') response = await getLead(id)
-        else if (method === 'PUT') response = await updateLead(id, event)
+        else if (method === 'PUT') response = await updateLead(id, event, user)
         else if (method === 'DELETE') response = await deleteLead(id)
         else throw new HttpError(405, 'Method not allowed')
       }
@@ -120,6 +120,28 @@ export const handler: Handler = async (event) => {
       if (method === 'GET') response = await getSettings()
       else if (method === 'PUT') response = await updateSettings(event)
       else throw new HttpError(405, 'Method not allowed')
+    } else if (resource === 'templates') {
+      await requireUser(event)
+      if (!id) {
+        if (method === 'GET') response = await listTemplates()
+        else if (method === 'POST') response = await createTemplate(event)
+        else throw new HttpError(405, 'Method not allowed')
+      } else {
+        if (method === 'PUT') response = await updateTemplate(id, event)
+        else if (method === 'DELETE') response = await deleteTemplate(id)
+        else throw new HttpError(405, 'Method not allowed')
+      }
+    } else if (resource === 'industries') {
+      await requireUser(event)
+      if (!id) {
+        if (method === 'GET') response = await listIndustries()
+        else if (method === 'POST') response = await createIndustry(event)
+        else throw new HttpError(405, 'Method not allowed')
+      } else {
+        if (method === 'PUT') response = await renameIndustry(id, event)
+        else if (method === 'DELETE') response = await deleteIndustry(id)
+        else throw new HttpError(405, 'Method not allowed')
+      }
     } else if (resource === 'attachments') {
       const user = await requireUser(event)
       if (!id && method === 'POST') response = await saveAttachmentMetadata(event, user)

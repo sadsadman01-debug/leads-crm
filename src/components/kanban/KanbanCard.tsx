@@ -2,7 +2,7 @@ import { useDraggable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
 import { Mail, Send, MessageCircle, Linkedin, MessageSquare, Reply, Trophy, MoveRight } from 'lucide-react'
 import clsx from 'clsx'
-import { PriorityBadge } from '@/components/ui/Badge'
+import { PriorityBadge, ScoreBadge } from '@/components/ui/Badge'
 import type { KanbanLead, PipelineStage } from '@/types/lead'
 
 const QUICK_ICONS: Array<{ key: keyof NonNullable<KanbanLead['status']>; icon: typeof Mail; label: string }> = [
@@ -58,8 +58,9 @@ export function KanbanCard({
 
       <p className="mb-2 truncate text-sm font-medium text-base-100">{lead.company_name}</p>
 
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-2 flex flex-wrap items-center gap-1.5">
         <PriorityBadge priority={lead.priority} />
+        <ScoreBadge score={lead.score} band={lead.band} />
       </div>
 
       {status && (

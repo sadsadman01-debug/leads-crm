@@ -60,6 +60,16 @@ select name, position from (
 where not exists (select 1 from public.pipeline_stages);
 
 -- ----------------------------------------------------------------------------
+-- industries: admin-configurable, referenced by leads (not free text) so a
+-- rename propagates everywhere. Created before `leads` for the FK below.
+-- ----------------------------------------------------------------------------
+create table if not exists public.industries (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  created_at timestamptz not null default now()
+);
+
+-- ----------------------------------------------------------------------------
 -- leads
 -- ----------------------------------------------------------------------------
 create table if not exists public.leads (
@@ -74,10 +84,13 @@ create table if not exists public.leads (
     check (lead_source in ('Google Maps', 'Referral', 'Manual Entry', 'Website', 'Other')),
   priority text not null default 'Medium' check (priority in ('High', 'Medium', 'Low')),
   stage_id uuid references public.pipeline_stages(id) on delete set null,
+  industry_id uuid references public.industries(id) on delete set null,
   created_by uuid references public.profiles(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+create index if not exists leads_industry_id_idx on public.leads (industry_id);
 
 create index if not exists leads_company_name_idx on public.leads using gin (to_tsvector('simple', company_name));
 create index if not exists leads_phone_idx on public.leads (phone);
@@ -247,6 +260,39 @@ create trigger app_settings_set_updated_at
   before update on public.app_settings
   for each row execute procedure public.set_updated_at();
 
+-- ----------------------------------------------------------------------------
+-- templates: reusable outreach copy (subject/body) with {{placeholder}} tokens
+-- filled in client-side per lead. No email-sending infra — copy-to-clipboard only.
+-- ----------------------------------------------------------------------------
+create table if not exists public.templates (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  subject text not null default '',
+  body text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+drop trigger if exists templates_set_updated_at on public.templates;
+create trigger templates_set_updated_at
+  before update on public.templates
+  for each row execute procedure public.set_updated_at();
+
+-- ----------------------------------------------------------------------------
+-- lead_activities: append-only timeline per lead (status/stage/tag changes,
+-- attachments, imports). Written by the functions layer at each mutation point.
+-- ----------------------------------------------------------------------------
+create table if not exists public.lead_activities (
+  id uuid primary key default gen_random_uuid(),
+  lead_id uuid not null references public.leads(id) on delete cascade,
+  type text not null,
+  message text not null,
+  created_by uuid references public.profiles(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists lead_activities_lead_id_idx on public.lead_activities (lead_id, created_at desc);
+
 -- ============================================================================
 -- Row Level Security
 -- All tables are locked down; the Netlify Functions API uses the Supabase
@@ -264,6 +310,9 @@ alter table public.lead_attachments enable row level security;
 alter table public.lead_status enable row level security;
 alter table public.pipeline_stages enable row level security;
 alter table public.app_settings enable row level security;
+alter table public.industries enable row level security;
+alter table public.templates enable row level security;
+alter table public.lead_activities enable row level security;
 
 create policy "authenticated users can read their own profile"
   on public.profiles for select
@@ -285,6 +334,12 @@ create policy "authenticated users can read pipeline_stages"
   on public.pipeline_stages for select using (auth.role() = 'authenticated');
 create policy "authenticated users can read app_settings"
   on public.app_settings for select using (auth.role() = 'authenticated');
+create policy "authenticated users can read industries"
+  on public.industries for select using (auth.role() = 'authenticated');
+create policy "authenticated users can read templates"
+  on public.templates for select using (auth.role() = 'authenticated');
+create policy "authenticated users can read lead_activities"
+  on public.lead_activities for select using (auth.role() = 'authenticated');
 
 -- No insert/update/delete policies are defined for the anon/authenticated
 -- roles: all writes go through the service-role key inside Netlify Functions.

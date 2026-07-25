@@ -67,6 +67,8 @@ export interface LeadStatus {
   is_due_today?: boolean
 }
 
+export type ScoreBand = 'Hot' | 'Warm' | 'Cold'
+
 export interface Lead {
   id: string
   company_name: string
@@ -80,10 +82,34 @@ export interface Lead {
   created_at: string
   updated_at: string
   stage_id: string | null
+  industry_id: string | null
+  score: number
+  band: ScoreBand
   status?: LeadStatus
   tags: Tag[]
   social_profiles: SocialProfile[]
   attachments?: Attachment[]
+}
+
+export interface Industry {
+  id: string
+  name: string
+}
+
+export interface Template {
+  id: string
+  name: string
+  subject: string
+  body: string
+  created_at: string
+  updated_at: string
+}
+
+export interface LeadActivity {
+  id: string
+  type: string
+  message: string
+  created_at: string
 }
 
 export interface PipelineStage {
@@ -97,6 +123,8 @@ export interface KanbanLead {
   company_name: string
   priority: Priority
   stage_id: string | null
+  score: number
+  band: ScoreBand
   status: Pick<
     LeadStatus,
     | 'cold_email_sent'
@@ -142,6 +170,7 @@ export interface LeadFormInput {
   notes: string
   lead_source: LeadSource
   priority: Priority
+  industry_id: string
   tags: string[]
   social_profiles: SocialProfile[]
 }
@@ -171,6 +200,7 @@ export interface LeadFilters {
   dateTo?: string
   hasWebsite?: boolean
   hasSocialProfile?: boolean
+  industryId?: string
 }
 
 export interface DashboardSummary {
@@ -197,4 +227,12 @@ export interface DashboardSummary {
     dueTodayCount: number
     items: ReminderItem[]
   }
+  industryComparison: Array<{
+    industryId: string | null
+    industryName: string
+    totalLeads: number
+    coldEmailSentPct: number
+    replyRate: number
+    conversionRate: number
+  }>
 }

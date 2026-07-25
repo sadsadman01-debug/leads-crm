@@ -1,6 +1,7 @@
 import clsx from 'clsx'
+import { Flame } from 'lucide-react'
 import type { ReactNode } from 'react'
-import type { Priority } from '@/types/lead'
+import type { Priority, ScoreBand } from '@/types/lead'
 
 type Tone = 'success' | 'warn' | 'danger' | 'neutral' | 'accent'
 
@@ -24,4 +25,15 @@ export function PriorityBadge({ priority }: { priority: Priority }) {
 
 export function TagPill({ label }: { label: string }) {
   return <span className="pill bg-base-800 text-base-300 border border-base-600">{label}</span>
+}
+
+const SCORE_BAND_TONE: Record<ScoreBand, Tone> = { Hot: 'success', Warm: 'warn', Cold: 'neutral' }
+
+export function ScoreBadge({ score, band }: { score: number; band: ScoreBand }) {
+  return (
+    <Badge tone={SCORE_BAND_TONE[band]}>
+      <Flame size={11} />
+      {band} · {score}
+    </Badge>
+  )
 }

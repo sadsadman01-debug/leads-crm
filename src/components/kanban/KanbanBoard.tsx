@@ -7,7 +7,7 @@ import { KanbanColumn } from './KanbanColumn'
 import { KanbanCard } from './KanbanCard'
 import type { KanbanLead } from '@/types/lead'
 
-export function KanbanBoard() {
+export function KanbanBoard({ industryId }: { industryId?: string }) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [activeLead, setActiveLead] = useState<KanbanLead | null>(null)
@@ -17,8 +17,8 @@ export function KanbanBoard() {
     queryFn: pipelineStagesApi.list,
   })
   const { data: kanbanData, isLoading: leadsLoading } = useQuery({
-    queryKey: ['leads-kanban'],
-    queryFn: leadsApi.kanban,
+    queryKey: ['leads-kanban', industryId],
+    queryFn: () => leadsApi.kanban(industryId),
   })
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
@@ -46,7 +46,7 @@ export function KanbanBoard() {
     const lead = leads.find((l) => l.id === leadId)
     if (!lead || lead.stage_id === newStageId) return
 
-    queryClient.setQueryData(['leads-kanban'], (prev: any) =>
+    queryClient.setQueryData(['leads-kanban', industryId], (prev: any) =>
       prev
         ? { ...prev, leads: prev.leads.map((l: KanbanLead) => (l.id === leadId ? { ...l, stage_id: newStageId } : l)) }
         : prev

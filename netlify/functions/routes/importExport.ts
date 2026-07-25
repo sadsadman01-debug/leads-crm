@@ -3,6 +3,7 @@ import Papa from 'papaparse'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
 import { ensureTagIds } from '../lib/tags.js'
+import { logActivities } from '../lib/activities.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const LEAD_SOURCES = ['Google Maps', 'Referral', 'Manual Entry', 'Website', 'Other']
@@ -28,6 +29,8 @@ const HEADER_ALIASES: Record<string, string> = {
   priority: 'priority',
   tags: 'tags',
   'tags/categories': 'tags',
+  industry: 'industry',
+  'industry name': 'industry',
 }
 
 interface ParsedLeadRow {
@@ -40,6 +43,7 @@ interface ParsedLeadRow {
   lead_source: string
   priority: string
   tags: string[]
+  industryName: string | null
 }
 
 function normalizeRow(raw: Record<string, any>): ParsedLeadRow | null {
@@ -63,11 +67,24 @@ function normalizeRow(raw: Record<string, any>): ParsedLeadRow | null {
     lead_source: (LEAD_SOURCES as string[]).includes(mapped.lead_source) ? mapped.lead_source : 'Manual Entry',
     priority: (PRIORITIES as string[]).includes(mapped.priority) ? mapped.priority : 'Medium',
     tags: mapped.tags ? mapped.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
+    industryName: mapped.industry ?? null,
   }
 }
 
-async function insertRows(rows: ParsedLeadRow[], userId: string) {
+async function insertRows(rows: ParsedLeadRow[], userId: string, defaultIndustryId?: string): Promise<number> {
   const supabase = getSupabaseAdmin()
+
+  let industryIdByLowerName = new Map<string, string>()
+  if (!defaultIndustryId && rows.some((r) => r.industryName)) {
+    const { data: industries } = await supabase.from('industries').select('id, name')
+    industryIdByLowerName = new Map((industries ?? []).map((i) => [i.name.toLowerCase(), i.id]))
+  }
+
+  function resolveIndustryId(row: ParsedLeadRow): string | null {
+    if (defaultIndustryId) return defaultIndustryId
+    if (!row.industryName) return null
+    return industryIdByLowerName.get(row.industryName.toLowerCase()) ?? null
+  }
 
   const { data: insertedLeads, error } = await supabase
     .from('leads')
@@ -81,6 +98,7 @@ async function insertRows(rows: ParsedLeadRow[], userId: string) {
         notes: r.notes,
         lead_source: r.lead_source,
         priority: r.priority,
+        industry_id: resolveIndustryId(r),
         created_by: userId,
       }))
     )
@@ -106,6 +124,12 @@ async function insertRows(rows: ParsedLeadRow[], userId: string) {
     }
   }
 
+  if (insertedLeads && insertedLeads.length > 0) {
+    await logActivities(
+      insertedLeads.map((lead) => ({ leadId: lead.id, type: 'created', message: 'Lead created via import', userId }))
+    )
+  }
+
   return insertedLeads?.length ?? 0
 }
 
@@ -128,7 +152,7 @@ export async function importRows(event: HandlerEvent, user: AuthedUser) {
   const valid = parsed.filter((r): r is ParsedLeadRow => r !== null)
   const skipped = parsed.length - valid.length
 
-  const imported = valid.length > 0 ? await insertRows(valid, user.id) : 0
+  const imported = valid.length > 0 ? await insertRows(valid, user.id, body.defaultIndustryId || undefined) : 0
 
   return json(200, { imported, skipped, total: rawRows.length })
 }
@@ -176,7 +200,7 @@ export async function importFromSheet(event: HandlerEvent, user: AuthedUser) {
   const valid = parsed.filter((r): r is ParsedLeadRow => r !== null)
   const skipped = parsed.length - valid.length
 
-  const imported = valid.length > 0 ? await insertRows(valid, user.id) : 0
+  const imported = valid.length > 0 ? await insertRows(valid, user.id, body.defaultIndustryId || undefined) : 0
 
   return json(200, { imported, skipped, total: rawRows.length })
 }
@@ -192,6 +216,7 @@ const EXPORT_COLUMNS = [
   'Website',
   'Lead Source',
   'Priority',
+  'Industry',
   'Tags',
   'Notes',
   'Cold Email Sent',
@@ -220,7 +245,7 @@ export async function exportLeads(event: HandlerEvent) {
 
   const allowedIds = await resolveJoinFilteredIds(filters)
   if (allowedIds !== null && allowedIds.size === 0) {
-    return csvResponse([])
+    return csvResponse([], new Map())
   }
 
   const rows: any[] = []
@@ -238,10 +263,13 @@ export async function exportLeads(event: HandlerEvent) {
     if (!data || data.length < EXPORT_CHUNK_SIZE) break
   }
 
-  return csvResponse(rows)
+  const { data: industries } = await supabase.from('industries').select('id, name')
+  const industryNameById = new Map((industries ?? []).map((i) => [i.id, i.name]))
+
+  return csvResponse(rows, industryNameById)
 }
 
-function csvResponse(leads: any[]) {
+function csvResponse(leads: any[], industryNameById: Map<string, string>) {
   const csv = Papa.unparse({
     fields: EXPORT_COLUMNS,
     data: leads.map((lead) => [
@@ -252,6 +280,7 @@ function csvResponse(leads: any[]) {
       lead.website ?? '',
       lead.lead_source,
       lead.priority,
+      (lead.industry_id && industryNameById.get(lead.industry_id)) ?? '',
       lead.tags.map((t: any) => t.name).join(', '),
       lead.notes ?? '',
       lead.status?.cold_email_sent ? 'Yes' : 'No',

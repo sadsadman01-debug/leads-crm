@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, ArrowLeft } from 'lucide-react'
-import { leadsApi } from '@/lib/api'
+import { industriesApi, leadsApi } from '@/lib/api'
 import { LEAD_SOURCES, PRIORITIES, type LeadFormInput, type SocialProfile } from '@/types/lead'
 import { TagInput } from '@/components/TagInput'
 import { SocialProfilesEditor } from '@/components/SocialProfilesEditor'
@@ -17,6 +17,7 @@ const EMPTY_FORM: LeadFormInput = {
   notes: '',
   lead_source: 'Manual Entry',
   priority: 'Medium',
+  industry_id: '',
   tags: [],
   social_profiles: [],
 }
@@ -47,6 +48,7 @@ export function LeadForm() {
         notes: existingLead.notes ?? '',
         lead_source: existingLead.lead_source,
         priority: existingLead.priority,
+        industry_id: existingLead.industry_id ?? '',
         tags: existingLead.tags.map((t) => t.name),
         social_profiles: existingLead.social_profiles,
       })
@@ -72,10 +74,13 @@ export function LeadForm() {
 
   const duplicates = duplicateResult?.matches ?? []
 
+  const { data: industriesData } = useQuery({ queryKey: ['industries'], queryFn: industriesApi.list })
+
   const saveMutation = useMutation({
     mutationFn: () => {
       const payload = { ...form, address: form.address || null, phone: form.phone || null,
-        email: form.email || null, website: form.website || null, notes: form.notes || null }
+        email: form.email || null, website: form.website || null, notes: form.notes || null,
+        industry_id: form.industry_id || null }
       return isEdit ? leadsApi.update(id!, payload as any) : leadsApi.create(payload as any)
     },
     onSuccess: (lead) => {
@@ -189,6 +194,20 @@ export function LeadForm() {
             >
               {PRIORITIES.map((p) => (
                 <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="sm:col-span-2">
+            <label className="label">Industry</label>
+            <select
+              className="input"
+              value={form.industry_id}
+              onChange={(e) => set('industry_id', e.target.value)}
+            >
+              <option value="">Unassigned</option>
+              {(industriesData?.industries ?? []).map((i) => (
+                <option key={i.id} value={i.id}>{i.name}</option>
               ))}
             </select>
           </div>

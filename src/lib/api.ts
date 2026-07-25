@@ -2,13 +2,16 @@ import { supabase } from './supabase'
 import type {
   AppSettings,
   DashboardSummary,
+  Industry,
   KanbanLead,
   Lead,
+  LeadActivity,
   LeadFilters,
   LeadListResponse,
   LeadStatus,
   PipelineStage,
   Tag,
+  Template,
 } from '@/types/lead'
 
 class ApiError extends Error {
@@ -96,7 +99,12 @@ export const leadsApi = {
   updateStage: (id: string, stageId: string) =>
     request<Lead>(`/leads/${id}/stage`, { method: 'PATCH', body: JSON.stringify({ stage_id: stageId }) }),
 
-  kanban: () => request<{ leads: KanbanLead[]; truncated: boolean }>('/leads/kanban'),
+  kanban: (industryId?: string) =>
+    request<{ leads: KanbanLead[]; truncated: boolean }>(
+      `/leads/kanban${industryId ? `?industryId=${industryId}` : ''}`
+    ),
+
+  activities: (id: string) => request<{ activities: LeadActivity[] }>(`/leads/${id}/activities`),
 }
 
 export const bulkApi = {
@@ -126,11 +134,17 @@ export interface ImportResult {
 }
 
 export const importApi = {
-  rows: (rows: Record<string, string>[]) =>
-    request<ImportResult>('/leads/import', { method: 'POST', body: JSON.stringify({ rows }) }),
+  rows: (rows: Record<string, string>[], defaultIndustryId?: string) =>
+    request<ImportResult>('/leads/import', {
+      method: 'POST',
+      body: JSON.stringify({ rows, defaultIndustryId }),
+    }),
 
-  googleSheet: (sheetUrl: string) =>
-    request<ImportResult>('/leads/import/sheet', { method: 'POST', body: JSON.stringify({ sheetUrl }) }),
+  googleSheet: (sheetUrl: string, defaultIndustryId?: string) =>
+    request<ImportResult>('/leads/import/sheet', {
+      method: 'POST',
+      body: JSON.stringify({ sheetUrl, defaultIndustryId }),
+    }),
 }
 
 export const exportApi = {
@@ -157,12 +171,38 @@ export const exportApi = {
 }
 
 export const dashboardApi = {
-  summary: (granularity: 'day' | 'week' | 'month' = 'day') =>
-    request<DashboardSummary>(`/dashboard/summary?granularity=${granularity}`),
+  summary: (granularity: 'day' | 'week' | 'month' = 'day', industryId?: string) => {
+    const qs = new URLSearchParams({ granularity })
+    if (industryId) qs.set('industryId', industryId)
+    return request<DashboardSummary>(`/dashboard/summary?${qs.toString()}`)
+  },
 }
 
 export const tagsApi = {
   list: () => request<{ tags: Tag[] }>('/tags'),
+}
+
+export const industriesApi = {
+  list: () => request<{ industries: Industry[] }>('/industries'),
+
+  create: (name: string) => request<Industry>('/industries', { method: 'POST', body: JSON.stringify({ name }) }),
+
+  rename: (id: string, name: string) =>
+    request<Industry>(`/industries/${id}`, { method: 'PUT', body: JSON.stringify({ name }) }),
+
+  remove: (id: string) => request<{ success: true }>(`/industries/${id}`, { method: 'DELETE' }),
+}
+
+export const templatesApi = {
+  list: () => request<{ templates: Template[] }>('/templates'),
+
+  create: (payload: { name: string; subject: string; body: string }) =>
+    request<Template>('/templates', { method: 'POST', body: JSON.stringify(payload) }),
+
+  update: (id: string, payload: Partial<{ name: string; subject: string; body: string }>) =>
+    request<Template>(`/templates/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+
+  remove: (id: string) => request<{ success: true }>(`/templates/${id}`, { method: 'DELETE' }),
 }
 
 export const pipelineStagesApi = {

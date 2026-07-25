@@ -13,8 +13,8 @@ import {
   Rows3,
   Columns3,
 } from 'lucide-react'
-import { bulkApi, exportApi, leadsApi, pipelineStagesApi } from '@/lib/api'
-import { PriorityBadge, TagPill, Badge } from '@/components/ui/Badge'
+import { bulkApi, exportApi, industriesApi, leadsApi, pipelineStagesApi } from '@/lib/api'
+import { PriorityBadge, ScoreBadge, TagPill, Badge } from '@/components/ui/Badge'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { FiltersBar } from '@/components/FiltersBar'
 import { BulkActionsBar } from '@/components/BulkActionsBar'
@@ -55,6 +55,15 @@ export function LeadsList() {
 
   const { data: stagesData } = useQuery({ queryKey: ['pipeline-stages'], queryFn: pipelineStagesApi.list })
   const stageNameById = new Map((stagesData?.stages ?? []).map((s) => [s.id, s.name]))
+
+  const { data: industriesData } = useQuery({ queryKey: ['industries'], queryFn: industriesApi.list })
+  const industries = industriesData?.industries ?? []
+  const selectedIndustryId = filters.industryId
+
+  function selectIndustry(industryId: string | undefined) {
+    setFilters((prev) => ({ ...prev, industryId }))
+    setPage(1)
+  }
 
   const total = data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
@@ -181,8 +190,36 @@ export function LeadsList() {
         </div>
       </div>
 
+      {industries.length > 0 && (
+        <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
+          <button
+            className={`shrink-0 pill border transition-colors ${
+              !selectedIndustryId
+                ? 'border-accent-500 bg-accent-500/15 text-accent-400'
+                : 'border-base-600 bg-base-800 text-base-300 hover:bg-base-700'
+            }`}
+            onClick={() => selectIndustry(undefined)}
+          >
+            All Industries
+          </button>
+          {industries.map((industry) => (
+            <button
+              key={industry.id}
+              className={`shrink-0 pill border transition-colors ${
+                selectedIndustryId === industry.id
+                  ? 'border-accent-500 bg-accent-500/15 text-accent-400'
+                  : 'border-base-600 bg-base-800 text-base-300 hover:bg-base-700'
+              }`}
+              onClick={() => selectIndustry(industry.id)}
+            >
+              {industry.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       {view === 'kanban' ? (
-        <KanbanBoard />
+        <KanbanBoard industryId={selectedIndustryId} />
       ) : (
         <>
       <div className="card mb-4 flex flex-wrap items-center gap-3 p-4">
@@ -321,7 +358,10 @@ export function LeadsList() {
                       </div>
                     </td>
                     <td className="px-5 py-3.5">
-                      <PriorityBadge priority={lead.priority} />
+                      <div className="flex flex-wrap gap-1.5">
+                        <PriorityBadge priority={lead.priority} />
+                        <ScoreBadge score={lead.score} band={lead.band} />
+                      </div>
                     </td>
                     <td className="px-5 py-3.5">{statusSummary(lead)}</td>
                     <td className="px-5 py-3.5 text-base-400">
@@ -370,6 +410,7 @@ export function LeadsList() {
 
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     <PriorityBadge priority={lead.priority} />
+                    <ScoreBadge score={lead.score} band={lead.band} />
                     {statusSummary(lead)}
                     {lead.stage_id && stageNameById.has(lead.stage_id) && (
                       <Badge tone="neutral">{stageNameById.get(lead.stage_id)}</Badge>

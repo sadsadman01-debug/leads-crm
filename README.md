@@ -4,7 +4,9 @@ A private, single-admin lead tracking system for outbound sales (cold email, Wha
 
 **Phase 1**: auth, lead data model, outreach status toggles, basic list/detail views.
 **Phase 2**: advanced filtering, bulk actions, CSV/Google Sheets import, CSV export, and a full analytics dashboard.
-**Phase 3** (this update): configurable pipeline stages, a drag-and-drop Kanban board, and a follow-up reminder system.
+**Phase 3**: configurable pipeline stages, a drag-and-drop Kanban board, and a follow-up reminder system.
+**Phase 4**: outreach templates, a per-lead activity timeline, and computed lead scoring.
+**Phase 5** (this update): industry segmentation — a structured Industry field, per-industry filtering/saved views on the Leads page, a dashboard scoped by industry, and an industry comparison table.
 
 ## Stack
 
@@ -18,18 +20,21 @@ A private, single-admin lead tracking system for outbound sales (cold email, Wha
 ```
 netlify/functions/       Serverless API (auth-checked, uses the Supabase service-role key)
   api.ts                 Single router entry point (/api/*)
-  lib/                   auth verification, supabase admin client, http helpers, tag resolution, reminders
-  routes/                leads (filters/bulk/stage/kanban), tags, attachments, importExport, dashboard,
-                         pipelineStages, settings
+  lib/                   auth verification, supabase admin client, http helpers, tag resolution,
+                         reminders, scoring, activities (timeline logging)
+  routes/                leads (filters/bulk/stage/kanban/activities), tags, attachments, importExport,
+                         dashboard, pipelineStages, settings, templates, industries
 src/
   pages/                 Login, Dashboard, Leads (list/detail/form), Settings
-  components/            Layout, shared UI (Badge, Toggle, Modal), StatusPanel, AttachmentsPanel,
-                         FiltersBar, BulkActionsBar, ImportModal, RemindersWidget,
-                         PipelineStagesSettings, FollowUpIntervalSettings,
+  components/            Layout, shared UI (Badge incl. ScoreBadge, Toggle, Modal), StatusPanel,
+                         AttachmentsPanel, FiltersBar, BulkActionsBar, ImportModal, RemindersWidget,
+                         PipelineStagesSettings, FollowUpIntervalSettings, IndustriesSettings,
+                         TemplatesSettings, TemplateUsePanel, LeadTimeline, IndustryComparisonTable,
                          kanban/ (Board, Column, Card), charts/ (StatTile, Funnel, Trend, Donut)
   contexts/AuthContext   Supabase session state
   lib/                   supabase client, api client (calls /api/*), chartColors
-  types/lead.ts          Shared Lead/Status/Tag/Attachment/Filters/DashboardSummary/Stage types
+  types/lead.ts          Shared Lead/Status/Tag/Attachment/Filters/DashboardSummary/Stage/
+                         Industry/Template/LeadActivity types
 supabase/schema.sql              Full DB schema for fresh installs (includes all phases)
 supabase/migrations/             Incremental SQL to run against an already-provisioned project
 scripts/seed-admin.mjs           One-time script to create the single admin user
@@ -99,7 +104,20 @@ scripts/seed-admin.mjs           One-time script to create the single admin user
 - **Follow-up reminders**: marking Cold Email / Follow-up 1 / Follow-up 2 sent stores a computed due date for the *next* step (`lead_status.followup{1,2,3}_due_at`), using the interval from `app_settings.follow_up_interval_days` (editable in Settings, default 3 days) at the moment it's computed — changing the interval later doesn't shift already-computed dates. `netlify/functions/lib/reminders.ts` is the single place that turns those stored dates into "next due / overdue / due today," reused by the leads list, lead detail, the Kanban cards, and the dashboard widget so they never disagree. A lead stops needing reminders once it's replied to or converted.
 - **Dashboard widget**: `GET /api/dashboard/summary` now also returns a `reminders` block (overdue/due-today counts + a sorted list) computed from the same leads query the rest of the dashboard already fetches — no extra full-table scan.
 
+## Phase 4 additions
+
+- **Templates** (`templates` table, `/api/templates*`): reusable subject/body outreach copy with `{{placeholder}}` tokens (`company_name`, `address`, `phone`, `email`, `website`, `lead_source`, `priority`). Managed in Settings; used from the lead detail page (`TemplateUsePanel`) which fills the placeholders for that specific lead and copies the result to the clipboard. There's no email-sending integration — this is copy/paste only, by design (no external notification/email service).
+- **Activity timeline** (`lead_activities` table, `GET /api/leads/:id/activities`): an append-only per-lead log written by the functions layer whenever something changes — lead creation (including via CSV/Sheets import), every status-toggle flip (individual or bulk), stage changes, and tag updates. `netlify/functions/lib/activities.ts` (`logActivity`/`logActivities`) is the only thing that writes to it, so every mutation path logs consistently.
+- **Lead scoring**: computed on the fly from `lead_status` + `priority` (`netlify/functions/lib/scoring.ts`, mirroring the `reminders.ts` pattern) — never stored, so tuning the weights needs no migration. Surfaced as a `score`/`band` (Hot/Warm/Cold) pair on every lead the API returns (list, detail, Kanban), rendered via `ScoreBadge`.
+
+## Phase 5 additions
+
+- **Industries** (`industries` table, `/api/industries*`): a structured, admin-managed reference table — leads hold an `industry_id` foreign key, not a free-text string, so renaming an industry in Settings instantly relabels every lead that references it. Managed alongside pipeline stages and templates in Settings; deleting an industry is blocked while any lead still references it (same guard pattern as pipeline stages).
+- **Leads page industry filter**: a horizontal pill/tab bar ("All Industries" + one per industry) above the Table/Kanban views. Selecting one sets `filters.industryId`, which flows into both the paginated table query and the Kanban board's `industryId` query param — one selection scopes both views.
+- **Dashboard industry scoping**: an industry `<select>` next to the granularity picker re-runs `GET /api/dashboard/summary?industryId=...`, which filters every stat/chart to that industry's leads (via `allRows.filter` before the existing aggregation logic runs) — "All Industries" (no param) matches the original Phase 2 behavior exactly.
+- **Industry comparison table**: the same dashboard endpoint groups the *unfiltered* lead set by `industry_id` (including an "Unassigned" bucket) and returns `industryComparison` — total leads, cold-email-sent %, reply rate, and conversion rate per industry — computed from the same query the rest of the dashboard already runs, so no extra full-table scan.
+- **CSV/Sheets import industry mapping**: an `Industry` column is recognized like any other CSV/Sheet header and resolved by case-insensitive name match against existing industries (no auto-creation — unmatched names are left unassigned, since industries are meant to be curated in Settings). Alternatively, the admin can pick a **Default Industry** in the import modal, which overrides the per-row column for the entire batch.
+
 ## What's intentionally deferred to later phases
 
-- Outreach templates, lead scoring
 - Multi-user roles/permissions (schema already supports adding this)

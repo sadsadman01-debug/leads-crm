@@ -3,12 +3,14 @@ import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
 import { ensureTagIds } from '../lib/tags.js'
 import { computeReminder, FOLLOW_UP_DUE_TRIGGERS } from '../lib/reminders.js'
+import { computeLeadScore } from '../lib/scoring.js'
+import { logActivity, logActivities } from '../lib/activities.js'
 import { getFollowUpIntervalDays } from './settings.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 export const LEAD_SELECT = `
   id, company_name, address, phone, email, website, notes, lead_source, priority,
-  stage_id, created_at, updated_at,
+  stage_id, industry_id, created_at, updated_at,
   lead_status ( * ),
   lead_tags ( tags ( id, name ) ),
   lead_social_profiles ( id, platform, url )
@@ -21,6 +23,7 @@ export function normalizeLead(row: any) {
   return {
     ...rest,
     status: status ? { ...status, ...computeReminder(status) } : status,
+    ...computeLeadScore(status, rest.priority),
     social_profiles: lead_social_profiles ?? [],
     tags: (lead_tags ?? []).map((t: any) => t.tags).filter(Boolean),
   }
@@ -35,6 +38,7 @@ export interface LeadFilters {
   dateTo?: string
   hasWebsite?: boolean
   hasSocialProfile?: boolean
+  industryId?: string
 }
 
 export function parseFilters(params: Record<string, string | undefined>): LeadFilters {
@@ -104,6 +108,7 @@ export function applyColumnFilters<T extends { eq: any; not: any; gte: any; lte:
   }
   if (filters.priority) q = q.eq('priority', filters.priority)
   if (filters.leadSource) q = q.eq('lead_source', filters.leadSource)
+  if (filters.industryId) q = q.eq('industry_id', filters.industryId)
   if (filters.dateFrom) q = q.gte('created_at', filters.dateFrom)
   if (filters.dateTo) q = q.lte('created_at', filters.dateTo)
   if (filters.hasWebsite) {
@@ -223,6 +228,7 @@ export async function createLead(event: HandlerEvent, user: AuthedUser) {
       notes: body.notes ?? null,
       lead_source: body.lead_source ?? 'Manual Entry',
       priority: body.priority ?? 'Medium',
+      industry_id: body.industry_id ?? null,
       created_by: user.id,
     })
     .select('id')
@@ -234,6 +240,7 @@ export async function createLead(event: HandlerEvent, user: AuthedUser) {
   await Promise.all([
     replaceTags(leadId, body.tags ?? []),
     replaceSocialProfiles(leadId, body.social_profiles ?? []),
+    logActivity(leadId, 'created', 'Lead created', user.id),
   ])
 
   return getLead(leadId)
@@ -254,12 +261,12 @@ export async function getLead(id: string) {
   return json(200, { ...normalizeLead(data), attachments: attachments ?? [] })
 }
 
-export async function updateLead(id: string, event: HandlerEvent) {
+export async function updateLead(id: string, event: HandlerEvent, user: AuthedUser) {
   const supabase = getSupabaseAdmin()
   const body = JSON.parse(event.body || '{}')
 
   const updatable: Record<string, any> = {}
-  for (const key of ['company_name', 'address', 'phone', 'email', 'website', 'notes', 'lead_source', 'priority']) {
+  for (const key of ['company_name', 'address', 'phone', 'email', 'website', 'notes', 'lead_source', 'priority', 'industry_id']) {
     if (key in body) updatable[key] = body[key]
   }
 
@@ -268,8 +275,18 @@ export async function updateLead(id: string, event: HandlerEvent) {
     if (error) throw new HttpError(500, error.message)
   }
 
-  if ('tags' in body) await replaceTags(id, body.tags ?? [])
+  if ('tags' in body) {
+    await replaceTags(id, body.tags ?? [])
+    const tagNames = (body.tags ?? []) as string[]
+    await logActivity(
+      id,
+      'tags',
+      tagNames.length > 0 ? `Tags set to: ${tagNames.join(', ')}` : 'Tags cleared',
+      user.id
+    )
+  }
   if ('social_profiles' in body) await replaceSocialProfiles(id, body.social_profiles ?? [])
+  if ('industry_id' in body) await logActivity(id, 'industry', 'Industry updated', user.id)
 
   return getLead(id)
 }
@@ -281,34 +298,36 @@ export async function deleteLead(id: string) {
   return json(200, { success: true })
 }
 
-export const STATUS_FIELDS: Record<string, { flagField: string; tsField: string }> = {
-  cold_email_sent: { flagField: 'cold_email_sent', tsField: 'cold_email_sent_at' },
-  followup1_sent: { flagField: 'followup1_sent', tsField: 'followup1_sent_at' },
-  followup2_sent: { flagField: 'followup2_sent', tsField: 'followup2_sent_at' },
-  followup3_sent: { flagField: 'followup3_sent', tsField: 'followup3_sent_at' },
-  replied: { flagField: 'replied', tsField: 'replied_at' },
-  whatsapp_sent: { flagField: 'whatsapp_sent', tsField: 'whatsapp_sent_at' },
-  no_whatsapp: { flagField: 'no_whatsapp', tsField: 'no_whatsapp_at' },
-  email_invalid: { flagField: 'email_invalid', tsField: 'email_invalid_at' },
-  phone_invalid: { flagField: 'phone_invalid', tsField: 'phone_invalid_at' },
-  converted: { flagField: 'converted', tsField: 'converted_at' },
-  linkedin_sent: { flagField: 'linkedin_sent', tsField: 'linkedin_sent_at' },
-  sms_sent: { flagField: 'sms_sent', tsField: 'sms_sent_at' },
-  cold_call_made: { flagField: 'cold_call_made', tsField: 'cold_call_made_at' },
+export const STATUS_FIELDS: Record<string, { flagField: string; tsField: string; label: string }> = {
+  cold_email_sent: { flagField: 'cold_email_sent', tsField: 'cold_email_sent_at', label: 'Cold Email Sent' },
+  followup1_sent: { flagField: 'followup1_sent', tsField: 'followup1_sent_at', label: '1st Follow-up Sent' },
+  followup2_sent: { flagField: 'followup2_sent', tsField: 'followup2_sent_at', label: '2nd Follow-up Sent' },
+  followup3_sent: { flagField: 'followup3_sent', tsField: 'followup3_sent_at', label: '3rd Follow-up Sent' },
+  replied: { flagField: 'replied', tsField: 'replied_at', label: 'Replied' },
+  whatsapp_sent: { flagField: 'whatsapp_sent', tsField: 'whatsapp_sent_at', label: 'WhatsApp Sent' },
+  no_whatsapp: { flagField: 'no_whatsapp', tsField: 'no_whatsapp_at', label: 'No WhatsApp Available' },
+  email_invalid: { flagField: 'email_invalid', tsField: 'email_invalid_at', label: 'Email Invalid' },
+  phone_invalid: { flagField: 'phone_invalid', tsField: 'phone_invalid_at', label: 'Phone Invalid' },
+  converted: { flagField: 'converted', tsField: 'converted_at', label: 'Converted to Client' },
+  linkedin_sent: { flagField: 'linkedin_sent', tsField: 'linkedin_sent_at', label: 'LinkedIn Sent' },
+  sms_sent: { flagField: 'sms_sent', tsField: 'sms_sent_at', label: 'SMS Sent' },
+  cold_call_made: { flagField: 'cold_call_made', tsField: 'cold_call_made_at', label: 'Cold Call Made' },
 }
 
-export async function updateLeadStatus(id: string, event: HandlerEvent) {
+export async function updateLeadStatus(id: string, event: HandlerEvent, user: AuthedUser) {
   const supabase = getSupabaseAdmin()
   const body = JSON.parse(event.body || '{}')
 
   const update: Record<string, any> = {}
+  const activityMessages: string[] = []
   let intervalDays: number | null = null
 
-  for (const [key, { flagField, tsField }] of Object.entries(STATUS_FIELDS)) {
+  for (const [key, { flagField, tsField, label }] of Object.entries(STATUS_FIELDS)) {
     if (key in body) {
       const value = Boolean(body[key])
       update[flagField] = value
       update[tsField] = value ? new Date().toISOString() : null
+      activityMessages.push(`${label} marked ${value ? 'done' : 'not done'}`)
 
       const trigger = FOLLOW_UP_DUE_TRIGGERS[key]
       if (trigger) {
@@ -324,8 +343,14 @@ export async function updateLeadStatus(id: string, event: HandlerEvent) {
     }
   }
 
-  if ('reply_sentiment' in body) update.reply_sentiment = body.reply_sentiment || null
-  if ('cold_call_outcome' in body) update.cold_call_outcome = body.cold_call_outcome || null
+  if ('reply_sentiment' in body) {
+    update.reply_sentiment = body.reply_sentiment || null
+    if (update.reply_sentiment) activityMessages.push(`Reply sentiment set to ${update.reply_sentiment}`)
+  }
+  if ('cold_call_outcome' in body) {
+    update.cold_call_outcome = body.cold_call_outcome || null
+    if (update.cold_call_outcome) activityMessages.push(`Cold call outcome: ${update.cold_call_outcome}`)
+  }
 
   if (Object.keys(update).length === 0) {
     throw new HttpError(400, 'No recognized status fields in request body')
@@ -339,10 +364,13 @@ export async function updateLeadStatus(id: string, event: HandlerEvent) {
     .single()
 
   if (error) throw new HttpError(500, error.message)
+
+  await logActivities(activityMessages.map((message) => ({ leadId: id, type: 'status', message, userId: user.id })))
+
   return json(200, { ...data, ...computeReminder(data) })
 }
 
-export async function updateLeadStage(id: string, event: HandlerEvent) {
+export async function updateLeadStage(id: string, event: HandlerEvent, user: AuthedUser) {
   const supabase = getSupabaseAdmin()
   const body = JSON.parse(event.body || '{}')
   const stageId = body.stage_id
@@ -352,7 +380,23 @@ export async function updateLeadStage(id: string, event: HandlerEvent) {
   const { error } = await supabase.from('leads').update({ stage_id: stageId }).eq('id', id)
   if (error) throw new HttpError(500, error.message)
 
+  const { data: stage } = await supabase.from('pipeline_stages').select('name').eq('id', stageId).maybeSingle()
+  await logActivity(id, 'stage', `Stage changed to ${stage?.name ?? 'unknown'}`, user.id)
+
   return getLead(id)
+}
+
+export async function getLeadActivities(id: string) {
+  const supabase = getSupabaseAdmin()
+  const { data, error } = await supabase
+    .from('lead_activities')
+    .select('id, type, message, created_at')
+    .eq('lead_id', id)
+    .order('created_at', { ascending: false })
+    .limit(200)
+
+  if (error) throw new HttpError(500, error.message)
+  return json(200, { activities: data ?? [] })
 }
 
 const KANBAN_SELECT = `
@@ -363,13 +407,14 @@ const KANBAN_SELECT = `
 `
 const KANBAN_MAX_LEADS = 1000
 
-export async function getKanbanLeads() {
+export async function getKanbanLeads(event: HandlerEvent) {
   const supabase = getSupabaseAdmin()
-  const { data, error } = await supabase
-    .from('leads')
-    .select(KANBAN_SELECT)
-    .order('created_at', { ascending: false })
-    .limit(KANBAN_MAX_LEADS)
+  const industryId = event.queryStringParameters?.industryId
+
+  let query = supabase.from('leads').select(KANBAN_SELECT)
+  if (industryId) query = query.eq('industry_id', industryId)
+
+  const { data, error } = await query.order('created_at', { ascending: false }).limit(KANBAN_MAX_LEADS)
 
   if (error) throw new HttpError(500, error.message)
 
@@ -381,6 +426,7 @@ export async function getKanbanLeads() {
       priority: row.priority,
       stage_id: row.stage_id,
       status: status ? { ...status, ...computeReminder(status) } : status,
+      ...computeLeadScore(status, row.priority),
     }
   })
 
@@ -400,7 +446,7 @@ function requireIds(body: any): string[] {
   return ids
 }
 
-export async function bulkAction(event: HandlerEvent) {
+export async function bulkAction(event: HandlerEvent, user: AuthedUser) {
   const supabase = getSupabaseAdmin()
   const body = JSON.parse(event.body || '{}')
   const type = body.type
@@ -409,7 +455,7 @@ export async function bulkAction(event: HandlerEvent) {
     const ids = requireIds(body)
     const { field, value } = body
     if (!(field in STATUS_FIELDS)) throw new HttpError(400, `Unknown status field: ${field}`)
-    const { tsField, flagField } = STATUS_FIELDS[field]
+    const { tsField, flagField, label } = STATUS_FIELDS[field]
     const boolValue = Boolean(value)
 
     const { error } = await supabase
@@ -418,6 +464,16 @@ export async function bulkAction(event: HandlerEvent) {
       .in('lead_id', ids)
 
     if (error) throw new HttpError(500, error.message)
+
+    await logActivities(
+      ids.map((leadId) => ({
+        leadId,
+        type: 'status',
+        message: `${label} marked ${boolValue ? 'done' : 'not done'} (bulk)`,
+        userId: user.id,
+      }))
+    )
+
     return json(200, { success: true, updated: ids.length })
   }
 
@@ -433,6 +489,15 @@ export async function bulkAction(event: HandlerEvent) {
 
     const { error: insErr } = await supabase.from('lead_tags').upsert(rows, { onConflict: 'lead_id,tag_id' })
     if (insErr) throw new HttpError(500, insErr.message)
+
+    await logActivities(
+      ids.map((leadId) => ({
+        leadId,
+        type: 'tags',
+        message: `Tags added (bulk): ${tagNames.join(', ')}`,
+        userId: user.id,
+      }))
+    )
 
     return json(200, { success: true, updated: ids.length })
   }

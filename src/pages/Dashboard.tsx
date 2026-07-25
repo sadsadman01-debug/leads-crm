@@ -13,12 +13,13 @@ import {
   Reply,
   Trophy,
 } from 'lucide-react'
-import { dashboardApi } from '@/lib/api'
+import { dashboardApi, industriesApi } from '@/lib/api'
 import { StatTile } from '@/components/charts/StatTile'
 import { FunnelChart } from '@/components/charts/FunnelChart'
 import { TrendChart } from '@/components/charts/TrendChart'
 import { DonutChart } from '@/components/charts/DonutChart'
 import { RemindersWidget } from '@/components/RemindersWidget'
+import { IndustryComparisonTable } from '@/components/IndustryComparisonTable'
 import { LEAD_SOURCE_COLORS, PRIORITY_COLORS, SENTIMENT_COLORS, STATUS_DIST_COLORS } from '@/lib/chartColors'
 
 const GRANULARITIES: Array<{ value: 'day' | 'week' | 'month'; label: string }> = [
@@ -29,12 +30,16 @@ const GRANULARITIES: Array<{ value: 'day' | 'week' | 'month'; label: string }> =
 
 export function Dashboard() {
   const [granularity, setGranularity] = useState<'day' | 'week' | 'month'>('day')
+  const [industryId, setIndustryId] = useState('')
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['dashboard-summary', granularity],
-    queryFn: () => dashboardApi.summary(granularity),
+    queryKey: ['dashboard-summary', granularity, industryId],
+    queryFn: () => dashboardApi.summary(granularity, industryId || undefined),
     placeholderData: (prev) => prev,
   })
+
+  const { data: industriesData } = useQuery({ queryKey: ['industries'], queryFn: industriesApi.list })
+  const industries = industriesData?.industries ?? []
 
   if (isLoading && !data) {
     return <div className="p-12 text-center text-base-400">Loading dashboard…</div>
@@ -52,15 +57,29 @@ export function Dashboard() {
           <h1 className="text-2xl font-semibold text-base-100">Dashboard</h1>
           <p className="mt-1 text-sm text-base-400">Outreach performance at a glance</p>
         </div>
-        <select
-          className="input w-full sm:w-auto"
-          value={granularity}
-          onChange={(e) => setGranularity(e.target.value as any)}
-        >
-          {GRANULARITIES.map((g) => (
-            <option key={g.value} value={g.value}>{g.label}</option>
-          ))}
-        </select>
+        <div className="flex flex-wrap gap-2">
+          {industries.length > 0 && (
+            <select
+              className="input w-full sm:w-auto"
+              value={industryId}
+              onChange={(e) => setIndustryId(e.target.value)}
+            >
+              <option value="">All Industries</option>
+              {industries.map((i) => (
+                <option key={i.id} value={i.id}>{i.name}</option>
+              ))}
+            </select>
+          )}
+          <select
+            className="input w-full sm:w-auto"
+            value={granularity}
+            onChange={(e) => setGranularity(e.target.value as any)}
+          >
+            {GRANULARITIES.map((g) => (
+              <option key={g.value} value={g.value}>{g.label}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <RemindersWidget reminders={data.reminders} />
@@ -193,6 +212,8 @@ export function Dashboard() {
           <DonutChart data={data.distributions.priority} colors={PRIORITY_COLORS} />
         </div>
       </div>
+
+      {data.industryComparison.length > 0 && <IndustryComparisonTable rows={data.industryComparison} />}
     </div>
   )
 }

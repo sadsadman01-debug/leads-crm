@@ -2,6 +2,8 @@ import { Settings as SettingsIcon } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { PipelineStagesSettings } from '@/components/PipelineStagesSettings'
 import { FollowUpIntervalSettings } from '@/components/FollowUpIntervalSettings'
+import { IndustriesSettings } from '@/components/IndustriesSettings'
+import { TemplatesSettings } from '@/components/TemplatesSettings'
 
 export function Settings() {
   const { session } = useAuth()
@@ -18,12 +20,12 @@ export function Settings() {
 
       <PipelineStagesSettings />
       <FollowUpIntervalSettings />
+      <IndustriesSettings />
+      <TemplatesSettings />
 
       <div className="card flex flex-col items-center gap-3 p-16 text-center">
         <SettingsIcon size={32} className="text-base-500" />
-        <p className="text-base-300">
-          Outreach templates and team management are coming in a future phase.
-        </p>
+        <p className="text-base-300">Team management is coming in a future phase.</p>
       </div>
     </div>
   )

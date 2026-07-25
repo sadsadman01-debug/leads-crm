@@ -17,10 +17,12 @@ import {
   Clock,
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
-import { leadsApi, pipelineStagesApi } from '@/lib/api'
-import { PriorityBadge, TagPill, Badge } from '@/components/ui/Badge'
+import { leadsApi, pipelineStagesApi, industriesApi } from '@/lib/api'
+import { PriorityBadge, TagPill, Badge, ScoreBadge } from '@/components/ui/Badge'
 import { StatusPanel } from '@/components/StatusPanel'
 import { AttachmentsPanel } from '@/components/AttachmentsPanel'
+import { LeadTimeline } from '@/components/LeadTimeline'
+import { TemplateUsePanel } from '@/components/TemplateUsePanel'
 import { Modal } from '@/components/ui/Modal'
 
 const PLATFORM_ICON: Record<string, typeof Globe> = {
@@ -42,6 +44,7 @@ export function LeadDetail() {
   })
 
   const { data: stagesData } = useQuery({ queryKey: ['pipeline-stages'], queryFn: pipelineStagesApi.list })
+  const { data: industriesData } = useQuery({ queryKey: ['industries'], queryFn: industriesApi.list })
 
   const deleteMutation = useMutation({
     mutationFn: () => leadsApi.remove(id!),
@@ -56,6 +59,15 @@ export function LeadDetail() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['lead', id] })
       queryClient.invalidateQueries({ queryKey: ['leads'] })
+    },
+  })
+
+  const industryMutation = useMutation({
+    mutationFn: (industryId: string) => leadsApi.update(id!, { industry_id: industryId || null } as any),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['lead', id] })
+      queryClient.invalidateQueries({ queryKey: ['leads'] })
+      queryClient.invalidateQueries({ queryKey: ['lead-activities', id] })
     },
   })
 
@@ -75,6 +87,7 @@ export function LeadDetail() {
           <div className="mb-2 flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-semibold text-base-100">{lead.company_name}</h1>
             <PriorityBadge priority={lead.priority} />
+            <ScoreBadge score={lead.score} band={lead.band} />
           </div>
           <div className="flex flex-wrap gap-1.5">
             {lead.tags.map((t) => (
@@ -129,6 +142,23 @@ export function LeadDetail() {
 
           <div className="card space-y-3 p-6">
             <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-base-300">
+              Industry
+            </h2>
+            <select
+              className="input"
+              value={lead.industry_id ?? ''}
+              disabled={industryMutation.isPending}
+              onChange={(e) => industryMutation.mutate(e.target.value)}
+            >
+              <option value="">Unassigned</option>
+              {(industriesData?.industries ?? []).map((i) => (
+                <option key={i.id} value={i.id}>{i.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="card space-y-3 p-6">
+            <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-base-300">
               Contact Info
             </h2>
             <InfoRow icon={MapPin} value={lead.address} />
@@ -177,10 +207,12 @@ export function LeadDetail() {
           )}
 
           <AttachmentsPanel leadId={lead.id} attachments={lead.attachments ?? []} />
+          <TemplateUsePanel lead={lead} />
         </div>
 
-        <div className="lg:col-span-2">
+        <div className="space-y-6 lg:col-span-2">
           <StatusPanel lead={lead} />
+          <LeadTimeline leadId={lead.id} />
         </div>
       </div>
 

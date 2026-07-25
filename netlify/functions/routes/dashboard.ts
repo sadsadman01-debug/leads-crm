@@ -86,15 +86,18 @@ export async function getDashboardSummary(event: HandlerEvent) {
     ? (params.granularity as Granularity)
     : 'day'
 
+  const industryId = params.industryId || undefined
+
   const { data: leads, error } = await supabase
     .from('leads')
-    .select('id, company_name, created_at, lead_source, priority, lead_status(*)')
+    .select('id, company_name, created_at, lead_source, priority, industry_id, lead_status(*)')
     .order('created_at', { ascending: true })
     .limit(MAX_LEADS_FOR_AGGREGATION)
 
   if (error) throw new HttpError(500, error.message)
 
-  const rows = leads ?? []
+  const allRows = leads ?? []
+  const rows = industryId ? allRows.filter((r: any) => r.industry_id === industryId) : allRows
   const totalLeads = rows.length
 
   const statuses = rows.map((r: any) => (Array.isArray(r.lead_status) ? r.lead_status[0] : r.lead_status))
@@ -184,6 +187,37 @@ export async function getDashboardSummary(event: HandlerEvent) {
   const overdueCount = statuses.filter((s: any) => computeReminder(s).is_overdue).length
   const dueTodayCount = statuses.filter((s: any) => computeReminder(s).is_due_today).length
 
+  const { data: industries } = await supabase.from('industries').select('id, name')
+  const industryNameById = new Map((industries ?? []).map((i) => [i.id, i.name]))
+
+  const byIndustry = new Map<string, any[]>()
+  for (const lead of allRows as any[]) {
+    const key = lead.industry_id ?? '__unassigned__'
+    if (!byIndustry.has(key)) byIndustry.set(key, [])
+    byIndustry.get(key)!.push(lead)
+  }
+
+  const industryComparison = [...byIndustry.entries()]
+    .map(([key, industryLeads]) => {
+      const industryStatuses = industryLeads.map((l: any) =>
+        Array.isArray(l.lead_status) ? l.lead_status[0] : l.lead_status
+      )
+      const total = industryLeads.length
+      const coldEmailCount = industryStatuses.filter((s: any) => s?.cold_email_sent).length
+      const repliedCount = industryStatuses.filter((s: any) => s?.replied).length
+      const convertedCount2 = industryStatuses.filter((s: any) => s?.converted).length
+
+      return {
+        industryId: key === '__unassigned__' ? null : key,
+        industryName: key === '__unassigned__' ? 'Unassigned' : industryNameById.get(key) ?? 'Unknown',
+        totalLeads: total,
+        coldEmailSentPct: pct(coldEmailCount, total),
+        replyRate: pct(repliedCount, total),
+        conversionRate: pct(convertedCount2, total),
+      }
+    })
+    .sort((a, b) => b.totalLeads - a.totalLeads)
+
   return json(200, {
     reminders: { overdueCount, dueTodayCount, items: reminderItems },
     totals: { leads: totalLeads },
@@ -201,5 +235,6 @@ export async function getDashboardSummary(event: HandlerEvent) {
       status: toDist(statusDistCounts),
     },
     trend,
+    industryComparison,
   })
 }
