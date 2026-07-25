@@ -66,6 +66,16 @@ import {
   reorderCustomFields,
   deleteCustomField,
 } from './routes/customFields.js'
+import {
+  listSavedReports,
+  createSavedReport,
+  updateSavedReport,
+  deleteSavedReport,
+  runReport,
+} from './routes/reports.js'
+import { getForecast } from './routes/forecast.js'
+import { getTrends, getPeriodComparisons } from './routes/trends.js'
+import { listQuotas, upsertQuota, deleteQuota } from './routes/quotas.js'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -274,6 +284,37 @@ export const handler: Handler = async (event) => {
       const user = await requireUser(event)
       if (id === 'summary' && method === 'GET') response = await getRevenueSummary(event, user)
       else throw new HttpError(404, 'Not found')
+    } else if (resource === 'reports') {
+      const user = await requireUser(event)
+      if (!id) {
+        if (method === 'GET') response = await listSavedReports(event, user)
+        else if (method === 'POST') response = await createSavedReport(event, user)
+        else throw new HttpError(405, 'Method not allowed')
+      } else if (id === 'run') {
+        if (method === 'POST') response = await runReport(event, user)
+        else throw new HttpError(405, 'Method not allowed')
+      } else {
+        if (method === 'PUT') response = await updateSavedReport(id, event, user)
+        else if (method === 'DELETE') response = await deleteSavedReport(id, event, user)
+        else throw new HttpError(405, 'Method not allowed')
+      }
+    } else if (resource === 'forecast') {
+      const user = await requireUser(event)
+      if (method === 'GET') response = await getForecast(event, user)
+      else throw new HttpError(405, 'Method not allowed')
+    } else if (resource === 'trends') {
+      const user = await requireUser(event)
+      if (id === 'period-comparisons' && method === 'GET') response = await getPeriodComparisons(event, user)
+      else if (!id && method === 'GET') response = await getTrends(event, user)
+      else throw new HttpError(404, 'Not found')
+    } else if (resource === 'quotas') {
+      const user = await requireUser(event)
+      if (!id) {
+        if (method === 'GET') response = await listQuotas(event, user)
+        else if (method === 'POST') response = await upsertQuota(event, user)
+        else throw new HttpError(405, 'Method not allowed')
+      } else if (method === 'DELETE') response = await deleteQuota(id, event, user)
+      else throw new HttpError(405, 'Method not allowed')
     } else if (resource === 'attachments') {
       const user = await requireUser(event)
       if (!id && method === 'POST') response = await saveAttachmentMetadata(event, user)

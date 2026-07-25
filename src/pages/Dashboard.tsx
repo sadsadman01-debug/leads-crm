@@ -24,6 +24,7 @@ import { RemindersWidget } from '@/components/RemindersWidget'
 import { IndustryComparisonTable } from '@/components/IndustryComparisonTable'
 import { TeamPerformanceTable } from '@/components/TeamPerformanceTable'
 import { RevenueSection } from '@/components/RevenueSection'
+import { DashboardPeriodComparisons } from '@/components/DashboardPeriodComparisons'
 import { LEAD_SOURCE_COLORS, PRIORITY_COLORS, SENTIMENT_COLORS, STATUS_DIST_COLORS } from '@/lib/chartColors'
 import { useAuth, isAdminOrAbove } from '@/contexts/AuthContext'
 import type { RevenueSummary } from '@/types/deal'
@@ -133,6 +134,8 @@ export function Dashboard() {
           </select>
         </div>
       </div>
+
+      <DashboardPeriodComparisons currency={settings?.default_currency ?? 'USD'} />
 
       <RemindersWidget reminders={data.reminders} />
 

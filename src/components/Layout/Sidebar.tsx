@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Users, UserPlus, Settings as SettingsIcon, LogOut, Target, X, Handshake, UsersRound, Building2, ArrowLeftRight } from 'lucide-react'
+import { LayoutDashboard, Users, UserPlus, Settings as SettingsIcon, LogOut, Target, X, Handshake, UsersRound, Building2, ArrowLeftRight, BarChart3 } from 'lucide-react'
 import clsx from 'clsx'
 import { useAuth } from '@/contexts/AuthContext'
 import { useOrg } from '@/contexts/OrgContext'
@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { to: '/leads', label: 'Leads', icon: Users },
   { to: '/leads/new', label: 'Add New Lead', icon: UserPlus },
   { to: '/deals', label: 'Deals', icon: Handshake },
+  { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/settings', label: 'Settings', icon: SettingsIcon },
 ]
 
@@ -20,7 +21,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   const isSuperAdmin = profile?.role === 'super_admin'
   const navItems =
     profile && (profile.role === 'admin' || profile.role === 'super_admin')
-      ? [...NAV_ITEMS.slice(0, 4), { to: '/team', label: 'Team', icon: UsersRound }, NAV_ITEMS[4]]
+      ? [...NAV_ITEMS.slice(0, 5), { to: '/team', label: 'Team', icon: UsersRound }, NAV_ITEMS[5]]
       : NAV_ITEMS
 
   const workspaceLabel = isSuperAdmin

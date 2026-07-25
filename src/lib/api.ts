@@ -25,6 +25,7 @@ import type {
 import type { TeamMember, Role } from '@/types/team'
 import type { Organization, OrganizationSummary } from '@/types/organization'
 import type { CustomFieldDefinition, AppliesTo, FieldType } from '@/types/customField'
+import type { SavedReport, ReportRunResult, ReportType, ChartType, ReportFilters } from '@/types/report'
 import { withOrgScope } from './orgScope'
 
 class ApiError extends Error {
@@ -225,6 +226,108 @@ export const customFieldsApi = {
     }),
 
   remove: (id: string) => request<{ success: true }>(`/custom-fields/${id}`, { method: 'DELETE' }),
+}
+
+export const reportsApi = {
+  list: () => request<{ reports: SavedReport[] }>('/reports'),
+
+  create: (payload: {
+    name: string
+    report_type: ReportType
+    selected_fields?: string[]
+    group_by?: string | null
+    filters?: ReportFilters
+    chart_type?: ChartType
+    visible_to_all?: boolean
+  }) => request<SavedReport>('/reports', { method: 'POST', body: JSON.stringify(payload) }),
+
+  update: (id: string, payload: Partial<Omit<SavedReport, 'id' | 'created_by' | 'created_at' | 'updated_at' | 'report_type'>>) =>
+    request<SavedReport>(`/reports/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+
+  remove: (id: string) => request<{ success: true }>(`/reports/${id}`, { method: 'DELETE' }),
+
+  run: (payload: { report_type: ReportType; group_by?: string | null; filters?: ReportFilters; displayCurrency?: string }) =>
+    request<ReportRunResult>('/reports/run', { method: 'POST', body: JSON.stringify(payload) }),
+}
+
+export interface ForecastPeriod {
+  periodKey: string
+  label: string
+  forecast: number
+  openWeighted: number
+  closedWon: number
+  quota: number
+  progressPct: number | null
+  status: 'on_track' | 'at_risk' | 'behind' | 'no_quota'
+}
+
+export interface ForecastResponse {
+  displayCurrency: string
+  ratesUpdatedAt: string
+  thisMonth: ForecastPeriod
+  thisQuarter: ForecastPeriod
+  nextQuarter: ForecastPeriod
+}
+
+export const forecastApi = {
+  get: (displayCurrency?: string, assignedTo?: string) => {
+    const qs = new URLSearchParams()
+    if (displayCurrency) qs.set('displayCurrency', displayCurrency)
+    if (assignedTo) qs.set('assignedTo', assignedTo)
+    return request<ForecastResponse>(`/forecast?${qs.toString()}`)
+  },
+}
+
+export interface TrendMetric {
+  key: 'leadsAdded' | 'conversionRate' | 'revenue' | 'avgDealSize'
+  current: number
+  previous: number
+  pctChange: number | null
+}
+
+export interface PeriodComparisonMetric {
+  current: number
+  previous: number
+  pctChange: number | null
+}
+
+export interface PeriodComparison {
+  leadsAdded: PeriodComparisonMetric
+  conversionRate: PeriodComparisonMetric
+  revenue: PeriodComparisonMetric
+}
+
+export const trendsApi = {
+  get: (granularity: 'month' | 'quarter', displayCurrency?: string) => {
+    const qs = new URLSearchParams({ granularity })
+    if (displayCurrency) qs.set('displayCurrency', displayCurrency)
+    return request<{ granularity: string; displayCurrency: string; metrics: TrendMetric[] }>(`/trends?${qs.toString()}`)
+  },
+  periodComparisons: (displayCurrency?: string) => {
+    const qs = new URLSearchParams()
+    if (displayCurrency) qs.set('displayCurrency', displayCurrency)
+    return request<{ displayCurrency: string; ratesUpdatedAt: string; month: PeriodComparison; quarter: PeriodComparison; year: PeriodComparison }>(
+      `/trends/period-comparisons?${qs.toString()}`
+    )
+  },
+}
+
+export interface Quota {
+  id: string
+  user_id: string | null
+  period_type: 'month' | 'quarter'
+  period_key: string
+  amount: number
+  currency: string
+}
+
+export const quotasApi = {
+  list: () => request<{ quotas: Quota[] }>('/quotas'),
+
+  upsert: (payload: { user_id?: string | null; period_type: 'month' | 'quarter'; period_key: string; amount: number; currency?: string }) =>
+    request<Quota>('/quotas', { method: 'POST', body: JSON.stringify(payload) }),
+
+  remove: (id: string) => request<{ success: true }>(`/quotas/${id}`, { method: 'DELETE' }),
 }
 
 export const organizationsApi = {

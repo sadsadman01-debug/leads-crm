@@ -9,6 +9,7 @@ import { DealStagesSettings } from '@/components/DealStagesSettings'
 import { WinLossReasonsSettings } from '@/components/WinLossReasonsSettings'
 import { DefaultCurrencySettings } from '@/components/DefaultCurrencySettings'
 import { CustomFieldsSettings } from '@/components/CustomFieldsSettings'
+import { QuotaSettings } from '@/components/QuotaSettings'
 
 export function Settings() {
   const { session, profile } = useAuth()
@@ -40,6 +41,7 @@ export function Settings() {
         <WinLossReasonsSettings />
         <DefaultCurrencySettings />
         <CustomFieldsSettings />
+        <QuotaSettings />
       </fieldset>
     </div>
   )

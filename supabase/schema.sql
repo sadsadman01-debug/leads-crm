@@ -389,6 +389,55 @@ create table if not exists public.custom_field_definitions (
 create index if not exists custom_field_definitions_org_idx on public.custom_field_definitions (organization_id);
 
 -- ----------------------------------------------------------------------------
+-- saved_reports: custom report builder configurations.
+-- ----------------------------------------------------------------------------
+create table if not exists public.saved_reports (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid references public.organizations(id) on delete cascade,
+  created_by uuid references public.profiles(id) on delete set null,
+  name text not null,
+  report_type text not null check (report_type in ('leads', 'deals', 'activity')),
+  selected_fields jsonb not null default '[]'::jsonb,
+  group_by text,
+  filters jsonb not null default '{}'::jsonb,
+  chart_type text not null default 'table' check (chart_type in ('table', 'bar', 'line', 'donut', 'table_and_chart')),
+  visible_to_all boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists saved_reports_org_idx on public.saved_reports (organization_id);
+
+drop trigger if exists saved_reports_set_updated_at on public.saved_reports;
+create trigger saved_reports_set_updated_at
+  before update on public.saved_reports
+  for each row execute procedure public.set_updated_at();
+
+-- ----------------------------------------------------------------------------
+-- quotas: org-wide (user_id null) or per-team-member revenue goals, by month
+-- ("2026-07") or quarter ("2026-Q3") period_key.
+-- ----------------------------------------------------------------------------
+create table if not exists public.quotas (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid references public.organizations(id) on delete cascade,
+  user_id uuid references public.profiles(id) on delete cascade,
+  period_type text not null check (period_type in ('month', 'quarter')),
+  period_key text not null,
+  amount numeric(14, 2) not null default 0,
+  currency text not null default 'USD',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists quotas_org_user_period_unique
+  on public.quotas (organization_id, coalesce(user_id, '00000000-0000-0000-0000-000000000000'::uuid), period_type, period_key);
+
+drop trigger if exists quotas_set_updated_at on public.quotas;
+create trigger quotas_set_updated_at
+  before update on public.quotas
+  for each row execute procedure public.set_updated_at();
+
+-- ----------------------------------------------------------------------------
 -- win_loss_reasons: admin-editable suggestion list. Deals store outcome_reason
 -- as free text (so "Other: <custom text>" always works) rather than an FK.
 -- ----------------------------------------------------------------------------
@@ -499,6 +548,8 @@ alter table public.win_loss_reasons enable row level security;
 alter table public.deals enable row level security;
 alter table public.organizations enable row level security;
 alter table public.custom_field_definitions enable row level security;
+alter table public.saved_reports enable row level security;
+alter table public.quotas enable row level security;
 
 -- Role-check / org-check helper functions, used by policies below and
 -- re-checked independently server-side by every sensitive Netlify Function.
@@ -551,7 +602,7 @@ do $$
 declare
   t text;
 begin
-  foreach t in array array['leads', 'deals', 'pipeline_stages', 'deal_stages', 'industries', 'templates', 'win_loss_reasons', 'tags', 'app_settings', 'custom_field_definitions']
+  foreach t in array array['leads', 'deals', 'pipeline_stages', 'deal_stages', 'industries', 'templates', 'win_loss_reasons', 'tags', 'app_settings', 'custom_field_definitions', 'quotas']
   loop
     execute format(
       'create policy "%s select scoped" on public.%I for select using (public.is_super_admin() or organization_id = public.current_org_id())',
@@ -627,7 +678,7 @@ do $$
 declare
   t text;
 begin
-  foreach t in array array['pipeline_stages', 'industries', 'templates', 'deal_stages', 'win_loss_reasons', 'app_settings', 'custom_field_definitions']
+  foreach t in array array['pipeline_stages', 'industries', 'templates', 'deal_stages', 'win_loss_reasons', 'app_settings', 'custom_field_definitions', 'quotas']
   loop
     execute format(
       'create policy "%s insert admin scoped" on public.%I for insert with check (public.is_super_admin() or (public.is_admin_or_above() and organization_id = public.current_org_id()))',
@@ -649,6 +700,22 @@ end $$;
 -- writes to those go through the service-role key inside Netlify Functions,
 -- which independently re-checks the parent lead's organization/permission
 -- before writing.
+
+-- saved_reports: readable by its creator, any admin-or-above in the org, or
+-- anyone in the org when explicitly marked visible_to_all; writable only by
+-- admins/super admins (custom select logic, so not part of the generic loops above).
+create policy "saved_reports select scoped"
+  on public.saved_reports for select
+  using (
+    public.is_super_admin()
+    or (organization_id = public.current_org_id() and (visible_to_all or created_by = auth.uid() or public.is_admin_or_above()))
+  );
+create policy "saved_reports insert admin scoped" on public.saved_reports for insert
+  with check (public.is_super_admin() or (public.is_admin_or_above() and organization_id = public.current_org_id()));
+create policy "saved_reports update admin scoped" on public.saved_reports for update
+  using (public.is_super_admin() or (public.is_admin_or_above() and organization_id = public.current_org_id()));
+create policy "saved_reports delete admin scoped" on public.saved_reports for delete
+  using (public.is_super_admin() or (public.is_admin_or_above() and organization_id = public.current_org_id()));
 
 -- ----------------------------------------------------------------------------
 -- exchange_rates: platform-wide (not organization-scoped) cache of the free
