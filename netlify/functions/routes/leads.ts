@@ -8,10 +8,11 @@ import { logActivity, logActivities } from '../lib/activities.js'
 import { getFollowUpIntervalDays } from './settings.js'
 import type { AuthedUser } from '../lib/auth.js'
 import { requireCanModifyRecord, isAdminOrAbove, resolveOrganizationId, scopeToOrg } from '../lib/permissions.js'
+import { loadActiveDefinitions, requireRequiredFieldsFilled, mergeCustomFieldValues } from '../lib/customFieldValues.js'
 
 export const LEAD_SELECT = `
   id, company_name, address, phone, email, website, notes, lead_source, priority,
-  stage_id, industry_id, created_by, assigned_to, organization_id, created_at, updated_at,
+  stage_id, industry_id, created_by, assigned_to, organization_id, custom_fields, created_at, updated_at,
   lead_status ( * ),
   lead_tags ( tags ( id, name ) ),
   lead_social_profiles ( id, platform, url )
@@ -233,6 +234,11 @@ export async function createLead(event: HandlerEvent, user: AuthedUser) {
   // restricted to admins/super admins (a User can only ever create leads for themselves).
   const assignedTo = isAdminOrAbove(user) && body.assigned_to ? body.assigned_to : user.id
 
+  const leadFieldDefs = await loadActiveDefinitions(orgId, 'leads')
+  const incomingCustomFields = body.custom_fields ?? {}
+  requireRequiredFieldsFilled(leadFieldDefs, incomingCustomFields)
+  const { merged: customFields } = mergeCustomFieldValues({}, incomingCustomFields, leadFieldDefs)
+
   const { data, error } = await supabase
     .from('leads')
     .insert({
@@ -248,6 +254,7 @@ export async function createLead(event: HandlerEvent, user: AuthedUser) {
       created_by: user.id,
       assigned_to: assignedTo,
       organization_id: orgId,
+      custom_fields: customFields,
     })
     .select('id')
     .single()
@@ -285,7 +292,7 @@ async function fetchLeadInScope(id: string, user: AuthedUser, event: HandlerEven
   const orgId = resolveOrganizationId(user, event)
   const { data: existing, error: fetchErr } = await supabase
     .from('leads')
-    .select('id, assigned_to, created_by, organization_id')
+    .select('id, assigned_to, created_by, organization_id, custom_fields')
     .eq('id', id)
     .single()
   if (fetchErr || !existing) throw new HttpError(404, 'Lead not found')
@@ -314,12 +321,23 @@ export async function updateLead(id: string, event: HandlerEvent, user: AuthedUs
     updatable.assigned_to = body.assigned_to || null
   }
 
+  let customFieldMessages: string[] = []
+  if ('custom_fields' in body) {
+    const defs = await loadActiveDefinitions(existing.organization_id, 'leads')
+    const { merged, messages } = mergeCustomFieldValues(existing.custom_fields ?? {}, body.custom_fields ?? {}, defs)
+    updatable.custom_fields = merged
+    customFieldMessages = messages
+  }
+
   if (Object.keys(updatable).length > 0) {
     const { error } = await supabase.from('leads').update(updatable).eq('id', id)
     if (error) throw new HttpError(500, error.message)
   }
 
   if ('assigned_to' in body) await logActivity(id, 'assignment', 'Assigned owner changed', user.id)
+  if (customFieldMessages.length > 0) {
+    await logActivities(customFieldMessages.map((message) => ({ leadId: id, type: 'custom_field', message, userId: user.id })))
+  }
   if ('tags' in body) {
     await replaceTags(id, body.tags ?? [], existing.organization_id)
     const tagNames = (body.tags ?? []) as string[]

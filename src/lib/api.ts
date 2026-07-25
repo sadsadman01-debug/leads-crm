@@ -24,6 +24,7 @@ import type {
 } from '@/types/deal'
 import type { TeamMember, Role } from '@/types/team'
 import type { Organization, OrganizationSummary } from '@/types/organization'
+import type { CustomFieldDefinition, AppliesTo, FieldType } from '@/types/customField'
 import { withOrgScope } from './orgScope'
 
 class ApiError extends Error {
@@ -194,6 +195,38 @@ export const dashboardApi = {
   },
 }
 
+export const customFieldsApi = {
+  list: () => request<{ fields: CustomFieldDefinition[] }>('/custom-fields'),
+
+  create: (payload: {
+    applies_to: AppliesTo
+    label: string
+    field_type: FieldType
+    options?: string[]
+    required?: boolean
+    default_value?: string | null
+  }) => request<CustomFieldDefinition>('/custom-fields', { method: 'POST', body: JSON.stringify(payload) }),
+
+  update: (
+    id: string,
+    payload: Partial<{
+      applies_to: AppliesTo
+      label: string
+      options: string[]
+      required: boolean
+      default_value: string | null
+    }>
+  ) => request<CustomFieldDefinition>(`/custom-fields/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+
+  reorder: (orderedIds: string[]) =>
+    request<{ fields: CustomFieldDefinition[] }>('/custom-fields/reorder', {
+      method: 'PATCH',
+      body: JSON.stringify({ orderedIds }),
+    }),
+
+  remove: (id: string) => request<{ success: true }>(`/custom-fields/${id}`, { method: 'DELETE' }),
+}
+
 export const organizationsApi = {
   list: () => request<{ organizations: OrganizationSummary[] }>('/organizations'),
 
@@ -350,11 +383,12 @@ export const dealsApi = {
     expected_close_date?: string | null
     notes?: string | null
     owner_id?: string
+    custom_fields?: Record<string, any>
   }) => request<Deal>('/deals', { method: 'POST', body: JSON.stringify(payload) }),
 
   update: (
     id: string,
-    payload: Partial<Pick<Deal, 'name' | 'value' | 'currency' | 'probability' | 'expected_close_date' | 'notes' | 'owner_id'>>
+    payload: Partial<Pick<Deal, 'name' | 'value' | 'currency' | 'probability' | 'expected_close_date' | 'notes' | 'owner_id' | 'custom_fields'>>
   ) => request<Deal>(`/deals/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
 
   updateStage: (

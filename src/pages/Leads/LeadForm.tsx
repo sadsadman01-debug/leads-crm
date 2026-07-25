@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, ArrowLeft } from 'lucide-react'
-import { industriesApi, leadsApi, teamApi } from '@/lib/api'
+import { industriesApi, leadsApi, teamApi, customFieldsApi } from '@/lib/api'
 import { LEAD_SOURCES, PRIORITIES, type LeadFormInput, type SocialProfile } from '@/types/lead'
 import { TagInput } from '@/components/TagInput'
 import { SocialProfilesEditor } from '@/components/SocialProfilesEditor'
+import { CustomFieldsSection } from '@/components/CustomFieldsSection'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { useAuth, isAdminOrAbove } from '@/contexts/AuthContext'
 
@@ -22,6 +23,7 @@ const EMPTY_FORM: LeadFormInput = {
   assigned_to: '',
   tags: [],
   social_profiles: [],
+  custom_fields: {},
 }
 
 export function LeadForm() {
@@ -56,6 +58,7 @@ export function LeadForm() {
         assigned_to: existingLead.assigned_to ?? '',
         tags: existingLead.tags.map((t) => t.name),
         social_profiles: existingLead.social_profiles,
+        custom_fields: existingLead.custom_fields ?? {},
       })
       setInitialized(true)
     }
@@ -82,6 +85,9 @@ export function LeadForm() {
   const { data: industriesData } = useQuery({ queryKey: ['industries'], queryFn: industriesApi.list })
   const { data: rosterData } = useQuery({ queryKey: ['team-roster'], queryFn: teamApi.roster, enabled: canReassign })
   const roster = rosterData?.members ?? []
+
+  const { data: customFieldsData } = useQuery({ queryKey: ['custom-fields'], queryFn: customFieldsApi.list })
+  const leadCustomFields = (customFieldsData?.fields ?? []).filter((f) => f.applies_to === 'leads' || f.applies_to === 'both')
 
   const saveMutation = useMutation({
     mutationFn: () => {
@@ -258,6 +264,12 @@ export function LeadForm() {
             </p>
           )}
         </div>
+
+        <CustomFieldsSection
+          fields={leadCustomFields}
+          values={form.custom_fields}
+          onChange={(fieldId, value) => set('custom_fields', { ...form.custom_fields, [fieldId]: value })}
+        />
 
         {saveMutation.isError && (
           <p className="text-sm text-danger">Something went wrong. Please try again.</p>

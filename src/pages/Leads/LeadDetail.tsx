@@ -17,7 +17,8 @@ import {
   Clock,
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
-import { leadsApi, pipelineStagesApi, industriesApi, dealsApi, teamApi } from '@/lib/api'
+import { leadsApi, pipelineStagesApi, industriesApi, dealsApi, teamApi, customFieldsApi } from '@/lib/api'
+import { CustomFieldsDisplay } from '@/components/CustomFieldsDisplay'
 import { PriorityBadge, TagPill, Badge, ScoreBadge } from '@/components/ui/Badge'
 import { StatusPanel } from '@/components/StatusPanel'
 import { AttachmentsPanel } from '@/components/AttachmentsPanel'
@@ -52,6 +53,8 @@ export function LeadDetail() {
   const { data: industriesData } = useQuery({ queryKey: ['industries'], queryFn: industriesApi.list })
   const { data: rosterData } = useQuery({ queryKey: ['team-roster'], queryFn: teamApi.roster })
   const roster = rosterData?.members ?? []
+  const { data: customFieldsData } = useQuery({ queryKey: ['custom-fields'], queryFn: customFieldsApi.list })
+  const leadCustomFields = (customFieldsData?.fields ?? []).filter((f) => f.applies_to === 'leads' || f.applies_to === 'both')
   const { data: leadDeals } = useQuery({
     queryKey: ['deals', { leadId: id }],
     queryFn: () => dealsApi.list({ filters: { leadId: id } }),
@@ -265,6 +268,7 @@ export function LeadDetail() {
             </div>
           )}
 
+          <CustomFieldsDisplay fields={leadCustomFields} values={lead.custom_fields ?? {}} />
           <AttachmentsPanel leadId={lead.id} attachments={lead.attachments ?? []} />
           <TemplateUsePanel lead={lead} />
         </div>

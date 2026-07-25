@@ -5,10 +5,11 @@ import { logActivity } from '../lib/activities.js'
 import { getOrRefreshRates } from '../lib/exchangeRates.js'
 import type { AuthedUser } from '../lib/auth.js'
 import { requireCanModifyRecord, isAdminOrAbove, resolveOrganizationId, scopeToOrg } from '../lib/permissions.js'
+import { loadActiveDefinitions, requireRequiredFieldsFilled, mergeCustomFieldValues } from '../lib/customFieldValues.js'
 
 export const DEAL_SELECT = `
   id, lead_id, name, value, currency, stage_id, probability,
-  expected_close_date, actual_close_date, outcome_reason, notes, owner_id, organization_id,
+  expected_close_date, actual_close_date, outcome_reason, notes, owner_id, organization_id, custom_fields,
   created_at, updated_at,
   leads ( id, company_name, industry_id )
 `
@@ -150,6 +151,11 @@ export async function createDeal(event: HandlerEvent, user: AuthedUser) {
     currency = settings?.default_currency ?? 'USD'
   }
 
+  const dealFieldDefs = await loadActiveDefinitions(orgId, 'deals')
+  const incomingCustomFields = body.custom_fields ?? {}
+  requireRequiredFieldsFilled(dealFieldDefs, incomingCustomFields)
+  const { merged: customFields } = mergeCustomFieldValues({}, incomingCustomFields, dealFieldDefs)
+
   const { data, error } = await supabase
     .from('deals')
     .insert({
@@ -163,6 +169,7 @@ export async function createDeal(event: HandlerEvent, user: AuthedUser) {
       notes: body.notes ?? null,
       owner_id: ownerId,
       organization_id: orgId,
+      custom_fields: customFields,
     })
     .select('id, name, value, currency')
     .single()
@@ -183,7 +190,7 @@ export async function updateDeal(id: string, event: HandlerEvent, user: AuthedUs
   const supabase = getSupabaseAdmin()
   const body = JSON.parse(event.body || '{}')
 
-  const { existing, orgId } = await fetchDealInScope(id, user, event, 'id, owner_id, organization_id')
+  const { existing, orgId } = await fetchDealInScope(id, user, event, 'id, owner_id, organization_id, lead_id, custom_fields')
   requireCanModifyRecord(user, existing)
 
   const updatable: Record<string, any> = {}
@@ -200,10 +207,22 @@ export async function updateDeal(id: string, event: HandlerEvent, user: AuthedUs
     updatable.owner_id = body.owner_id || null
   }
 
+  let customFieldMessages: string[] = []
+  if ('custom_fields' in body) {
+    const defs = await loadActiveDefinitions(existing.organization_id, 'deals')
+    const { merged, messages } = mergeCustomFieldValues(existing.custom_fields ?? {}, body.custom_fields ?? {}, defs)
+    updatable.custom_fields = merged
+    customFieldMessages = messages
+  }
+
   if (Object.keys(updatable).length === 0) throw new HttpError(400, 'Nothing to update')
 
   const { error } = await supabase.from('deals').update(updatable).eq('id', id)
   if (error) throw new HttpError(500, error.message)
+
+  for (const message of customFieldMessages) {
+    await logActivity(existing.lead_id, 'custom_field', message, user.id)
+  }
 
   return getDeal(id, orgId, user.role === 'super_admin')
 }

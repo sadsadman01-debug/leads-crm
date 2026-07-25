@@ -114,10 +114,12 @@ create table if not exists public.leads (
   created_by uuid references public.profiles(id) on delete set null,
   assigned_to uuid references public.profiles(id) on delete set null,
   organization_id uuid references public.organizations(id) on delete cascade,
+  custom_fields jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
+create index if not exists leads_custom_fields_idx on public.leads using gin (custom_fields);
 create index if not exists leads_industry_id_idx on public.leads (industry_id);
 create index if not exists leads_assigned_to_idx on public.leads (assigned_to);
 create index if not exists leads_organization_id_idx on public.leads (organization_id);
@@ -365,6 +367,28 @@ select name, position, default_probability, is_closed, is_won from (
 where not exists (select 1 from public.deal_stages);
 
 -- ----------------------------------------------------------------------------
+-- custom_field_definitions: admin-defined extra fields on Leads/Deals, values
+-- stored in the `custom_fields` jsonb column added to each table below.
+-- is_active is a soft-delete flag: hides the field from forms/the builder
+-- without destroying whatever historical values are already stored.
+-- ----------------------------------------------------------------------------
+create table if not exists public.custom_field_definitions (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid references public.organizations(id) on delete cascade,
+  applies_to text not null check (applies_to in ('leads', 'deals', 'both')),
+  label text not null,
+  field_type text not null check (field_type in ('text', 'number', 'date', 'dropdown', 'multiselect', 'checkbox', 'url', 'textarea')),
+  options jsonb,
+  required boolean not null default false,
+  default_value text,
+  display_order int not null default 0,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists custom_field_definitions_org_idx on public.custom_field_definitions (organization_id);
+
+-- ----------------------------------------------------------------------------
 -- win_loss_reasons: admin-editable suggestion list. Deals store outcome_reason
 -- as free text (so "Other: <custom text>" always works) rather than an FK.
 -- ----------------------------------------------------------------------------
@@ -410,10 +434,12 @@ create table if not exists public.deals (
   -- revenue reporting never silently shifts as live rates fluctuate. Null
   -- while the deal is still open.
   closed_exchange_rate_snapshot jsonb,
+  custom_fields jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
+create index if not exists deals_custom_fields_idx on public.deals using gin (custom_fields);
 create index if not exists deals_lead_id_idx on public.deals (lead_id);
 create index if not exists deals_stage_id_idx on public.deals (stage_id);
 create index if not exists deals_expected_close_date_idx on public.deals (expected_close_date);
@@ -472,6 +498,7 @@ alter table public.deal_stages enable row level security;
 alter table public.win_loss_reasons enable row level security;
 alter table public.deals enable row level security;
 alter table public.organizations enable row level security;
+alter table public.custom_field_definitions enable row level security;
 
 -- Role-check / org-check helper functions, used by policies below and
 -- re-checked independently server-side by every sensitive Netlify Function.
@@ -524,7 +551,7 @@ do $$
 declare
   t text;
 begin
-  foreach t in array array['leads', 'deals', 'pipeline_stages', 'deal_stages', 'industries', 'templates', 'win_loss_reasons', 'tags', 'app_settings']
+  foreach t in array array['leads', 'deals', 'pipeline_stages', 'deal_stages', 'industries', 'templates', 'win_loss_reasons', 'tags', 'app_settings', 'custom_field_definitions']
   loop
     execute format(
       'create policy "%s select scoped" on public.%I for select using (public.is_super_admin() or organization_id = public.current_org_id())',
@@ -600,7 +627,7 @@ do $$
 declare
   t text;
 begin
-  foreach t in array array['pipeline_stages', 'industries', 'templates', 'deal_stages', 'win_loss_reasons', 'app_settings']
+  foreach t in array array['pipeline_stages', 'industries', 'templates', 'deal_stages', 'win_loss_reasons', 'app_settings', 'custom_field_definitions']
   loop
     execute format(
       'create policy "%s insert admin scoped" on public.%I for insert with check (public.is_super_admin() or (public.is_admin_or_above() and organization_id = public.current_org_id()))',

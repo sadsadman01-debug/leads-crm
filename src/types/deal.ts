@@ -31,6 +31,7 @@ export interface Deal {
   outcome_reason: string | null
   notes: string | null
   owner_id: string | null
+  custom_fields: Record<string, any>
   created_at: string
   updated_at: string
   lead: DealLeadRef | null

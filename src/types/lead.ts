@@ -91,6 +91,7 @@ export interface Lead {
   tags: Tag[]
   social_profiles: SocialProfile[]
   attachments?: Attachment[]
+  custom_fields: Record<string, any>
 }
 
 export interface Industry {
@@ -180,6 +181,7 @@ export interface LeadFormInput {
   assigned_to: string
   tags: string[]
   social_profiles: SocialProfile[]
+  custom_fields: Record<string, any>
 }
 
 export const STATUS_TOGGLE_FIELDS: Array<{ field: keyof LeadStatus; label: string }> = [

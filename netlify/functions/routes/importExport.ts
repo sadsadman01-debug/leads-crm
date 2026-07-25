@@ -5,6 +5,7 @@ import { HttpError, json } from '../lib/http.js'
 import { ensureTagIds } from '../lib/tags.js'
 import { logActivities } from '../lib/activities.js'
 import { resolveOrganizationId, scopeToOrg } from '../lib/permissions.js'
+import { loadActiveDefinitions, type CustomFieldDefRow } from '../lib/customFieldValues.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const LEAD_SOURCES = ['Google Maps', 'Referral', 'Manual Entry', 'Website', 'Other']
@@ -45,14 +46,37 @@ interface ParsedLeadRow {
   priority: string
   tags: string[]
   industryName: string | null
+  customFieldValues: Record<string, any>
 }
 
-function normalizeRow(raw: Record<string, any>): ParsedLeadRow | null {
+/** Coerces a raw CSV/Sheet string into the shape expected for a given custom field type. */
+function coerceCustomFieldValue(def: CustomFieldDefRow, raw: string): any {
+  const trimmed = raw.trim()
+  if (def.field_type === 'checkbox') return ['yes', 'true', '1'].includes(trimmed.toLowerCase())
+  if (def.field_type === 'multiselect') return trimmed.split(',').map((v) => v.trim()).filter(Boolean)
+  if (def.field_type === 'number') return Number(trimmed)
+  return trimmed
+}
+
+/** Any CSV/Sheet column header that doesn't match a standard field is checked
+ * against active custom field labels (case-insensitive) and auto-mapped —
+ * same convention as the existing Industry column matching. */
+function normalizeRow(raw: Record<string, any>, customFieldDefsByLowerLabel: Map<string, CustomFieldDefRow>): ParsedLeadRow | null {
   const mapped: Record<string, string> = {}
+  const customFieldValues: Record<string, any> = {}
+
   for (const [key, value] of Object.entries(raw)) {
-    const canonical = HEADER_ALIASES[key.trim().toLowerCase()]
-    if (canonical && value != null && String(value).trim() !== '') {
+    const keyLower = key.trim().toLowerCase()
+    if (value == null || String(value).trim() === '') continue
+
+    const canonical = HEADER_ALIASES[keyLower]
+    if (canonical) {
       mapped[canonical] = String(value).trim()
+      continue
+    }
+    const customFieldDef = customFieldDefsByLowerLabel.get(keyLower)
+    if (customFieldDef) {
+      customFieldValues[customFieldDef.id] = coerceCustomFieldValue(customFieldDef, String(value))
     }
   }
 
@@ -69,6 +93,7 @@ function normalizeRow(raw: Record<string, any>): ParsedLeadRow | null {
     priority: (PRIORITIES as string[]).includes(mapped.priority) ? mapped.priority : 'Medium',
     tags: mapped.tags ? mapped.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
     industryName: mapped.industry ?? null,
+    customFieldValues,
   }
 }
 
@@ -110,6 +135,7 @@ async function insertRows(
         created_by: userId,
         assigned_to: userId,
         organization_id: organizationId,
+        custom_fields: r.customFieldValues,
       }))
     )
     .select('id')
@@ -159,7 +185,9 @@ export async function importRows(event: HandlerEvent, user: AuthedUser) {
     )
   }
 
-  const parsed = rawRows.map(normalizeRow)
+  const customFieldDefs = await loadActiveDefinitions(orgId, 'leads')
+  const customFieldDefsByLowerLabel = new Map(customFieldDefs.map((d) => [d.label.toLowerCase(), d]))
+  const parsed = rawRows.map((r) => normalizeRow(r, customFieldDefsByLowerLabel))
   const valid = parsed.filter((r): r is ParsedLeadRow => r !== null)
   const skipped = parsed.length - valid.length
 
@@ -208,7 +236,9 @@ export async function importFromSheet(event: HandlerEvent, user: AuthedUser) {
     )
   }
 
-  const parsed = rawRows.map(normalizeRow)
+  const customFieldDefs = await loadActiveDefinitions(orgId, 'leads')
+  const customFieldDefsByLowerLabel = new Map(customFieldDefs.map((d) => [d.label.toLowerCase(), d]))
+  const parsed = rawRows.map((r) => normalizeRow(r, customFieldDefsByLowerLabel))
   const valid = parsed.filter((r): r is ParsedLeadRow => r !== null)
   const skipped = parsed.length - valid.length
 
@@ -282,12 +312,20 @@ export async function exportLeads(event: HandlerEvent, user: AuthedUser) {
   const { data: industries } = await industriesQuery
   const industryNameById = new Map((industries ?? []).map((i) => [i.id, i.name]))
 
-  return csvResponse(rows, industryNameById)
+  const customFieldDefs = await loadActiveDefinitions(orgId, 'leads')
+
+  return csvResponse(rows, industryNameById, customFieldDefs)
 }
 
-function csvResponse(leads: any[], industryNameById: Map<string, string>) {
+function formatCustomFieldForExport(value: any): string {
+  if (Array.isArray(value)) return value.join(', ')
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+  return value ?? ''
+}
+
+function csvResponse(leads: any[], industryNameById: Map<string, string>, customFieldDefs: CustomFieldDefRow[] = []) {
   const csv = Papa.unparse({
-    fields: EXPORT_COLUMNS,
+    fields: [...EXPORT_COLUMNS, ...customFieldDefs.map((d) => d.label)],
     data: leads.map((lead) => [
       lead.company_name,
       lead.address ?? '',
@@ -310,6 +348,7 @@ function csvResponse(leads: any[], industryNameById: Map<string, string>) {
       lead.status?.sms_sent ? 'Yes' : 'No',
       lead.status?.converted ? 'Yes' : 'No',
       lead.created_at,
+      ...customFieldDefs.map((d) => formatCustomFieldForExport(lead.custom_fields?.[d.id])),
     ]),
   })
 

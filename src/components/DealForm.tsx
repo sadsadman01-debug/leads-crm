@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Search } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
-import { dealsApi, leadsApi, settingsApi, teamApi } from '@/lib/api'
+import { dealsApi, leadsApi, settingsApi, teamApi, customFieldsApi } from '@/lib/api'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { useAuth, isAdminOrAbove } from '@/contexts/AuthContext'
 import { CURRENCIES, currencyLabel } from '@/types/deal'
 import type { Deal } from '@/types/deal'
+import { CustomFieldsSection } from '@/components/CustomFieldsSection'
 
 interface DealFormState {
   lead_id: string
@@ -17,6 +18,7 @@ interface DealFormState {
   expected_close_date: string
   notes: string
   owner_id: string
+  custom_fields: Record<string, any>
 }
 
 const EMPTY: DealFormState = {
@@ -28,6 +30,7 @@ const EMPTY: DealFormState = {
   expected_close_date: '',
   notes: '',
   owner_id: '',
+  custom_fields: {},
 }
 
 export function DealForm({
@@ -59,6 +62,9 @@ export function DealForm({
   const { data: rosterData } = useQuery({ queryKey: ['team-roster'], queryFn: teamApi.roster, enabled: canReassign })
   const roster = rosterData?.members ?? []
 
+  const { data: customFieldsData } = useQuery({ queryKey: ['custom-fields'], queryFn: customFieldsApi.list })
+  const dealCustomFields = (customFieldsData?.fields ?? []).filter((f) => f.applies_to === 'deals' || f.applies_to === 'both')
+
   const { data: leadResults } = useQuery({
     queryKey: ['lead-search', debouncedLeadSearch],
     queryFn: () => leadsApi.list({ search: debouncedLeadSearch, pageSize: 8 }),
@@ -77,6 +83,7 @@ export function DealForm({
         expected_close_date: deal.expected_close_date ?? '',
         notes: deal.notes ?? '',
         owner_id: deal.owner_id ?? '',
+        custom_fields: deal.custom_fields ?? {},
       })
     } else {
       setForm({
@@ -105,6 +112,7 @@ export function DealForm({
           expected_close_date: form.expected_close_date || null,
           notes: form.notes || null,
           owner_id: form.owner_id || null,
+          custom_fields: form.custom_fields,
         })
       }
       return dealsApi.create({
@@ -115,6 +123,7 @@ export function DealForm({
         expected_close_date: form.expected_close_date || undefined,
         notes: form.notes || undefined,
         owner_id: form.owner_id || undefined,
+        custom_fields: form.custom_fields,
       })
     },
     onSuccess: (savedDeal) => {
@@ -234,6 +243,12 @@ export function DealForm({
             </select>
           </div>
         )}
+
+        <CustomFieldsSection
+          fields={dealCustomFields}
+          values={form.custom_fields}
+          onChange={(fieldId, value) => set('custom_fields', { ...form.custom_fields, [fieldId]: value })}
+        />
       </div>
 
       <div className="mt-5 flex justify-end gap-3">

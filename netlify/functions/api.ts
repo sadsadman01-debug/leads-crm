@@ -59,6 +59,13 @@ import {
   updateOrganizationStatus,
   deleteOrganization,
 } from './routes/organizations.js'
+import {
+  listCustomFields,
+  createCustomField,
+  updateCustomField,
+  reorderCustomFields,
+  deleteCustomField,
+} from './routes/customFields.js'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -176,6 +183,20 @@ export const handler: Handler = async (event) => {
       } else {
         if (method === 'PUT') response = await renameStage(id, event, user)
         else if (method === 'DELETE') response = await deleteStage(id, event, user)
+        else throw new HttpError(405, 'Method not allowed')
+      }
+    } else if (resource === 'custom-fields') {
+      const user = await requireUser(event)
+      if (!id) {
+        if (method === 'GET') response = await listCustomFields(event, user)
+        else if (method === 'POST') response = await createCustomField(event, user)
+        else throw new HttpError(405, 'Method not allowed')
+      } else if (id === 'reorder') {
+        if (method === 'PATCH') response = await reorderCustomFields(event, user)
+        else throw new HttpError(405, 'Method not allowed')
+      } else {
+        if (method === 'PUT') response = await updateCustomField(id, event, user)
+        else if (method === 'DELETE') response = await deleteCustomField(id, event, user)
         else throw new HttpError(405, 'Method not allowed')
       }
     } else if (resource === 'settings') {

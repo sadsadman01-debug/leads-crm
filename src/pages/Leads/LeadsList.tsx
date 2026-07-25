@@ -12,8 +12,9 @@ import {
   Download,
   Rows3,
   Columns3,
+  SlidersHorizontal,
 } from 'lucide-react'
-import { bulkApi, exportApi, industriesApi, leadsApi, pipelineStagesApi, teamApi } from '@/lib/api'
+import { bulkApi, exportApi, industriesApi, leadsApi, pipelineStagesApi, teamApi, customFieldsApi } from '@/lib/api'
 import { PriorityBadge, ScoreBadge, TagPill, Badge } from '@/components/ui/Badge'
 import { Avatar } from '@/components/ui/RoleBadge'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
@@ -63,6 +64,19 @@ export function LeadsList() {
 
   const { data: rosterData } = useQuery({ queryKey: ['team-roster'], queryFn: teamApi.roster })
   const assigneeNameById = new Map((rosterData?.members ?? []).map((m) => [m.id, m.nickname || m.email]))
+
+  const { data: customFieldsData } = useQuery({ queryKey: ['custom-fields'], queryFn: customFieldsApi.list })
+  const leadCustomFields = (customFieldsData?.fields ?? []).filter((f) => f.applies_to === 'leads' || f.applies_to === 'both')
+  const [visibleColumnIds, setVisibleColumnIds] = useState<Set<string>>(new Set())
+  const [columnsMenuOpen, setColumnsMenuOpen] = useState(false)
+  const visibleCustomFields = leadCustomFields.filter((f) => visibleColumnIds.has(f.id))
+
+  function formatCustomFieldCell(value: any): string {
+    if (value === null || value === undefined || value === '') return '—'
+    if (Array.isArray(value)) return value.length > 0 ? value.join(', ') : '—'
+    if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+    return String(value)
+  }
 
   function selectIndustry(industryId: string | undefined) {
     setFilters((prev) => ({ ...prev, industryId }))
@@ -179,6 +193,38 @@ export function LeadsList() {
               Kanban
             </button>
           </div>
+          {leadCustomFields.length > 0 && view === 'table' && (
+            <div className="relative">
+              <button className="btn-secondary" onClick={() => setColumnsMenuOpen((o) => !o)}>
+                <SlidersHorizontal size={16} />
+                Manage Columns
+              </button>
+              {columnsMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setColumnsMenuOpen(false)} />
+                  <div className="card absolute right-0 z-50 mt-2 w-56 space-y-2 p-3">
+                    {leadCustomFields.map((f) => (
+                      <label key={f.id} className="flex items-center gap-2 text-sm text-base-200">
+                        <input
+                          type="checkbox"
+                          checked={visibleColumnIds.has(f.id)}
+                          onChange={() =>
+                            setVisibleColumnIds((prev) => {
+                              const next = new Set(prev)
+                              next.has(f.id) ? next.delete(f.id) : next.add(f.id)
+                              return next
+                            })
+                          }
+                          className="h-4 w-4 rounded border-base-600 bg-base-800 text-accent-500 focus:ring-accent-500"
+                        />
+                        {f.label}
+                      </label>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
           <button className="btn-secondary" onClick={() => setImportOpen(true)}>
             <Upload size={16} />
             Import
@@ -312,6 +358,9 @@ export function LeadsList() {
                   <th className="px-5 py-3 font-medium">Status</th>
                   <th className="px-5 py-3 font-medium">Assigned To</th>
                   <th className="px-5 py-3 font-medium">Updated</th>
+                  {visibleCustomFields.map((f) => (
+                    <th key={f.id} className="px-5 py-3 font-medium">{f.label}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -384,6 +433,11 @@ export function LeadsList() {
                     <td className="px-5 py-3.5 text-base-400">
                       {new Date(lead.updated_at).toLocaleDateString()}
                     </td>
+                    {visibleCustomFields.map((f) => (
+                      <td key={f.id} className="px-5 py-3.5 text-base-300">
+                        {formatCustomFieldCell(lead.custom_fields?.[f.id])}
+                      </td>
+                    ))}
                   </tr>
                 ))}
               </tbody>

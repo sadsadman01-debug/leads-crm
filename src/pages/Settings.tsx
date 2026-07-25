@@ -8,6 +8,7 @@ import { TemplatesSettings } from '@/components/TemplatesSettings'
 import { DealStagesSettings } from '@/components/DealStagesSettings'
 import { WinLossReasonsSettings } from '@/components/WinLossReasonsSettings'
 import { DefaultCurrencySettings } from '@/components/DefaultCurrencySettings'
+import { CustomFieldsSettings } from '@/components/CustomFieldsSettings'
 
 export function Settings() {
   const { session, profile } = useAuth()
@@ -38,6 +39,7 @@ export function Settings() {
         <DealStagesSettings />
         <WinLossReasonsSettings />
         <DefaultCurrencySettings />
+        <CustomFieldsSettings />
       </fieldset>
     </div>
   )
