@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Users, UserPlus, Settings as SettingsIcon, LogOut, Target, X } from 'lucide-react'
+import { LayoutDashboard, Users, UserPlus, Settings as SettingsIcon, LogOut, Target, X, Handshake } from 'lucide-react'
 import clsx from 'clsx'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/leads', label: 'Leads', icon: Users },
   { to: '/leads/new', label: 'Add New Lead', icon: UserPlus },
+  { to: '/deals', label: 'Deals', icon: Handshake },
   { to: '/settings', label: 'Settings', icon: SettingsIcon },
 ]
 

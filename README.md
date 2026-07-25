@@ -6,7 +6,8 @@ A private, single-admin lead tracking system for outbound sales (cold email, Wha
 **Phase 2**: advanced filtering, bulk actions, CSV/Google Sheets import, CSV export, and a full analytics dashboard.
 **Phase 3**: configurable pipeline stages, a drag-and-drop Kanban board, and a follow-up reminder system.
 **Phase 4**: outreach templates, a per-lead activity timeline, and computed lead scoring.
-**Phase 5** (this update): industry segmentation — a structured Industry field, per-industry filtering/saved views on the Leads page, a dashboard scoped by industry, and an industry comparison table.
+**Phase 5**: industry segmentation — a structured Industry field, per-industry filtering/saved views on the Leads page, a dashboard scoped by industry, and an industry comparison table.
+**Phase 6** (this update): Deals/Opportunities linked to leads, a separate configurable deal pipeline with its own Kanban board, and revenue forecasting/pipeline analytics on the Dashboard.
 
 ## Stack
 
@@ -23,18 +24,23 @@ netlify/functions/       Serverless API (auth-checked, uses the Supabase service
   lib/                   auth verification, supabase admin client, http helpers, tag resolution,
                          reminders, scoring, activities (timeline logging)
   routes/                leads (filters/bulk/stage/kanban/activities), tags, attachments, importExport,
-                         dashboard, pipelineStages, settings, templates, industries
+                         dashboard, pipelineStages, settings, templates, industries, dealStages,
+                         winLossReasons, deals, revenue
 src/
-  pages/                 Login, Dashboard, Leads (list/detail/form), Settings
+  pages/                 Login, Dashboard, Leads (list/detail/form), Deals (list), Settings
   components/            Layout, shared UI (Badge incl. ScoreBadge, Toggle, Modal), StatusPanel,
                          AttachmentsPanel, FiltersBar, BulkActionsBar, ImportModal, RemindersWidget,
                          PipelineStagesSettings, FollowUpIntervalSettings, IndustriesSettings,
                          TemplatesSettings, TemplateUsePanel, LeadTimeline, IndustryComparisonTable,
-                         kanban/ (Board, Column, Card), charts/ (StatTile, Funnel, Trend, Donut)
+                         DealStagesSettings, WinLossReasonsSettings, DefaultCurrencySettings, DealForm,
+                         LeadDealsPanel, CloseDealModal, RevenueSection, DealsClosingWidget,
+                         kanban/ (Board, Column, Card, DealKanbanBoard, DealKanbanCard),
+                         charts/ (StatTile, Funnel, Trend, Donut, DealFunnelChart, RevenueTrendChart)
   contexts/AuthContext   Supabase session state
-  lib/                   supabase client, api client (calls /api/*), chartColors
+  lib/                   supabase client, api client (calls /api/*), chartColors, currency
   types/lead.ts          Shared Lead/Status/Tag/Attachment/Filters/DashboardSummary/Stage/
                          Industry/Template/LeadActivity types
+  types/deal.ts          Deal/DealStage/WinLossReason/KanbanDeal/RevenueSummary types
 supabase/schema.sql              Full DB schema for fresh installs (includes all phases)
 supabase/migrations/             Incremental SQL to run against an already-provisioned project
 scripts/seed-admin.mjs           One-time script to create the single admin user
@@ -118,6 +124,16 @@ scripts/seed-admin.mjs           One-time script to create the single admin user
 - **Industry comparison table**: the same dashboard endpoint groups the *unfiltered* lead set by `industry_id` (including an "Unassigned" bucket) and returns `industryComparison` — total leads, cold-email-sent %, reply rate, and conversion rate per industry — computed from the same query the rest of the dashboard already runs, so no extra full-table scan.
 - **CSV/Sheets import industry mapping**: an `Industry` column is recognized like any other CSV/Sheet header and resolved by case-insensitive name match against existing industries (no auto-creation — unmatched names are left unassigned, since industries are meant to be curated in Settings). Alternatively, the admin can pick a **Default Industry** in the import modal, which overrides the per-row column for the entire batch.
 
+## Phase 6 additions
+
+- **Deals** (`deals` table, `/api/deals*`): a separate entity linked to a lead via `lead_id` (a lead can have zero, one, or many deals). Fields: name, value + currency, stage, probability (auto-suggested from the stage's default, overridable), expected/actual close date, outcome reason, notes, owner (`profiles.id`, structured for a future multi-user phase even though there's only one admin today). Created from a lead's detail page or directly from the Deals page (with a lead search-picker).
+- **Deal stages** (`deal_stages` table, `/api/deal-stages*`): a pipeline entirely separate from the lead `pipeline_stages` from Phase 3 — same admin UI pattern (Settings, drag-to-reorder via `@dnd-kit`), plus a per-stage default win-probability % and `is_closed`/`is_won` booleans. Those booleans (not stage names) are what "is this deal closed" logic checks everywhere, so renaming "Closed Won" doesn't break anything. Ships with Qualification (20%) → Needs Analysis (40%) → Proposal Sent (50%) → Negotiation (75%) → Closed Won (100%) / Closed Lost (0%).
+- **Deals Kanban** (`GET /api/deals/kanban`, capped at 1,000 deals): reuses the generic `KanbanColumn` from Phase 3 with a new `DealKanbanCard` (deal name, company, value, probability, expected-close urgency dot) and the same touch-drag-fallback `<select>` pattern. Dragging (or selecting) a stage marked `is_closed` opens `CloseDealModal` first — a win/loss reason (from the admin-editable `win_loss_reasons` list, or free-text "Other") is required before the move commits, and the actual close date defaults to today but is editable. A Table/List view is a click away via the same Table/Kanban toggle pattern as the Leads page.
+- **Win/loss reasons** (`win_loss_reasons` table, `/api/win-loss-reasons*`): admin-editable suggestions only — `deals.outcome_reason` is free text, not a foreign key, so "Other: <anything>" always works and deleting a reason from the list never orphans historical deals.
+- **Revenue & pipeline analytics** (`GET /api/revenue/summary?closedRange=all|month|quarter|year&industryId=...`): open/weighted pipeline value, Closed Won revenue (range-filterable) and Closed Lost value, win rate, average deal size, average sales cycle (calendar-day difference, not raw timestamp subtraction — a same-day close doesn't read as negative days), a per-stage funnel (count + value), a 12-month Closed Won revenue trend, a loss-reason breakdown, and a "closing this month" list sorted by urgency. All of it accepts the same `industryId` the rest of the Phase 5 dashboard uses, reusing the resolve-lead-ids-first join pattern from `routes/leads.ts` for correct pagination/filtering. Rendered as a new "Revenue & Pipeline" section at the bottom of the existing Dashboard (`RevenueSection`), sharing its industry selector.
+- **Lead ↔ Deal integration**: a "Deals" panel on the lead detail page (`LeadDealsPanel`) lists/creates deals for that lead; marking a lead's "Converted to Client" toggle shows a dismissible quick-action banner ("create a Deal now?") as long as the lead has zero deals yet. Every deal create/stage-change/delete writes a `lead_activities` entry (reusing the Phase 4 `logActivity` helper) — e.g. `Deal "Acme Corp - Website Redesign" Closed Won ($5,000.00)`.
+- **Currency**: `app_settings.default_currency` (Settings → Default Currency) is applied to new deals unless overridden per-deal from a fixed list (`USD`, `EUR`, `GBP`, `CAD`, `AUD`, `INR`). Formatting uses `Intl.NumberFormat` (`src/lib/currency.ts`) rather than a hardcoded symbol map. **No FX conversion** is performed anywhere (no paid external API, per the brief) — revenue totals are a raw sum across whatever currencies the underlying deals use, which is only meaningful if you stick to one currency in practice.
+
 ## What's intentionally deferred to later phases
 
-- Multi-user roles/permissions (schema already supports adding this)
+- Multi-user roles/permissions (schema already supports adding this — `deals.owner_id` and `leads.created_by` already point at `profiles`)

@@ -27,6 +27,29 @@ import { listStages, createStage, renameStage, reorderStages, deleteStage } from
 import { getSettings, updateSettings } from './routes/settings.js'
 import { listTemplates, createTemplate, updateTemplate, deleteTemplate } from './routes/templates.js'
 import { listIndustries, createIndustry, renameIndustry, deleteIndustry } from './routes/industries.js'
+import {
+  listDealStages,
+  createDealStage,
+  updateDealStage as updateDealStageConfig,
+  reorderDealStages,
+  deleteDealStage,
+} from './routes/dealStages.js'
+import {
+  listWinLossReasons,
+  createWinLossReason,
+  renameWinLossReason,
+  deleteWinLossReason,
+} from './routes/winLossReasons.js'
+import {
+  listDeals,
+  getDeal,
+  createDeal,
+  updateDeal,
+  updateDealStage,
+  deleteDeal,
+  getDealsKanban,
+} from './routes/deals.js'
+import { getRevenueSummary } from './routes/revenue.js'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -142,6 +165,54 @@ export const handler: Handler = async (event) => {
         else if (method === 'DELETE') response = await deleteIndustry(id)
         else throw new HttpError(405, 'Method not allowed')
       }
+    } else if (resource === 'deal-stages') {
+      await requireUser(event)
+      if (!id) {
+        if (method === 'GET') response = await listDealStages()
+        else if (method === 'POST') response = await createDealStage(event)
+        else throw new HttpError(405, 'Method not allowed')
+      } else if (id === 'reorder') {
+        if (method === 'PATCH') response = await reorderDealStages(event)
+        else throw new HttpError(405, 'Method not allowed')
+      } else {
+        if (method === 'PUT') response = await updateDealStageConfig(id, event)
+        else if (method === 'DELETE') response = await deleteDealStage(id)
+        else throw new HttpError(405, 'Method not allowed')
+      }
+    } else if (resource === 'win-loss-reasons') {
+      await requireUser(event)
+      if (!id) {
+        if (method === 'GET') response = await listWinLossReasons()
+        else if (method === 'POST') response = await createWinLossReason(event)
+        else throw new HttpError(405, 'Method not allowed')
+      } else {
+        if (method === 'PUT') response = await renameWinLossReason(id, event)
+        else if (method === 'DELETE') response = await deleteWinLossReason(id)
+        else throw new HttpError(405, 'Method not allowed')
+      }
+    } else if (resource === 'deals') {
+      const user = await requireUser(event)
+
+      if (!id) {
+        if (method === 'GET') response = await listDeals(event)
+        else if (method === 'POST') response = await createDeal(event, user)
+        else throw new HttpError(405, 'Method not allowed')
+      } else if (id === 'kanban') {
+        if (method === 'GET') response = await getDealsKanban(event)
+        else throw new HttpError(405, 'Method not allowed')
+      } else if (sub === 'stage') {
+        if (method === 'PATCH') response = await updateDealStage(id, event, user)
+        else throw new HttpError(405, 'Method not allowed')
+      } else {
+        if (method === 'GET') response = await getDeal(id)
+        else if (method === 'PUT') response = await updateDeal(id, event)
+        else if (method === 'DELETE') response = await deleteDeal(id)
+        else throw new HttpError(405, 'Method not allowed')
+      }
+    } else if (resource === 'revenue') {
+      await requireUser(event)
+      if (id === 'summary' && method === 'GET') response = await getRevenueSummary(event)
+      else throw new HttpError(404, 'Not found')
     } else if (resource === 'attachments') {
       const user = await requireUser(event)
       if (!id && method === 'POST') response = await saveAttachmentMetadata(event, user)

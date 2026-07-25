@@ -13,6 +13,15 @@ import type {
   Tag,
   Template,
 } from '@/types/lead'
+import type {
+  Deal,
+  DealFilters,
+  DealListResponse,
+  DealStage,
+  KanbanDeal,
+  RevenueSummary,
+  WinLossReason,
+} from '@/types/deal'
 
 class ApiError extends Error {
   status: number
@@ -226,11 +235,92 @@ export const pipelineStagesApi = {
 export const settingsApi = {
   get: () => request<AppSettings>('/settings'),
 
-  update: (followUpIntervalDays: number) =>
-    request<AppSettings>('/settings', {
-      method: 'PUT',
-      body: JSON.stringify({ follow_up_interval_days: followUpIntervalDays }),
+  update: (payload: Partial<Pick<AppSettings, 'follow_up_interval_days' | 'default_currency'>>) =>
+    request<AppSettings>('/settings', { method: 'PUT', body: JSON.stringify(payload) }),
+}
+
+export const dealStagesApi = {
+  list: () => request<{ stages: DealStage[] }>('/deal-stages'),
+
+  create: (payload: { name: string; default_probability?: number; is_closed?: boolean; is_won?: boolean }) =>
+    request<DealStage>('/deal-stages', { method: 'POST', body: JSON.stringify(payload) }),
+
+  update: (id: string, payload: Partial<Pick<DealStage, 'name' | 'default_probability' | 'is_closed' | 'is_won'>>) =>
+    request<DealStage>(`/deal-stages/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+
+  reorder: (orderedIds: string[]) =>
+    request<{ stages: DealStage[] }>('/deal-stages/reorder', {
+      method: 'PATCH',
+      body: JSON.stringify({ orderedIds }),
     }),
+
+  remove: (id: string) => request<{ success: true }>(`/deal-stages/${id}`, { method: 'DELETE' }),
+}
+
+export const winLossReasonsApi = {
+  list: () => request<{ reasons: WinLossReason[] }>('/win-loss-reasons'),
+
+  create: (label: string) =>
+    request<WinLossReason>('/win-loss-reasons', { method: 'POST', body: JSON.stringify({ label }) }),
+
+  rename: (id: string, label: string) =>
+    request<WinLossReason>(`/win-loss-reasons/${id}`, { method: 'PUT', body: JSON.stringify({ label }) }),
+
+  remove: (id: string) => request<{ success: true }>(`/win-loss-reasons/${id}`, { method: 'DELETE' }),
+}
+
+export interface ListDealsParams {
+  page?: number
+  pageSize?: number
+  sortBy?: string
+  sortOrder?: 'asc' | 'desc'
+  filters?: DealFilters
+}
+
+export const dealsApi = {
+  list: (params: ListDealsParams = {}) => {
+    const qs = new URLSearchParams()
+    if (params.page) qs.set('page', String(params.page))
+    if (params.pageSize) qs.set('pageSize', String(params.pageSize))
+    if (params.sortBy) qs.set('sortBy', params.sortBy)
+    if (params.sortOrder) qs.set('sortOrder', params.sortOrder)
+    if (params.filters && Object.keys(params.filters).length > 0) qs.set('filters', JSON.stringify(params.filters))
+    return request<DealListResponse>(`/deals?${qs.toString()}`)
+  },
+
+  get: (id: string) => request<Deal>(`/deals/${id}`),
+
+  create: (payload: {
+    lead_id: string
+    name: string
+    value: number
+    currency?: string
+    expected_close_date?: string | null
+    notes?: string | null
+  }) => request<Deal>('/deals', { method: 'POST', body: JSON.stringify(payload) }),
+
+  update: (
+    id: string,
+    payload: Partial<Pick<Deal, 'name' | 'value' | 'currency' | 'probability' | 'expected_close_date' | 'notes'>>
+  ) => request<Deal>(`/deals/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+
+  updateStage: (
+    id: string,
+    payload: { stage_id: string; probability?: number; outcome_reason?: string; actual_close_date?: string }
+  ) => request<Deal>(`/deals/${id}/stage`, { method: 'PATCH', body: JSON.stringify(payload) }),
+
+  remove: (id: string) => request<{ success: true }>(`/deals/${id}`, { method: 'DELETE' }),
+
+  kanban: (industryId?: string) =>
+    request<{ deals: KanbanDeal[]; truncated: boolean }>(`/deals/kanban${industryId ? `?industryId=${industryId}` : ''}`),
+}
+
+export const revenueApi = {
+  summary: (closedRange: 'all' | 'month' | 'quarter' | 'year' = 'all', industryId?: string) => {
+    const qs = new URLSearchParams({ closedRange })
+    if (industryId) qs.set('industryId', industryId)
+    return request<RevenueSummary>(`/revenue/summary?${qs.toString()}`)
+  },
 }
 
 export const attachmentsApi = {

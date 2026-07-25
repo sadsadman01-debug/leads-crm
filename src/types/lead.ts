@@ -144,6 +144,7 @@ export interface KanbanLead {
 
 export interface AppSettings {
   follow_up_interval_days: number
+  default_currency: string
 }
 
 export interface ReminderItem {

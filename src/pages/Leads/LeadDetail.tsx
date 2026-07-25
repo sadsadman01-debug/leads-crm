@@ -17,13 +17,16 @@ import {
   Clock,
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
-import { leadsApi, pipelineStagesApi, industriesApi } from '@/lib/api'
+import { leadsApi, pipelineStagesApi, industriesApi, dealsApi } from '@/lib/api'
 import { PriorityBadge, TagPill, Badge, ScoreBadge } from '@/components/ui/Badge'
 import { StatusPanel } from '@/components/StatusPanel'
 import { AttachmentsPanel } from '@/components/AttachmentsPanel'
 import { LeadTimeline } from '@/components/LeadTimeline'
 import { TemplateUsePanel } from '@/components/TemplateUsePanel'
+import { LeadDealsPanel } from '@/components/LeadDealsPanel'
+import { DealForm } from '@/components/DealForm'
 import { Modal } from '@/components/ui/Modal'
+import { Handshake } from 'lucide-react'
 
 const PLATFORM_ICON: Record<string, typeof Globe> = {
   Facebook,
@@ -45,6 +48,13 @@ export function LeadDetail() {
 
   const { data: stagesData } = useQuery({ queryKey: ['pipeline-stages'], queryFn: pipelineStagesApi.list })
   const { data: industriesData } = useQuery({ queryKey: ['industries'], queryFn: industriesApi.list })
+  const { data: leadDeals } = useQuery({
+    queryKey: ['deals', { leadId: id }],
+    queryFn: () => dealsApi.list({ filters: { leadId: id } }),
+    enabled: Boolean(id),
+  })
+  const [showConvertedPrompt, setShowConvertedPrompt] = useState(true)
+  const [quickDealFormOpen, setQuickDealFormOpen] = useState(false)
 
   const deleteMutation = useMutation({
     mutationFn: () => leadsApi.remove(id!),
@@ -119,6 +129,19 @@ export function LeadDetail() {
             {lead.status.is_overdue ? 'Follow-up overdue since ' : lead.status.is_due_today ? 'Follow-up due today' : 'Next follow-up due '}
             {!lead.status.is_due_today && format(parseISO(lead.status.next_follow_up_due_at), 'MMM d, yyyy')}
           </span>
+        </div>
+      )}
+
+      {lead.status?.converted && (leadDeals?.deals.length ?? 0) === 0 && showConvertedPrompt && (
+        <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg bg-success-bg px-4 py-3 text-sm text-success">
+          <Handshake size={16} className="shrink-0" />
+          <span className="flex-1">This lead was converted to a client — create a Deal for it now?</span>
+          <button className="btn-primary" onClick={() => setQuickDealFormOpen(true)}>
+            Create Deal
+          </button>
+          <button className="text-success/70 hover:text-success" onClick={() => setShowConvertedPrompt(false)}>
+            Dismiss
+          </button>
         </div>
       )}
 
@@ -212,9 +235,21 @@ export function LeadDetail() {
 
         <div className="space-y-6 lg:col-span-2">
           <StatusPanel lead={lead} />
+          <LeadDealsPanel leadId={lead.id} companyName={lead.company_name} />
           <LeadTimeline leadId={lead.id} />
         </div>
       </div>
+
+      <DealForm
+        open={quickDealFormOpen}
+        leadId={lead.id}
+        leadCompanyName={lead.company_name}
+        onClose={() => setQuickDealFormOpen(false)}
+        onSaved={() => {
+          queryClient.invalidateQueries({ queryKey: ['deals', { leadId: id }] })
+          setShowConvertedPrompt(false)
+        }}
+      />
 
       <Modal open={confirmDelete} onClose={() => setConfirmDelete(false)} title="Delete this lead?">
         <p className="mb-5 text-sm text-base-300">

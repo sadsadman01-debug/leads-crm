@@ -10,6 +10,7 @@ import { Settings } from '@/pages/Settings'
 
 // Charting (recharts) is only needed here — code-split so it doesn't bloat every route.
 const Dashboard = lazy(() => import('@/pages/Dashboard').then((m) => ({ default: m.Dashboard })))
+const DealsList = lazy(() => import('@/pages/Deals/DealsList').then((m) => ({ default: m.DealsList })))
 
 function PageFallback() {
   return <div className="p-12 text-center text-base-400">Loading…</div>
@@ -35,6 +36,14 @@ export default function App() {
           <Route path="/leads/new" element={<LeadForm />} />
           <Route path="/leads/:id" element={<LeadDetail />} />
           <Route path="/leads/:id/edit" element={<LeadForm />} />
+          <Route
+            path="/deals"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <DealsList />
+              </Suspense>
+            }
+          />
           <Route path="/settings" element={<Settings />} />
         </Route>
       </Route>

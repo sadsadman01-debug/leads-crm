@@ -2,19 +2,20 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2 } from 'lucide-react'
 import { settingsApi } from '@/lib/api'
+import { CURRENCIES } from '@/types/deal'
 
-export function FollowUpIntervalSettings() {
+export function DefaultCurrencySettings() {
   const queryClient = useQueryClient()
   const { data } = useQuery({ queryKey: ['settings'], queryFn: settingsApi.get })
-  const [days, setDays] = useState(3)
+  const [currency, setCurrency] = useState('USD')
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
-    if (data) setDays(data.follow_up_interval_days)
+    if (data) setCurrency(data.default_currency)
   }, [data])
 
   const mutation = useMutation({
-    mutationFn: (value: number) => settingsApi.update({ follow_up_interval_days: value }),
+    mutationFn: (value: string) => settingsApi.update({ default_currency: value }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings'] })
       setSaved(true)
@@ -22,32 +23,27 @@ export function FollowUpIntervalSettings() {
     },
   })
 
-  const dirty = data && days !== data.follow_up_interval_days
+  const dirty = data && currency !== data.default_currency
 
   return (
     <div className="card p-6">
-      <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-base-300">Follow-up Reminders</h2>
+      <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-base-300">Default Currency</h2>
       <p className="mb-4 text-xs text-base-400">
-        When a cold email or follow-up is marked sent, the next follow-up's suggested due date is this many days
-        later. Changing it only affects follow-ups computed from now on.
+        Used for new deals unless overridden per-deal. Deal totals are summed as raw numbers with no currency
+        conversion, so mixing currencies across deals will skew revenue totals.
       </p>
 
       <div className="flex flex-wrap items-center gap-3">
-        <label className="label mb-0" htmlFor="interval-days">Interval</label>
-        <input
-          id="interval-days"
-          type="number"
-          min={1}
-          className="input w-24"
-          value={days}
-          onChange={(e) => setDays(Math.max(1, parseInt(e.target.value, 10) || 1))}
-        />
-        <span className="text-sm text-base-400">days</span>
+        <select className="input w-auto" value={currency} onChange={(e) => setCurrency(e.target.value)}>
+          {CURRENCIES.map((c) => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
 
         <button
           className="btn-primary sm:ml-auto"
           disabled={!dirty || mutation.isPending}
-          onClick={() => mutation.mutate(days)}
+          onClick={() => mutation.mutate(currency)}
         >
           {mutation.isPending ? 'Saving…' : 'Save'}
         </button>

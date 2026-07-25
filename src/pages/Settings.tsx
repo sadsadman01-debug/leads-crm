@@ -4,6 +4,9 @@ import { PipelineStagesSettings } from '@/components/PipelineStagesSettings'
 import { FollowUpIntervalSettings } from '@/components/FollowUpIntervalSettings'
 import { IndustriesSettings } from '@/components/IndustriesSettings'
 import { TemplatesSettings } from '@/components/TemplatesSettings'
+import { DealStagesSettings } from '@/components/DealStagesSettings'
+import { WinLossReasonsSettings } from '@/components/WinLossReasonsSettings'
+import { DefaultCurrencySettings } from '@/components/DefaultCurrencySettings'
 
 export function Settings() {
   const { session } = useAuth()
@@ -22,6 +25,9 @@ export function Settings() {
       <FollowUpIntervalSettings />
       <IndustriesSettings />
       <TemplatesSettings />
+      <DealStagesSettings />
+      <WinLossReasonsSettings />
+      <DefaultCurrencySettings />
 
       <div className="card flex flex-col items-center gap-3 p-16 text-center">
         <SettingsIcon size={32} className="text-base-500" />

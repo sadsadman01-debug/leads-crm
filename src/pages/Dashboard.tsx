@@ -13,14 +13,16 @@ import {
   Reply,
   Trophy,
 } from 'lucide-react'
-import { dashboardApi, industriesApi } from '@/lib/api'
+import { dashboardApi, industriesApi, revenueApi, settingsApi } from '@/lib/api'
 import { StatTile } from '@/components/charts/StatTile'
 import { FunnelChart } from '@/components/charts/FunnelChart'
 import { TrendChart } from '@/components/charts/TrendChart'
 import { DonutChart } from '@/components/charts/DonutChart'
 import { RemindersWidget } from '@/components/RemindersWidget'
 import { IndustryComparisonTable } from '@/components/IndustryComparisonTable'
+import { RevenueSection } from '@/components/RevenueSection'
 import { LEAD_SOURCE_COLORS, PRIORITY_COLORS, SENTIMENT_COLORS, STATUS_DIST_COLORS } from '@/lib/chartColors'
+import type { RevenueSummary } from '@/types/deal'
 
 const GRANULARITIES: Array<{ value: 'day' | 'week' | 'month'; label: string }> = [
   { value: 'day', label: 'Daily (30d)' },
@@ -31,12 +33,21 @@ const GRANULARITIES: Array<{ value: 'day' | 'week' | 'month'; label: string }> =
 export function Dashboard() {
   const [granularity, setGranularity] = useState<'day' | 'week' | 'month'>('day')
   const [industryId, setIndustryId] = useState('')
+  const [closedRange, setClosedRange] = useState<RevenueSummary['closedRange']>('all')
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['dashboard-summary', granularity, industryId],
     queryFn: () => dashboardApi.summary(granularity, industryId || undefined),
     placeholderData: (prev) => prev,
   })
+
+  const { data: revenue } = useQuery({
+    queryKey: ['revenue-summary', closedRange, industryId],
+    queryFn: () => revenueApi.summary(closedRange, industryId || undefined),
+    placeholderData: (prev) => prev,
+  })
+
+  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: settingsApi.get })
 
   const { data: industriesData } = useQuery({ queryKey: ['industries'], queryFn: industriesApi.list })
   const industries = industriesData?.industries ?? []
@@ -214,6 +225,17 @@ export function Dashboard() {
       </div>
 
       {data.industryComparison.length > 0 && <IndustryComparisonTable rows={data.industryComparison} />}
+
+      <div className="border-t border-base-700/60 pt-6">
+        {revenue && (
+          <RevenueSection
+            revenue={revenue}
+            currency={settings?.default_currency ?? 'USD'}
+            closedRange={closedRange}
+            onClosedRangeChange={setClosedRange}
+          />
+        )}
+      </div>
     </div>
   )
 }
