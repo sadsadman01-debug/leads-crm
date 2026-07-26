@@ -99,7 +99,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           )}
         </div>
 
-        <nav className="flex-1 space-y-1 px-3">
+        <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-1">
           {isSuperAdmin && (
             <NavLink
               to="/organizations"
