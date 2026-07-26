@@ -23,7 +23,7 @@ import clsx from 'clsx'
 import { useAuth } from '@/contexts/AuthContext'
 import { useOrg } from '@/contexts/OrgContext'
 import { RoleBadge, Avatar } from '@/components/ui/RoleBadge'
-import { signupRequestsApi, passwordResetRequestsApi } from '@/lib/api'
+import { signupRequestsApi, passwordResetRequestsApi, brandingApi } from '@/lib/api'
 
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -62,16 +62,21 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
     refetchInterval: 60_000,
   })
   const pendingPasswordResetCount = (passwordResetData?.requests ?? []).filter((r) => r.status === 'pending').length
+
+  const { data: branding } = useQuery({ queryKey: ['org-branding'], queryFn: brandingApi.get })
+
   const navItems =
     profile && (profile.role === 'admin' || profile.role === 'super_admin')
       ? [...NAV_ITEMS.slice(0, 5), { to: '/team', label: 'Team', icon: UsersRound }, NAV_ITEMS[5]]
       : NAV_ITEMS
 
-  const workspaceLabel = isSuperAdmin
-    ? viewingOrgId === undefined
-      ? null
-      : viewingOrgName
-    : profile?.organization_name
+  const workspaceLabel =
+    branding?.display_name ||
+    (isSuperAdmin
+      ? viewingOrgId === undefined
+        ? null
+        : viewingOrgName
+      : profile?.organization_name)
 
   // Visible whenever the mobile drawer is open, the tablet rail is expanded,
   // or we're at Laptop+ — hidden only in the tablet-collapsed-rail gap.
@@ -90,7 +95,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
             'group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150',
             rowJustify,
             isActive
-              ? 'bg-accent-500/15 text-accent-400 shadow-[inset_0_0_0_1px_rgba(91,108,240,0.35)]'
+              ? 'bg-accent-500/15 text-accent-400 shadow-[inset_0_0_0_1px_rgb(var(--accent-500)/0.35)]'
               : 'text-base-300 hover:bg-base-800 hover:text-base-100'
           )
         }
@@ -139,9 +144,17 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
         <div className={clsx('px-6 py-6', !railExpanded && 'md:px-3', 'lg:px-6')}>
           <div className={clsx('flex items-center', railExpanded ? 'justify-between' : 'md:justify-center lg:justify-between', 'justify-between')}>
             <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-500 shadow-glow">
-                <Target size={18} className="text-white" />
-              </div>
+              {branding?.logo_url ? (
+                <img
+                  src={branding.logo_url}
+                  alt={workspaceLabel ?? 'Organization logo'}
+                  className="h-8 w-8 shrink-0 rounded-lg object-cover"
+                />
+              ) : (
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-500 shadow-glow">
+                  <Target size={18} className="text-white" />
+                </div>
+              )}
               <span className={clsx('text-base font-semibold tracking-tight text-base-100', labelClass)}>Leads CRM</span>
             </div>
             <button onClick={onClose} className="btn-ghost -mr-2 h-11 w-11 px-0 md:hidden" aria-label="Close menu">

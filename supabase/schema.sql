@@ -15,7 +15,11 @@ create table if not exists public.organizations (
   name text not null,
   created_by uuid,
   status text not null default 'active' check (status in ('active', 'suspended')),
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  -- Organization Branding / White-label
+  logo_storage_path text,
+  accent_color text,
+  display_name text
 );
 
 -- ----------------------------------------------------------------------------
@@ -1009,3 +1013,15 @@ on conflict (id) do nothing;
 create policy "service role manages lead-attachments"
   on storage.objects for all
   using (bucket_id = 'lead-attachments' and auth.role() = 'service_role');
+
+-- ============================================================================
+-- Storage bucket for Organization Branding logos — public-read (logos aren't
+-- sensitive), write-only via the service role.
+-- ============================================================================
+insert into storage.buckets (id, name, public)
+values ('org-logos', 'org-logos', true)
+on conflict (id) do nothing;
+
+create policy "service role manages org-logos"
+  on storage.objects for all
+  using (bucket_id = 'org-logos' and auth.role() = 'service_role');

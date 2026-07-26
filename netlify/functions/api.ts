@@ -104,6 +104,7 @@ import {
 import { getForecast } from './routes/forecast.js'
 import { getTrends, getPeriodComparisons } from './routes/trends.js'
 import { listQuotas, upsertQuota, deleteQuota } from './routes/quotas.js'
+import { getBranding, createLogoSignedUpload, updateBranding, resetBranding } from './routes/branding.js'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -397,6 +398,21 @@ export const handler: Handler = async (event) => {
         else throw new HttpError(405, 'Method not allowed')
       } else if (method === 'DELETE') response = await deleteQuota(id, event, user)
       else throw new HttpError(405, 'Method not allowed')
+    } else if (resource === 'branding') {
+      const user = await requireUser(event)
+      if (!id) {
+        if (method === 'GET') response = await getBranding(event, user)
+        else if (method === 'PATCH') response = await updateBranding(event, user)
+        else throw new HttpError(405, 'Method not allowed')
+      } else if (id === 'logo' && sub === 'sign') {
+        if (method === 'POST') response = await createLogoSignedUpload(event, user)
+        else throw new HttpError(405, 'Method not allowed')
+      } else if (id === 'reset') {
+        if (method === 'POST') response = await resetBranding(event, user)
+        else throw new HttpError(405, 'Method not allowed')
+      } else {
+        throw new HttpError(404, 'Not found')
+      }
     } else if (resource === 'attachments') {
       const user = await requireUser(event)
       if (!id && method === 'POST') response = await saveAttachmentMetadata(event, user)

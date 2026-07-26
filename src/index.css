@@ -4,6 +4,10 @@
 
 html {
   color-scheme: dark;
+  /* Default accent (Indigo) — overridden per-organization via Branding settings. */
+  --accent-400: 124 143 255;
+  --accent-500: 91 108 240;
+  --accent-600: 70 82 214;
 }
 
 body {
@@ -28,7 +32,7 @@ body {
 
   .btn-primary {
     @apply btn bg-accent-500 text-white hover:bg-accent-400 active:bg-accent-600
-      shadow-[0_0_0_1px_rgba(91,108,240,0.5)] hover:shadow-glow;
+      shadow-[0_0_0_1px_rgb(var(--accent-500)/0.5)] hover:shadow-glow;
   }
 
   .btn-secondary {

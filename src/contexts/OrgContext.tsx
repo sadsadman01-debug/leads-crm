@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { setActiveOrganizationId } from '@/lib/orgScope'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -16,6 +17,7 @@ const OrgContext = createContext<OrgContextValue | undefined>(undefined)
 
 export function OrgProvider({ children }: { children: ReactNode }) {
   const { profile } = useAuth()
+  const queryClient = useQueryClient()
   const [viewingOrgId, setViewingOrgId] = useState<string | null | undefined>(undefined)
   const [viewingOrgName, setViewingOrgName] = useState<string | undefined>(undefined)
 
@@ -25,7 +27,11 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     } else {
       setActiveOrganizationId(undefined)
     }
-  }, [profile?.role, viewingOrgId])
+    // Branding is org-scoped but its query key isn't keyed by viewingOrgId,
+    // so a Super Admin switching organizations needs an explicit invalidation
+    // to avoid briefly showing the previous org's logo/accent color.
+    queryClient.invalidateQueries({ queryKey: ['org-branding'] })
+  }, [profile?.role, viewingOrgId, queryClient])
 
   // Reset the selection whenever a different Super Admin session starts.
   useEffect(() => {

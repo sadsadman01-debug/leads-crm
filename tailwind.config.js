@@ -25,11 +25,15 @@ export default {
           200: '#c4c6cf',
           100: '#e6e7eb',
         },
+        // Organization Branding: driven by --accent-{400,500,600} CSS custom
+        // properties (space-separated RGB triplets), set at runtime per the
+        // signed-in org's chosen accent color — see src/lib/brandColors.ts.
+        // Defaults (unset) come from src/index.css's :root block.
         accent: {
-          400: '#7c8fff',
-          500: '#5b6cf0',
-          600: '#4652d6',
-          glow: 'rgba(91, 108, 240, 0.35)',
+          400: 'rgb(var(--accent-400) / <alpha-value>)',
+          500: 'rgb(var(--accent-500) / <alpha-value>)',
+          600: 'rgb(var(--accent-600) / <alpha-value>)',
+          glow: 'rgb(var(--accent-500) / 0.35)',
         },
         success: { DEFAULT: '#22c55e', bg: 'rgba(34,197,94,0.12)' },
         warn: { DEFAULT: '#eab308', bg: 'rgba(234,179,8,0.12)' },
@@ -40,7 +44,7 @@ export default {
       },
       boxShadow: {
         soft: '0 1px 2px rgba(0,0,0,0.4), 0 8px 24px -8px rgba(0,0,0,0.5)',
-        glow: '0 0 0 1px rgba(91,108,240,0.4), 0 0 24px rgba(91,108,240,0.25)',
+        glow: '0 0 0 1px rgb(var(--accent-500) / 0.4), 0 0 24px rgb(var(--accent-500) / 0.25)',
       },
       borderRadius: {
         xl2: '1rem',

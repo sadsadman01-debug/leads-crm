@@ -12,3 +12,16 @@ export interface OrganizationSummary extends Organization {
   dealCount: number
   openPipelineValue: number
 }
+
+export interface BrandPaletteColor {
+  id: string
+  label: string
+  hex: string
+}
+
+export interface OrgBranding {
+  logo_url: string | null
+  accent_color: string | null
+  display_name: string | null
+  palette: BrandPaletteColor[]
+}

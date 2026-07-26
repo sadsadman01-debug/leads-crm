@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react'
 import { AlertCircle } from 'lucide-react'
 import { useAuth, hasPermission } from '@/contexts/AuthContext'
+import { useOrg } from '@/contexts/OrgContext'
 import { RoleBadge } from '@/components/ui/RoleBadge'
 import { PipelineStagesSettings } from '@/components/PipelineStagesSettings'
 import { FollowUpIntervalSettings } from '@/components/FollowUpIntervalSettings'
@@ -11,6 +12,7 @@ import { WinLossReasonsSettings } from '@/components/WinLossReasonsSettings'
 import { DefaultCurrencySettings } from '@/components/DefaultCurrencySettings'
 import { CustomFieldsSettings } from '@/components/CustomFieldsSettings'
 import { QuotaSettings } from '@/components/QuotaSettings'
+import { BrandingSettings } from '@/components/BrandingSettings'
 
 /** Wraps a settings section in a disabled fieldset unless the caller passes
  * (or is granted) write access — same "view only, greyed out" convention
@@ -22,7 +24,12 @@ function Section({ canWrite, children }: { canWrite: boolean; children: ReactNod
 
 export function Settings() {
   const { session, profile } = useAuth()
+  const { viewingOrgId } = useOrg()
   const isUser = profile?.role === 'user'
+  const isSuperAdmin = profile?.role === 'super_admin'
+  // Branding is Admin-only, scoped to a real organization — a Super Admin
+  // only has one to brand once they've drilled into a specific org.
+  const showBranding = !isUser && (!isSuperAdmin || typeof viewingOrgId === 'string')
 
   const canManageTemplates = hasPermission(profile, 'canManageTemplates')
   const canManageCustomFields = hasPermission(profile, 'canManageCustomFields')
@@ -51,6 +58,11 @@ export function Settings() {
       )}
 
       <div className="space-y-6">
+        {showBranding && (
+          <Section canWrite>
+            <BrandingSettings />
+          </Section>
+        )}
         <Section canWrite={canManageStages}>
           <PipelineStagesSettings />
         </Section>

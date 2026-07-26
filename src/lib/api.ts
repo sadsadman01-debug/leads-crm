@@ -24,7 +24,7 @@ import type {
   WinLossReason,
 } from '@/types/deal'
 import type { TeamMember, Role, UserPermissions } from '@/types/team'
-import type { Organization, OrganizationSummary } from '@/types/organization'
+import type { Organization, OrganizationSummary, OrgBranding } from '@/types/organization'
 import type { CustomFieldDefinition, AppliesTo, FieldType } from '@/types/customField'
 import type { SavedReport, ReportRunResult, ReportType, ChartType, ReportFilters } from '@/types/report'
 import type { SignupRequest, ApproveSignupRequestResult } from '@/types/signupRequest'
@@ -365,6 +365,21 @@ export const organizationsApi = {
 
   remove: (id: string, confirm: string) =>
     request<{ success: true }>(`/organizations/${id}`, { method: 'DELETE', body: JSON.stringify({ confirm }) }),
+}
+
+export const brandingApi = {
+  get: () => request<OrgBranding>('/branding'),
+
+  createLogoSignedUpload: (fileName: string) =>
+    request<{ signedUrl: string; token: string; storage_path: string }>('/branding/logo/sign', {
+      method: 'POST',
+      body: JSON.stringify({ file_name: fileName }),
+    }),
+
+  update: (payload: { logo_storage_path?: string | null; accent_color?: string | null; display_name?: string | null }) =>
+    request<OrgBranding>('/branding', { method: 'PATCH', body: JSON.stringify(payload) }),
+
+  reset: () => request<OrgBranding>('/branding/reset', { method: 'POST' }),
 }
 
 export const signupRequestsApi = {
