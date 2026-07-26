@@ -21,6 +21,7 @@ import { FunnelChart } from '@/components/charts/FunnelChart'
 import { TrendChart } from '@/components/charts/TrendChart'
 import { DonutChart } from '@/components/charts/DonutChart'
 import { RemindersWidget } from '@/components/RemindersWidget'
+import { OnboardingChecklist } from '@/components/OnboardingChecklist'
 import { IndustryComparisonTable } from '@/components/IndustryComparisonTable'
 import { TeamPerformanceTable } from '@/components/TeamPerformanceTable'
 import { RevenueSection } from '@/components/RevenueSection'
@@ -152,6 +153,8 @@ export function Dashboard() {
       <DashboardPeriodComparisons currency={settings?.default_currency ?? 'USD'} />
 
       <RemindersWidget reminders={data.reminders} />
+
+      {profile?.role === 'admin' && <OnboardingChecklist />}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 desktop:grid-cols-4">
         <StatTile label="Total Leads" value={data.totals.leads} icon={Users} tone="accent" onClick={() => drillDown(undefined, 'Total Leads')} />

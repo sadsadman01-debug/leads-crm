@@ -111,6 +111,7 @@ import {
   updatePlatformBranding,
   resetPlatformBranding,
 } from './routes/platformBranding.js'
+import { getOnboardingStatus, dismissOnboarding } from './routes/onboarding.js'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -428,6 +429,17 @@ export const handler: Handler = async (event) => {
         else throw new HttpError(405, 'Method not allowed')
       } else if (id === 'reset') {
         if (method === 'POST') response = await resetBranding(event, user)
+        else throw new HttpError(405, 'Method not allowed')
+      } else {
+        throw new HttpError(404, 'Not found')
+      }
+    } else if (resource === 'onboarding') {
+      const user = await requireUser(event)
+      if (!id) {
+        if (method === 'GET') response = await getOnboardingStatus(event, user)
+        else throw new HttpError(405, 'Method not allowed')
+      } else if (id === 'dismiss') {
+        if (method === 'POST') response = await dismissOnboarding(event, user)
         else throw new HttpError(405, 'Method not allowed')
       } else {
         throw new HttpError(404, 'Not found')

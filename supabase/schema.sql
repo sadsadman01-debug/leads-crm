@@ -19,7 +19,11 @@ create table if not exists public.organizations (
   -- Organization Branding / White-label
   logo_storage_path text,
   accent_color text,
-  display_name text
+  display_name text,
+  -- Onboarding Checklist — step completion is computed live from existing
+  -- data on every read; only these two are persisted.
+  onboarding_dismissed boolean not null default false,
+  onboarding_completed_at timestamptz
 );
 
 -- ----------------------------------------------------------------------------

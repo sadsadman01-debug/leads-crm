@@ -30,6 +30,7 @@ import type { SavedReport, ReportRunResult, ReportType, ChartType, ReportFilters
 import type { SignupRequest, ApproveSignupRequestResult } from '@/types/signupRequest'
 import type { PasswordResetRequest, PasswordResetResult } from '@/types/passwordResetRequest'
 import type { AppNotification, NotificationListResponse } from '@/types/notification'
+import type { OnboardingStatus } from '@/types/onboarding'
 import { withOrgScope } from './orgScope'
 
 class ApiError extends Error {
@@ -397,6 +398,12 @@ export const platformBrandingApi = {
     request<PlatformBranding>('/platform-branding', { method: 'PATCH', body: JSON.stringify(payload) }),
 
   reset: () => request<PlatformBranding>('/platform-branding/reset', { method: 'POST' }),
+}
+
+export const onboardingApi = {
+  get: () => request<OnboardingStatus>('/onboarding'),
+
+  dismiss: () => request<{ success: true }>('/onboarding/dismiss', { method: 'POST' }),
 }
 
 export const signupRequestsApi = {
