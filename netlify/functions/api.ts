@@ -60,7 +60,14 @@ import {
   deleteTeamMember,
   getTeamMemberPermissions,
   updateTeamMemberPermissions,
+  clearForcePasswordChange,
 } from './routes/team.js'
+import {
+  createSignupRequest,
+  listSignupRequests,
+  approveSignupRequest,
+  rejectSignupRequest,
+} from './routes/signupRequests.js'
 import {
   listOrganizations,
   getOrganization,
@@ -114,7 +121,21 @@ export const handler: Handler = async (event) => {
 
     let response
 
-    if (resource === 'leads') {
+    if (resource === 'signup-requests') {
+      // The only unauthenticated write in this entire API: a public "Request
+      // Access" submission never creates an Auth account or an Organization,
+      // so it needs no session. Every other action on this resource (viewing,
+      // approving, rejecting) is Super-Admin-only, enforced inside each function.
+      if (!id && method === 'POST') {
+        response = await createSignupRequest(event)
+      } else {
+        const user = await requireUser(event)
+        if (!id && method === 'GET') response = await listSignupRequests(user)
+        else if (id && sub === 'approve' && method === 'POST') response = await approveSignupRequest(id, event, user)
+        else if (id && sub === 'reject' && method === 'POST') response = await rejectSignupRequest(id, event, user)
+        else throw new HttpError(404, 'Not found')
+      }
+    } else if (resource === 'leads') {
       const user = await requireUser(event)
 
       if (!id) {
@@ -170,6 +191,9 @@ export const handler: Handler = async (event) => {
       if (!id) {
         if (method === 'GET') response = await listTeamMembers(event, user)
         else if (method === 'POST') response = await createTeamMember(event, user)
+        else throw new HttpError(405, 'Method not allowed')
+      } else if (id === 'me' && sub === 'clear-force-password-change') {
+        if (method === 'POST') response = await clearForcePasswordChange(user)
         else throw new HttpError(405, 'Method not allowed')
       } else if (id === 'me') {
         if (method === 'GET') response = await getMyProfile(user)

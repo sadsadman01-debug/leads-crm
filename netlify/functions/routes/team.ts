@@ -30,7 +30,18 @@ export async function getMyProfile(user: AuthedUser) {
     organization_id: user.organization_id,
     organization_name: organizationName,
     permissions: user.permissions,
+    force_password_change: user.force_password_change,
   })
+}
+
+/** Self-service — the caller clears their own flag after successfully changing
+ * their password via the Supabase Auth SDK client-side. No admin gate needed:
+ * this only ever touches the caller's own row, and only ever sets it to false. */
+export async function clearForcePasswordChange(user: AuthedUser) {
+  const supabase = getSupabaseAdmin()
+  const { error } = await supabase.from('profiles').update({ force_password_change: false }).eq('id', user.id)
+  if (error) throw new HttpError(500, error.message)
+  return json(200, { success: true })
 }
 
 /** Lightweight roster for assignment dropdowns/filters — any authenticated

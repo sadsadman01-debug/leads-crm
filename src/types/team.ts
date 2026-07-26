@@ -98,6 +98,7 @@ export interface Profile {
   is_active: boolean
   organization_id?: string | null
   permissions?: UserPermissions
+  force_password_change?: boolean
 }
 
 export interface TeamMember extends Profile {

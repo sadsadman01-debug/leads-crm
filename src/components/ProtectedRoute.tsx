@@ -59,6 +59,26 @@ export function RequireSuperAdmin() {
   return <Outlet />
 }
 
+/** Blocks access to the rest of the app until a mandatory password change
+ * (set on the profile by the Signup Request approve flow) is completed. */
+export function RequirePasswordSet() {
+  const { profile, loading } = useAuth()
+
+  if (loading || !profile) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-base-950">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent-500 border-t-transparent" />
+      </div>
+    )
+  }
+
+  if (profile.force_password_change) {
+    return <Navigate to="/set-new-password" replace />
+  }
+
+  return <Outlet />
+}
+
 /** Sends the Super Admin to the Organizations Overview by default; everyone else to Leads. */
 export function DefaultLanding() {
   const { profile } = useAuth()

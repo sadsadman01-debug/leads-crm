@@ -32,11 +32,34 @@ create table if not exists public.profiles (
   is_active boolean not null default true,
   organization_id uuid references public.organizations(id) on delete cascade,
   permissions jsonb not null default '{}'::jsonb,
+  force_password_change boolean not null default false,
   created_at timestamptz not null default now()
 );
 
 alter table public.organizations add constraint organizations_created_by_fkey
   foreign key (created_by) references public.profiles(id) on delete set null;
+
+-- ----------------------------------------------------------------------------
+-- signup_requests: public "Request Access" submissions from the Login page,
+-- reviewed manually by the Super Admin (approve/reject) — no email verification
+-- or outbound email of any kind, ever, from this app. Platform-level (no
+-- organization_id — this predates any organization existing for the request).
+-- ----------------------------------------------------------------------------
+create table if not exists public.signup_requests (
+  id uuid primary key default gen_random_uuid(),
+  organization_name text not null,
+  contact_name text not null,
+  email text not null,
+  phone text,
+  message text,
+  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
+  requested_at timestamptz not null default now(),
+  reviewed_at timestamptz,
+  reviewed_by uuid references public.profiles(id) on delete set null,
+  rejection_reason text
+);
+
+create index if not exists signup_requests_status_idx on public.signup_requests (status);
 
 -- Auto-create a profile row whenever a new auth user is created. New accounts
 -- default to 'user' — the Team Management "add member" function immediately
@@ -598,6 +621,12 @@ $$;
 -- organizations: only the Super Admin can read/write it.
 create policy "organizations super admin only"
   on public.organizations for all
+  using (public.is_super_admin())
+  with check (public.is_super_admin());
+
+alter table public.signup_requests enable row level security;
+create policy "signup_requests super admin only"
+  on public.signup_requests for all
   using (public.is_super_admin())
   with check (public.is_super_admin());
 

@@ -14,6 +14,7 @@ export interface AuthedUser {
   /** Always populated (defaulted) even for admins/super admins — they simply
    * never consult it, since every permission check short-circuits on role first. */
   permissions: UserPermissions
+  force_password_change: boolean
 }
 
 /**
@@ -38,7 +39,7 @@ export async function requireUser(event: HandlerEvent): Promise<AuthedUser> {
 
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('role, nickname, is_active, organization_id, permissions')
+    .select('role, nickname, is_active, organization_id, permissions, force_password_change')
     .eq('id', data.user.id)
     .single()
 
@@ -57,6 +58,7 @@ export async function requireUser(event: HandlerEvent): Promise<AuthedUser> {
     is_active: profile.is_active,
     organization_id: profile.organization_id,
     permissions: normalizePermissions(profile.permissions),
+    force_password_change: Boolean(profile.force_password_change),
   }
 }
 

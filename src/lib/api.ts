@@ -27,6 +27,7 @@ import type { TeamMember, Role, UserPermissions } from '@/types/team'
 import type { Organization, OrganizationSummary } from '@/types/organization'
 import type { CustomFieldDefinition, AppliesTo, FieldType } from '@/types/customField'
 import type { SavedReport, ReportRunResult, ReportType, ChartType, ReportFilters } from '@/types/report'
+import type { SignupRequest, ApproveSignupRequestResult } from '@/types/signupRequest'
 import { withOrgScope } from './orgScope'
 
 class ApiError extends Error {
@@ -52,6 +53,20 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   const res = await fetch(`/api${withOrgScope(path)}`, { ...options, headers })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new ApiError(res.status, body.error ?? `Request failed with status ${res.status}`)
+  }
+  if (res.status === 204) return undefined as T
+  return res.json() as Promise<T>
+}
+
+/** For the handful of endpoints reachable before login (currently just the
+ * public "Request Access" submission) — no session exists yet, so this skips
+ * authHeader() (which throws without one) and the org-scope query param. */
+async function requestPublic<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const headers = { 'Content-Type': 'application/json', ...(options.headers ?? {}) }
+  const res = await fetch(`/api${path}`, { ...options, headers })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new ApiError(res.status, body.error ?? `Request failed with status ${res.status}`)
@@ -350,6 +365,19 @@ export const organizationsApi = {
     request<{ success: true }>(`/organizations/${id}`, { method: 'DELETE', body: JSON.stringify({ confirm }) }),
 }
 
+export const signupRequestsApi = {
+  /** Public — reachable from the Login page before any session exists. */
+  create: (payload: { organization_name: string; contact_name: string; email: string; phone?: string; message?: string }) =>
+    requestPublic<SignupRequest>('/signup-requests', { method: 'POST', body: JSON.stringify(payload) }),
+
+  list: () => request<{ requests: SignupRequest[] }>('/signup-requests'),
+
+  approve: (id: string) => request<ApproveSignupRequestResult>(`/signup-requests/${id}/approve`, { method: 'POST' }),
+
+  reject: (id: string, rejection_reason?: string) =>
+    request<SignupRequest>(`/signup-requests/${id}/reject`, { method: 'POST', body: JSON.stringify({ rejection_reason }) }),
+}
+
 export const teamApi = {
   me: () => request<{
     id: string
@@ -360,7 +388,11 @@ export const teamApi = {
     organization_id: string | null
     organization_name: string | null
     permissions: UserPermissions
+    force_password_change: boolean
   }>('/team-members/me'),
+
+  clearForcePasswordChange: () =>
+    request<{ success: true }>('/team-members/me/clear-force-password-change', { method: 'POST' }),
 
   roster: () => request<{ members: Array<{ id: string; nickname: string | null; email: string }> }>(
     '/team-members/roster'

@@ -1,9 +1,11 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Users, UserPlus, Settings as SettingsIcon, LogOut, Target, X, Handshake, UsersRound, Building2, ArrowLeftRight, BarChart3 } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { LayoutDashboard, Users, UserPlus, Settings as SettingsIcon, LogOut, Target, X, Handshake, UsersRound, Building2, ArrowLeftRight, BarChart3, UserPlus2 } from 'lucide-react'
 import clsx from 'clsx'
 import { useAuth } from '@/contexts/AuthContext'
 import { useOrg } from '@/contexts/OrgContext'
 import { RoleBadge, Avatar } from '@/components/ui/RoleBadge'
+import { signupRequestsApi } from '@/lib/api'
 
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -19,6 +21,14 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   const { viewingOrgId, viewingOrgName, exitToOrganizations } = useOrg()
   const navigate = useNavigate()
   const isSuperAdmin = profile?.role === 'super_admin'
+
+  const { data: signupRequestsData } = useQuery({
+    queryKey: ['signup-requests'],
+    queryFn: signupRequestsApi.list,
+    enabled: isSuperAdmin,
+    refetchInterval: 60_000,
+  })
+  const pendingSignupCount = (signupRequestsData?.requests ?? []).filter((r) => r.status === 'pending').length
   const navItems =
     profile && (profile.role === 'admin' || profile.role === 'super_admin')
       ? [...NAV_ITEMS.slice(0, 5), { to: '/team', label: 'Team', icon: UsersRound }, NAV_ITEMS[5]]
@@ -97,6 +107,28 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
             >
               <Building2 size={18} strokeWidth={2} />
               Organizations
+            </NavLink>
+          )}
+          {isSuperAdmin && (
+            <NavLink
+              to="/signup-requests"
+              onClick={onClose}
+              className={({ isActive }) =>
+                clsx(
+                  'group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150',
+                  isActive
+                    ? 'bg-accent-500/15 text-accent-400 shadow-[inset_0_0_0_1px_rgba(91,108,240,0.35)]'
+                    : 'text-base-300 hover:bg-base-800 hover:text-base-100'
+                )
+              }
+            >
+              <UserPlus2 size={18} strokeWidth={2} />
+              <span className="flex-1">Signup Requests</span>
+              {pendingSignupCount > 0 && (
+                <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-warn px-1.5 text-xs font-semibold text-base-950">
+                  {pendingSignupCount}
+                </span>
+              )}
             </NavLink>
           )}
           {navItems.map(({ to, label, icon: Icon }) => (
