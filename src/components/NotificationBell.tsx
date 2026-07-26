@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -35,6 +35,28 @@ export function NotificationBell() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  // Standard click-outside-to-close: a document-level listener (rather than a
+  // full-screen backdrop) so this reliably closes the panel even when the
+  // click lands on another element with a higher z-index (e.g. the sidebar).
+  useEffect(() => {
+    if (!open) return
+    function handlePointerDown(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [open])
 
   const { data: countData } = useQuery({
     queryKey: ['notifications-unread-count'],
@@ -97,7 +119,7 @@ export function NotificationBell() {
   const badgeLabel = unreadCount > 9 ? '9+' : String(unreadCount)
 
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       <button
         onClick={() => setOpen((o) => !o)}
         className="btn-ghost relative h-11 w-11 px-0"
@@ -112,12 +134,7 @@ export function NotificationBell() {
       </button>
 
       {open && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div
-            className="fixed inset-x-0 top-14 bottom-0 z-50 flex flex-col overflow-hidden bg-base-900 sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:bottom-auto sm:mt-2 sm:max-h-[70vh] sm:w-96 sm:rounded-xl sm:border sm:border-base-700/60 sm:shadow-lg"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="fixed inset-x-0 top-14 bottom-0 z-50 flex flex-col overflow-hidden bg-base-900 sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:bottom-auto sm:mt-2 sm:max-h-[70vh] sm:w-96 sm:rounded-xl sm:border sm:border-base-700/60 sm:shadow-lg">
             <div className="flex shrink-0 items-center justify-between border-b border-base-700/60 px-4 py-3">
               <span className="text-sm font-semibold text-base-100">Notifications</span>
               {unreadCount > 0 && (
@@ -179,7 +196,6 @@ export function NotificationBell() {
               View All
             </button>
           </div>
-        </>
       )}
     </div>
   )
