@@ -70,7 +70,12 @@ export function Login() {
           </div>
 
           <div>
-            <label className="label" htmlFor="password">Password</label>
+            <div className="flex items-center justify-between">
+              <label className="label" htmlFor="password">Password</label>
+              <Link to="/forgot-password" className="text-xs font-medium text-accent-400 hover:underline">
+                Forgot Password?
+              </Link>
+            </div>
             <div className="relative">
               <input
                 id="password"

@@ -1,27 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Copy, Check, ShieldAlert } from 'lucide-react'
+import { AlertTriangle } from 'lucide-react'
 import { signupRequestsApi } from '@/lib/api'
 import { Modal } from '@/components/ui/Modal'
+import { TempPasswordResult } from '@/components/TempPasswordResult'
 import type { ApproveSignupRequestResult, SignupRequest } from '@/types/signupRequest'
-
-function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) {
-  const [copied, setCopied] = useState(false)
-  return (
-    <button
-      type="button"
-      className="btn-secondary shrink-0"
-      onClick={async () => {
-        await navigator.clipboard.writeText(text)
-        setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
-      }}
-    >
-      {copied ? <Check size={15} /> : <Copy size={15} />}
-      {copied ? 'Copied' : label}
-    </button>
-  )
-}
 
 function draftWelcomeMessage(result: ApproveSignupRequestResult): string {
   const loginUrl = `${window.location.origin}/login`
@@ -70,46 +53,12 @@ export function ApproveFlow({ request, onClose }: { request: SignupRequest | nul
   if (result) {
     return (
       <Modal open onClose={handleClose} title="Account created" size="lg">
-        <div className="space-y-4">
-          <div className="flex items-start gap-2.5 rounded-lg bg-warn-bg px-3 py-2.5 text-sm text-warn">
-            <ShieldAlert size={16} className="mt-0.5 shrink-0" />
-            <p>
-              This app does <strong>not</strong> send any email automatically. Copy the credentials or the message
-              below and send it yourself from your own email client.
-            </p>
-          </div>
-
-          <div>
-            <label className="label">Email</label>
-            <div className="flex gap-2">
-              <input readOnly className="input" value={result.admin.email} />
-              <CopyButton text={result.admin.email} />
-            </div>
-          </div>
-
-          <div>
-            <label className="label">Temporary Password</label>
-            <div className="flex gap-2">
-              <input readOnly className="input font-mono" value={result.admin.temporary_password} />
-              <CopyButton text={result.admin.temporary_password} />
-            </div>
-          </div>
-
-          <div>
-            <div className="mb-1.5 flex items-center justify-between">
-              <label className="label mb-0">Welcome Message (editable)</label>
-            </div>
-            <textarea
-              className="input min-h-[200px] resize-y font-mono text-xs"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-            />
-            <div className="mt-2 flex justify-end">
-              <CopyButton text={draft} label="Copy Message" />
-            </div>
-          </div>
-        </div>
-
+        <TempPasswordResult
+          email={result.admin.email}
+          temporaryPassword={result.admin.temporary_password}
+          draft={draft}
+          onDraftChange={setDraft}
+        />
         <div className="mt-5 flex justify-end border-t border-base-700/60 pt-4">
           <button className="btn-primary" onClick={handleClose}>Done</button>
         </div>

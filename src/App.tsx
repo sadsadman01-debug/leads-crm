@@ -4,6 +4,7 @@ import { ProtectedRoute, RequireAdmin, RequireSuperAdmin, RequirePasswordSet, De
 import { AppLayout } from '@/components/Layout/AppLayout'
 import { Login } from '@/pages/Login'
 import { RequestAccess } from '@/pages/RequestAccess'
+import { ForgotPassword } from '@/pages/ForgotPassword'
 import { SetNewPassword } from '@/pages/SetNewPassword'
 import { LeadsList } from '@/pages/Leads/LeadsList'
 import { LeadForm } from '@/pages/Leads/LeadForm'
@@ -12,6 +13,7 @@ import { Settings } from '@/pages/Settings'
 import { TeamList } from '@/pages/Team/TeamList'
 import { OrganizationsOverview } from '@/pages/Organizations/OrganizationsOverview'
 import { SignupRequestsPage } from '@/pages/SignupRequests/SignupRequestsPage'
+import { PasswordResetRequestsPage } from '@/pages/PasswordResetRequests/PasswordResetRequestsPage'
 
 // Charting (recharts) is only needed here — code-split so it doesn't bloat every route.
 const Dashboard = lazy(() => import('@/pages/Dashboard').then((m) => ({ default: m.Dashboard })))
@@ -27,6 +29,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/request-access" element={<RequestAccess />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
 
       <Route element={<ProtectedRoute />}>
         <Route path="/set-new-password" element={<SetNewPassword />} />
@@ -36,6 +39,7 @@ export default function App() {
             <Route element={<RequireSuperAdmin />}>
               <Route path="/organizations" element={<OrganizationsOverview />} />
               <Route path="/signup-requests" element={<SignupRequestsPage />} />
+              <Route path="/password-reset-requests" element={<PasswordResetRequestsPage />} />
             </Route>
             <Route
               path="/dashboard"

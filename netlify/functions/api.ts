@@ -61,6 +61,7 @@ import {
   getTeamMemberPermissions,
   updateTeamMemberPermissions,
   clearForcePasswordChange,
+  resetTeamMemberPassword,
 } from './routes/team.js'
 import {
   createSignupRequest,
@@ -68,6 +69,11 @@ import {
   approveSignupRequest,
   rejectSignupRequest,
 } from './routes/signupRequests.js'
+import {
+  createPasswordResetRequest,
+  listPasswordResetRequests,
+  resolvePasswordResetRequest,
+} from './routes/passwordResetRequests.js'
 import {
   listOrganizations,
   getOrganization,
@@ -133,6 +139,19 @@ export const handler: Handler = async (event) => {
         if (!id && method === 'GET') response = await listSignupRequests(user)
         else if (id && sub === 'approve' && method === 'POST') response = await approveSignupRequest(id, event, user)
         else if (id && sub === 'reject' && method === 'POST') response = await rejectSignupRequest(id, event, user)
+        else throw new HttpError(404, 'Not found')
+      }
+    } else if (resource === 'password-reset-requests') {
+      // Same shape as signup-requests: the public "Forgot Password" submission
+      // needs no session; viewing/resolving is Admin-or-above, scoped per role
+      // inside each function (an Admin only ever sees their own org's User
+      // requests; only the Super Admin can see/resolve an Admin-role request).
+      if (!id && method === 'POST') {
+        response = await createPasswordResetRequest(event)
+      } else {
+        const user = await requireUser(event)
+        if (!id && method === 'GET') response = await listPasswordResetRequests(event, user)
+        else if (id && sub === 'resolve' && method === 'POST') response = await resolvePasswordResetRequest(id, event, user)
         else throw new HttpError(404, 'Not found')
       }
     } else if (resource === 'leads') {
@@ -204,6 +223,9 @@ export const handler: Handler = async (event) => {
       } else if (sub === 'permissions') {
         if (method === 'GET') response = await getTeamMemberPermissions(id, event, user)
         else if (method === 'PUT') response = await updateTeamMemberPermissions(id, event, user)
+        else throw new HttpError(405, 'Method not allowed')
+      } else if (sub === 'reset-password') {
+        if (method === 'POST') response = await resetTeamMemberPassword(id, event, user)
         else throw new HttpError(405, 'Method not allowed')
       } else {
         if (method === 'PUT') response = await updateTeamMember(id, event, user)

@@ -28,6 +28,7 @@ import type { Organization, OrganizationSummary } from '@/types/organization'
 import type { CustomFieldDefinition, AppliesTo, FieldType } from '@/types/customField'
 import type { SavedReport, ReportRunResult, ReportType, ChartType, ReportFilters } from '@/types/report'
 import type { SignupRequest, ApproveSignupRequestResult } from '@/types/signupRequest'
+import type { PasswordResetRequest, PasswordResetResult } from '@/types/passwordResetRequest'
 import { withOrgScope } from './orgScope'
 
 class ApiError extends Error {
@@ -378,6 +379,20 @@ export const signupRequestsApi = {
     request<SignupRequest>(`/signup-requests/${id}/reject`, { method: 'POST', body: JSON.stringify({ rejection_reason }) }),
 }
 
+export const passwordResetRequestsApi = {
+  /** Public — reachable from the Login page before any session exists. Always
+   * resolves the same way whether or not a matching account was found. */
+  create: (email: string) =>
+    requestPublic<{ message: string }>('/password-reset-requests', { method: 'POST', body: JSON.stringify({ email }) }),
+
+  list: () => request<{ requests: PasswordResetRequest[] }>('/password-reset-requests'),
+
+  resolve: (id: string) =>
+    request<{ request: PasswordResetRequest; admin: PasswordResetResult }>(`/password-reset-requests/${id}/resolve`, {
+      method: 'POST',
+    }),
+}
+
 export const teamApi = {
   me: () => request<{
     id: string
@@ -416,6 +431,9 @@ export const teamApi = {
 
   resetPermissions: (id: string) =>
     request<TeamMember>(`/team-members/${id}/permissions`, { method: 'PUT', body: JSON.stringify({ reset: true }) }),
+
+  resetPassword: (id: string) =>
+    request<{ admin: PasswordResetResult }>(`/team-members/${id}/reset-password`, { method: 'POST' }),
 }
 
 export const tagsApi = {

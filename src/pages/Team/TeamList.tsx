@@ -1,26 +1,41 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, UsersRound, ShieldCheck } from 'lucide-react'
-import { teamApi } from '@/lib/api'
+import { Plus, UsersRound, ShieldCheck, KeyRound, Mail } from 'lucide-react'
+import { teamApi, passwordResetRequestsApi } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { Modal } from '@/components/ui/Modal'
 import { RoleBadge, Avatar } from '@/components/ui/RoleBadge'
 import { Badge } from '@/components/ui/Badge'
 import { PermissionsPanel } from '@/components/PermissionsPanel'
+import { DirectPasswordResetModal } from '@/components/DirectPasswordResetModal'
+import { PasswordResetResolveModal } from '@/components/PasswordResetResolveModal'
 import { DEFAULT_USER_PERMISSIONS, permissionsMatchDefault, type TeamMember } from '@/types/team'
+import type { PasswordResetRequest } from '@/types/passwordResetRequest'
+
+type Tab = 'members' | 'password-resets'
 
 export function TeamList() {
   const { profile } = useAuth()
   const queryClient = useQueryClient()
+  const [tab, setTab] = useState<Tab>('members')
   const [addOpen, setAddOpen] = useState(false)
   const [editing, setEditing] = useState<TeamMember | null>(null)
   const [deactivating, setDeactivating] = useState<TeamMember | null>(null)
   const [deleting, setDeleting] = useState<TeamMember | null>(null)
   const [managingPermissions, setManagingPermissions] = useState<TeamMember | null>(null)
+  const [resettingPassword, setResettingPassword] = useState<TeamMember | null>(null)
+  const [resolvingRequest, setResolvingRequest] = useState<PasswordResetRequest | null>(null)
 
   const { data, isLoading } = useQuery({ queryKey: ['team-members'], queryFn: teamApi.list })
   const members = data?.members ?? []
   const isSuperAdmin = profile?.role === 'super_admin'
+
+  const { data: resetRequestsData } = useQuery({
+    queryKey: ['password-reset-requests'],
+    queryFn: passwordResetRequestsApi.list,
+  })
+  const resetRequests = resetRequestsData?.requests ?? []
+  const pendingResetRequests = resetRequests.filter((r) => r.status === 'pending')
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: ['team-members'] })
@@ -38,13 +53,77 @@ export function TeamList() {
           <h1 className="text-2xl font-semibold text-base-100">Team</h1>
           <p className="mt-1 text-sm text-base-400">{members.length} member{members.length === 1 ? '' : 's'}</p>
         </div>
-        <button className="btn-primary" onClick={() => setAddOpen(true)}>
-          <Plus size={16} />
-          Add Team Member
+        {tab === 'members' && (
+          <button className="btn-primary" onClick={() => setAddOpen(true)}>
+            <Plus size={16} />
+            Add Team Member
+          </button>
+        )}
+      </div>
+
+      <div className="mb-4 flex gap-1 rounded-lg bg-base-850 p-1 w-fit">
+        <button
+          className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+            tab === 'members' ? 'bg-accent-500 text-white' : 'text-base-300 hover:text-base-100'
+          }`}
+          onClick={() => setTab('members')}
+        >
+          Team Members
+        </button>
+        <button
+          className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+            tab === 'password-resets' ? 'bg-accent-500 text-white' : 'text-base-300 hover:text-base-100'
+          }`}
+          onClick={() => setTab('password-resets')}
+        >
+          Password Reset Requests
+          {pendingResetRequests.length > 0 && (
+            <span className={`rounded-full px-1.5 text-xs ${tab === 'password-resets' ? 'bg-white/20' : 'bg-warn-bg text-warn'}`}>
+              {pendingResetRequests.length}
+            </span>
+          )}
         </button>
       </div>
 
-      {isLoading ? (
+      {tab === 'password-resets' ? (
+        pendingResetRequests.length === 0 ? (
+          <div className="card flex flex-col items-center gap-3 p-16 text-center">
+            <KeyRound size={32} className="text-base-500" />
+            <p className="text-base-300">No pending password reset requests.</p>
+          </div>
+        ) : (
+          <div className="card overflow-x-auto p-6">
+            <table className="w-full min-w-[600px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-base-700/60 text-xs uppercase tracking-wide text-base-400">
+                  <th className="py-2 pr-3 font-medium">User</th>
+                  <th className="px-3 py-2 font-medium">Requested</th>
+                  <th className="px-3 py-2 font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendingResetRequests.map((r) => (
+                  <tr key={r.id} className="border-b border-base-800">
+                    <td className="py-3 pr-3">
+                      <div className="font-medium text-base-100">{r.target_nickname || r.target_email}</div>
+                      <div className="mt-0.5 flex items-center gap-1.5 text-xs text-base-400">
+                        <Mail size={12} className="shrink-0" />
+                        {r.target_email}
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 text-base-400">{new Date(r.requested_at).toLocaleString()}</td>
+                    <td className="px-3 py-3">
+                      <button className="btn-ghost px-2 text-accent-400" onClick={() => setResolvingRequest(r)}>
+                        Reset Password
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      ) : isLoading ? (
         <div className="card p-12 text-center text-base-400">Loading team…</div>
       ) : members.length === 0 ? (
         <div className="card flex flex-col items-center gap-3 p-16 text-center">
@@ -99,6 +178,14 @@ export function TeamList() {
                           <button className="btn-ghost px-2 text-accent-400" onClick={() => setEditing(m)}>
                             Edit
                           </button>
+                          <button
+                            className="btn-ghost px-2 text-accent-400"
+                            title="Reset password"
+                            onClick={() => setResettingPassword(m)}
+                          >
+                            <KeyRound size={16} />
+                            Reset Password
+                          </button>
                           {m.role === 'user' && (
                             <button
                               className="btn-ghost px-2 text-accent-400"
@@ -152,6 +239,16 @@ export function TeamList() {
         member={managingPermissions}
         onClose={() => setManagingPermissions(null)}
         onSaved={invalidate}
+      />
+      <DirectPasswordResetModal
+        key={`direct-${resettingPassword?.id ?? 'none'}`}
+        member={resettingPassword}
+        onClose={() => setResettingPassword(null)}
+      />
+      <PasswordResetResolveModal
+        key={`request-${resolvingRequest?.id ?? 'none'}`}
+        request={resolvingRequest}
+        onClose={() => setResolvingRequest(null)}
       />
     </div>
   )

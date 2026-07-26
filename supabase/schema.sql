@@ -61,6 +61,27 @@ create table if not exists public.signup_requests (
 
 create index if not exists signup_requests_status_idx on public.signup_requests (status);
 
+-- ----------------------------------------------------------------------------
+-- password_reset_requests: public "Forgot Password" submissions from the Login
+-- page, routed to whoever can act on them (the requester's own org Admin(s)
+-- for a User target, or only the Super Admin for an Admin target) and manually
+-- resolved with a fresh temporary password — no outbound email, ever.
+-- ----------------------------------------------------------------------------
+create table if not exists public.password_reset_requests (
+  id uuid primary key default gen_random_uuid(),
+  target_profile_id uuid not null references public.profiles(id) on delete cascade,
+  target_email text not null,
+  target_role text not null check (target_role in ('admin', 'user')),
+  organization_id uuid references public.organizations(id) on delete cascade,
+  status text not null default 'pending' check (status in ('pending', 'resolved')),
+  requested_at timestamptz not null default now(),
+  resolved_at timestamptz,
+  resolved_by uuid references public.profiles(id) on delete set null
+);
+
+create index if not exists password_reset_requests_status_idx on public.password_reset_requests (status);
+create index if not exists password_reset_requests_org_idx on public.password_reset_requests (organization_id);
+
 -- Auto-create a profile row whenever a new auth user is created. New accounts
 -- default to 'user' — the Team Management "add member" function immediately
 -- updates role/nickname right after this trigger runs. The single Super Admin
@@ -629,6 +650,25 @@ create policy "signup_requests super admin only"
   on public.signup_requests for all
   using (public.is_super_admin())
   with check (public.is_super_admin());
+
+-- password_reset_requests: an Admin only sees/resolves User-role requests
+-- within their own organization; the Super Admin sees/resolves everything,
+-- including every Admin-role request platform-wide. No insert policy for
+-- authenticated/anon roles — the public submission always goes through the
+-- service-role key inside the Netlify Function, bypassing RLS entirely.
+alter table public.password_reset_requests enable row level security;
+create policy "password_reset_requests select scoped"
+  on public.password_reset_requests for select
+  using (
+    public.is_super_admin()
+    or (target_role = 'user' and public.is_admin_or_above() and organization_id = public.current_org_id())
+  );
+create policy "password_reset_requests update scoped"
+  on public.password_reset_requests for update
+  using (
+    public.is_super_admin()
+    or (target_role = 'user' and public.is_admin_or_above() and organization_id = public.current_org_id())
+  );
 
 -- profiles: scoped to own organization; Super Admin sees everyone; everyone
 -- can always read their own row (needed for login/profile checks).

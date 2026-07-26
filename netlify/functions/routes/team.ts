@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
 import { requireAdminOrAbove, requireSuperAdmin, isSuperAdmin, resolveOrganizationId, scopeToOrg } from '../lib/permissions.js'
 import { DEFAULT_USER_PERMISSIONS, normalizePermissions } from '../lib/userPermissions.js'
+import { performPasswordReset } from './passwordResetRequests.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const PROFILE_COLUMNS = 'id, email, nickname, role, is_active, created_at'
@@ -128,6 +129,24 @@ async function getTargetProfile(id: string, orgId: string | null) {
   if (!data) throw new HttpError(404, 'Team member not found')
   if (data.role === 'super_admin' || data.organization_id !== orgId) throw new HttpError(404, 'Team member not found')
   return data
+}
+
+/** Proactive reset from Team Management — no forgot-password request needed.
+ * An Admin may reset a User in their own organization; only a Super Admin may
+ * reset an Admin (same rule enforced again, independently, inside
+ * performPasswordReset itself — this check here is just the fast, org-scoped
+ * "does this row exist for you at all" gate that every other team.ts route uses). */
+export async function resetTeamMemberPassword(id: string, event: HandlerEvent, user: AuthedUser) {
+  requireAdminOrAbove(user)
+  const orgId = resolveOrganizationId(user, event)
+  const target = await getTargetProfile(id, orgId)
+  if (target.id === user.id) throw new HttpError(400, 'Use your own account settings to change your own password')
+  if (target.role !== 'user' && !isSuperAdmin(user)) {
+    throw new HttpError(403, "Only a Super Admin can reset an Admin account's password")
+  }
+
+  const result = await performPasswordReset(target.id, user)
+  return json(200, { admin: result })
 }
 
 /** Body: a partial UserPermissions object — unspecified keys keep their current
