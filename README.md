@@ -1,6 +1,6 @@
 # Leads CRM
 
-A private, single-admin lead tracking system for outbound sales (cold email, WhatsApp, and multi-channel outreach). Built as a JAMstack app for Netlify: static React frontend + Netlify Functions API + Supabase (Postgres, Auth, Storage).
+A private, single-admin lead tracking system for outbound sales (cold email, WhatsApp, and multi-channel outreach). Built as a JAMstack app: static React frontend + a serverless functions API + Supabase (Postgres, Auth, Storage). Deployable to either Netlify or Vercel (see below) — the API is a single Netlify Functions router at `netlify/functions/api.ts` with a thin adapter (`api/[...path].ts`) that runs the same router unmodified as a Vercel Function.
 
 **Phase 1**: auth, lead data model, outreach status toggles, basic list/detail views.
 **Phase 2**: advanced filtering, bulk actions, CSV/Google Sheets import, CSV export, and a full analytics dashboard.
@@ -12,15 +12,18 @@ A private, single-admin lead tracking system for outbound sales (cold email, Wha
 ## Stack
 
 - **Frontend**: Vite + React + TypeScript + Tailwind CSS, React Router, TanStack Query
-- **Backend**: Netlify Functions (serverless), single router at `netlify/functions/api.ts`
+- **Backend**: a single serverless router (`netlify/functions/api.ts`) with zero runtime dependency on any Netlify-specific API — it only reads `path`/`httpMethod`/`headers`/`body`/`queryStringParameters` off its event, so it runs unmodified under either host
 - **Database / Auth / Storage**: Supabase (Postgres + Supabase Auth + Supabase Storage)
-- **Deployment**: Netlify (static build + functions, no long-running server)
+- **Deployment**: Netlify **or** Vercel (static build + one serverless function, no long-running server either way)
 
 ## Project structure
 
 ```
+api/[...path].ts         Vercel Function entry point — adapts a Vercel request into the same
+                         HandlerEvent shape netlify/functions/api.ts expects, then delegates to it
 netlify/functions/       Serverless API (auth-checked, uses the Supabase service-role key)
-  api.ts                 Single router entry point (/api/*)
+  api.ts                 Single router entry point (/api/*), used directly by Netlify and via the
+                         adapter above by Vercel
   lib/                   auth verification, supabase admin client, http helpers, tag resolution,
                          reminders, scoring, activities (timeline logging)
   routes/                leads (filters/bulk/stage/kanban/activities), tags, attachments, importExport,
@@ -84,6 +87,18 @@ scripts/seed-admin.mjs           One-time script to create the single admin user
    - `SUPABASE_URL`
    - `SUPABASE_SERVICE_ROLE_KEY` (keep this secret — server-side only, never prefixed with `VITE_`)
 4. Deploy. No server to provision — Netlify builds the static frontend and deploys the functions automatically.
+
+## Deploying to Vercel
+
+1. Push this repo to GitHub/GitLab/Bitbucket.
+2. In Vercel: **Add New → Project**, import the repo. Framework preset "Vite" is auto-detected; build command/output directory are also pinned explicitly in `vercel.json` (`npm run build` → `dist`) so they don't drift from what Netlify uses. The catch-all Vercel Function at `api/[...path].ts` is picked up automatically from the `api/` directory — no extra config needed.
+3. Under **Project Settings → Environment Variables**, add the same four variables as the Netlify setup:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY` (server-side only, never prefixed with `VITE_`)
+4. Deploy. `vercel.json` handles the SPA fallback rewrite (everything except `/api/*` serves `index.html`) and the same security headers `netlify.toml` sets.
+5. **How the API stays identical on both hosts**: every route/lib file under `netlify/functions/` only ever reads five fields off its event object (`path`, `httpMethod`, `headers`, `body`, `queryStringParameters`) and has no other Netlify-specific import — confirmed by grepping the entire functions tree. `api/[...path].ts` is a small adapter that builds one of those synthetic events from the incoming Vercel request and calls the exact same `handler` Netlify uses, so the two hosts run identical route logic; nothing under `netlify/functions/` needed to change for the Vercel migration. Both `netlify.toml` and `vercel.json` can coexist in the repo indefinitely — whichever host you deploy to just ignores the other's config file.
 
 ## Data model notes (for future phases)
 
