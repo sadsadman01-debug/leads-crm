@@ -82,6 +82,32 @@ create table if not exists public.password_reset_requests (
 create index if not exists password_reset_requests_status_idx on public.password_reset_requests (status);
 create index if not exists password_reset_requests_org_idx on public.password_reset_requests (organization_id);
 
+-- ----------------------------------------------------------------------------
+-- notifications: the unified, role-aware Notification Center. One row per
+-- recipient per event — an org-wide event (e.g. a Deal closing) fans out to
+-- one row per Admin, not one shared row, so read/unread state is per-person.
+-- ----------------------------------------------------------------------------
+create table if not exists public.notifications (
+  id uuid primary key default gen_random_uuid(),
+  recipient_profile_id uuid not null references public.profiles(id) on delete cascade,
+  organization_id uuid references public.organizations(id) on delete cascade,
+  type text not null check (type in (
+    'signup_request', 'password_reset_request', 'lead_assigned', 'deal_assigned',
+    'follow_up_overdue', 'deal_closing_soon', 'deal_closed_won', 'deal_closed_lost'
+  )),
+  title text not null,
+  message text not null,
+  link_route text,
+  related_entity_id uuid,
+  related_entity_type text,
+  is_read boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists notifications_recipient_idx on public.notifications (recipient_profile_id, created_at desc);
+create index if not exists notifications_recipient_unread_idx on public.notifications (recipient_profile_id, is_read);
+create index if not exists notifications_dedup_idx on public.notifications (recipient_profile_id, type, related_entity_id, created_at);
+
 -- Auto-create a profile row whenever a new auth user is created. New accounts
 -- default to 'user' — the Team Management "add member" function immediately
 -- updates role/nickname right after this trigger runs. The single Super Admin
@@ -669,6 +695,30 @@ create policy "password_reset_requests update scoped"
     public.is_super_admin()
     or (target_role = 'user' and public.is_admin_or_above() and organization_id = public.current_org_id())
   );
+
+-- notifications: a profile may only ever see/update their own — never another
+-- account's, never across organizations. No insert policy for authenticated/
+-- anon roles — creation always goes through the service-role key.
+alter table public.notifications enable row level security;
+create policy "notifications select own"
+  on public.notifications for select
+  using (recipient_profile_id = auth.uid());
+create policy "notifications update own"
+  on public.notifications for update
+  using (recipient_profile_id = auth.uid())
+  with check (recipient_profile_id = auth.uid());
+
+-- Enables Supabase Realtime (Postgres change subscriptions, free on every
+-- plan) so the bell updates instantly without polling.
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'notifications'
+  ) then
+    alter publication supabase_realtime add table public.notifications;
+  end if;
+end $$;
 
 -- profiles: scoped to own organization; Super Admin sees everyone; everyone
 -- can always read their own row (needed for login/profile checks).

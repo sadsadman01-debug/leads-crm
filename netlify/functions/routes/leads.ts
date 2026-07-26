@@ -17,6 +17,7 @@ import {
   applyLeadVisibility,
 } from '../lib/permissions.js'
 import { loadActiveDefinitions, requireRequiredFieldsFilled, mergeCustomFieldValues } from '../lib/customFieldValues.js'
+import { notifyAssignment } from '../lib/notifications.js'
 
 export const LEAD_SELECT = `
   id, company_name, contact_name, address, phone, email, website, notes, lead_source, priority,
@@ -278,6 +279,18 @@ export async function createLead(event: HandlerEvent, user: AuthedUser) {
     logActivity(leadId, 'created', 'Lead created', user.id),
   ])
 
+  await notifyAssignment({
+    assigneeId: assignedTo,
+    actorId: user.id,
+    organizationId: orgId,
+    type: 'lead_assigned',
+    title: 'New lead assigned to you',
+    message: `"${body.company_name.trim()}" was assigned to you.`,
+    linkRoute: `/leads/${leadId}`,
+    entityId: leadId,
+    entityType: 'lead',
+  })
+
   return getLead(leadId, orgId, user)
 }
 
@@ -303,7 +316,7 @@ async function fetchLeadInScope(id: string, user: AuthedUser, event: HandlerEven
   const orgId = resolveOrganizationId(user, event)
   const { data: existing, error: fetchErr } = await supabase
     .from('leads')
-    .select('id, assigned_to, created_by, organization_id, custom_fields')
+    .select('id, company_name, assigned_to, created_by, organization_id, custom_fields')
     .eq('id', id)
     .single()
   if (fetchErr || !existing) throw new HttpError(404, 'Lead not found')
@@ -325,11 +338,13 @@ export async function updateLead(id: string, event: HandlerEvent, user: AuthedUs
 
   // Reassignment is restricted to admins/super admins, or the current owner
   // handing the lead off to someone else.
+  let newAssignee: string | null = null
   if ('assigned_to' in body) {
     if (!isAdminOrAbove(user) && existing.assigned_to !== user.id) {
       throw new HttpError(403, 'Only an admin or the current owner can reassign this lead')
     }
-    updatable.assigned_to = body.assigned_to || null
+    newAssignee = body.assigned_to || null
+    updatable.assigned_to = newAssignee
   }
 
   let customFieldMessages: string[] = []
@@ -345,7 +360,20 @@ export async function updateLead(id: string, event: HandlerEvent, user: AuthedUs
     if (error) throw new HttpError(500, error.message)
   }
 
-  if ('assigned_to' in body) await logActivity(id, 'assignment', 'Assigned owner changed', user.id)
+  if ('assigned_to' in body) {
+    await logActivity(id, 'assignment', 'Assigned owner changed', user.id)
+    await notifyAssignment({
+      assigneeId: newAssignee,
+      actorId: user.id,
+      organizationId: existing.organization_id,
+      type: 'lead_assigned',
+      title: 'Lead assigned to you',
+      message: `"${existing.company_name}" was reassigned to you.`,
+      linkRoute: `/leads/${id}`,
+      entityId: id,
+      entityType: 'lead',
+    })
+  }
   if (customFieldMessages.length > 0) {
     await logActivities(customFieldMessages.map((message) => ({ leadId: id, type: 'custom_field', message, userId: user.id })))
   }

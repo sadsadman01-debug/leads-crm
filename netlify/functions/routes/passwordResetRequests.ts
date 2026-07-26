@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
 import { isAdminOrAbove, isSuperAdmin, requireSuperAdmin } from '../lib/permissions.js'
 import { generateTempPassword } from '../lib/passwordGen.js'
+import { notifySuperAdmins, notifyOrgAdmins } from '../lib/notifications.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const COLUMNS =
@@ -25,12 +26,33 @@ export async function createPasswordResetRequest(event: HandlerEvent) {
       .maybeSingle()
 
     if (target && target.is_active && (target.role === 'admin' || target.role === 'user')) {
-      await supabase.from('password_reset_requests').insert({
-        target_profile_id: target.id,
-        target_email: target.email,
-        target_role: target.role,
-        organization_id: target.organization_id,
-      })
+      const { data: created } = await supabase
+        .from('password_reset_requests')
+        .insert({
+          target_profile_id: target.id,
+          target_email: target.email,
+          target_role: target.role,
+          organization_id: target.organization_id,
+        })
+        .select('id')
+        .single()
+
+      // Per the routing rules: an Admin target only the Super Admin can act on
+      // (only Super Admin manages Admin accounts); a User target goes to
+      // their own org's Admin(s).
+      const notifyFields = {
+        type: 'password_reset_request' as const,
+        title: 'Password reset requested',
+        message: `${target.email} requested a password reset.`,
+        link_route: target.role === 'admin' ? '/password-reset-requests' : '/team',
+        related_entity_id: created?.id ?? null,
+        related_entity_type: 'password_reset_request',
+      }
+      if (target.role === 'admin') {
+        await notifySuperAdmins(notifyFields)
+      } else if (target.organization_id) {
+        await notifyOrgAdmins(target.organization_id, notifyFields)
+      }
     }
   }
 

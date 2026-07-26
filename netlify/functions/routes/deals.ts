@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
 import { logActivity } from '../lib/activities.js'
 import { getOrRefreshRates } from '../lib/exchangeRates.js'
+import { notifyAssignment, notifyOrgAdmins } from '../lib/notifications.js'
 import type { AuthedUser } from '../lib/auth.js'
 import {
   requireCanModifyRecord,
@@ -206,6 +207,18 @@ export async function createDeal(event: HandlerEvent, user: AuthedUser) {
     user.id
   )
 
+  await notifyAssignment({
+    assigneeId: ownerId,
+    actorId: user.id,
+    organizationId: orgId,
+    type: 'deal_assigned',
+    title: 'New deal assigned to you',
+    message: `"${data.name}" was assigned to you.`,
+    linkRoute: '/deals',
+    entityId: data.id,
+    entityType: 'deal',
+  })
+
   return getDeal(data.id, orgId, user)
 }
 
@@ -213,7 +226,7 @@ export async function updateDeal(id: string, event: HandlerEvent, user: AuthedUs
   const supabase = getSupabaseAdmin()
   const body = JSON.parse(event.body || '{}')
 
-  const { existing, orgId } = await fetchDealInScope(id, user, event, 'id, owner_id, organization_id, lead_id, custom_fields')
+  const { existing, orgId } = await fetchDealInScope(id, user, event, 'id, name, owner_id, organization_id, lead_id, custom_fields')
   requireCanModifyRecord(user, existing, 'deal')
 
   const updatable: Record<string, any> = {}
@@ -223,11 +236,13 @@ export async function updateDeal(id: string, event: HandlerEvent, user: AuthedUs
 
   // Reassignment is restricted to admins/super admins, or the current owner
   // handing the deal off to someone else.
+  let newOwner: string | null = null
   if ('owner_id' in body) {
     if (!isAdminOrAbove(user) && existing.owner_id !== user.id) {
       throw new HttpError(403, 'Only an admin or the current owner can reassign this deal')
     }
-    updatable.owner_id = body.owner_id || null
+    newOwner = body.owner_id || null
+    updatable.owner_id = newOwner
   }
 
   let customFieldMessages: string[] = []
@@ -245,6 +260,20 @@ export async function updateDeal(id: string, event: HandlerEvent, user: AuthedUs
 
   for (const message of customFieldMessages) {
     await logActivity(existing.lead_id, 'custom_field', message, user.id)
+  }
+
+  if ('owner_id' in body) {
+    await notifyAssignment({
+      assigneeId: newOwner,
+      actorId: user.id,
+      organizationId: existing.organization_id,
+      type: 'deal_assigned',
+      title: 'Deal assigned to you',
+      message: `"${updatable.name ?? existing.name}" was reassigned to you.`,
+      linkRoute: '/deals',
+      entityId: id,
+      entityType: 'deal',
+    })
   }
 
   return getDeal(id, orgId, user)
@@ -302,6 +331,17 @@ export async function updateDealStage(id: string, event: HandlerEvent, user: Aut
       }`
     : `Deal "${deal.name}" moved to ${stage.name}`
   await logActivity(deal.lead_id, 'deal', message, user.id)
+
+  if (stage.is_closed && orgId) {
+    await notifyOrgAdmins(orgId, {
+      type: stage.is_won ? 'deal_closed_won' : 'deal_closed_lost',
+      title: stage.is_won ? 'Deal Closed Won' : 'Deal Closed Lost',
+      message: `"${deal.name}" (${formatCurrency(Number(deal.value), deal.currency)}) was Closed ${stage.is_won ? 'Won' : 'Lost'}.`,
+      link_route: '/deals',
+      related_entity_id: id,
+      related_entity_type: 'deal',
+    })
+  }
 
   return getDeal(id, orgId, user)
 }

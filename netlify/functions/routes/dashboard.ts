@@ -2,7 +2,8 @@ import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
 import { computeReminder } from '../lib/reminders.js'
-import { isAdminOrAbove, hasFeaturePermission, resolveOrganizationId, scopeToOrg } from '../lib/permissions.js'
+import { isAdminOrAbove, isSuperAdmin, hasFeaturePermission, resolveOrganizationId, scopeToOrg } from '../lib/permissions.js'
+import { maybeCreateOverdueDigest, maybeNotifyDealDate } from '../lib/notifications.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const MAX_REMINDER_ITEMS = 50
@@ -196,6 +197,63 @@ export async function getDashboardSummary(event: HandlerEvent, user: AuthedUser)
 
   const overdueCount = statuses.filter((s: any) => computeReminder(s).is_overdue).length
   const dueTodayCount = statuses.filter((s: any) => computeReminder(s).is_due_today).length
+
+  // Lazily-triggered notification checks — no cron job exists in this app (same
+  // "check on next request" pattern already used for exchange-rate refresh), so
+  // these run inline on Dashboard load rather than on a schedule. Both are
+  // internally deduped (at most one overdue digest per recipient per day; at
+  // most one deal_closing_soon notification per deal ever), so repeated
+  // Dashboard visits never spam duplicates. Super Admin visits (inspecting an
+  // organization, or their own personal/sandbox scope) never generate these —
+  // this is about the org's own Admin/User accountability, not the platform view.
+  if (!isSuperAdmin(user) && orgId) {
+    if (isAdminOrAbove(user)) {
+      const allStatusesForDigest = allRows.map((r: any) => (Array.isArray(r.lead_status) ? r.lead_status[0] : r.lead_status))
+      const orgOverdueCount = allStatusesForDigest.filter((s: any) => computeReminder(s).is_overdue).length
+      await maybeCreateOverdueDigest({
+        recipientId: user.id,
+        organizationId: orgId,
+        overdueCount: orgOverdueCount,
+        scopeLabel: 'in your Organization',
+        linkRoute: '/leads',
+      })
+    } else {
+      const selfRows = allRows.filter((r: any) => r.assigned_to === user.id)
+      const selfStatuses = selfRows.map((r: any) => (Array.isArray(r.lead_status) ? r.lead_status[0] : r.lead_status))
+      const selfOverdueCount = selfStatuses.filter((s: any) => computeReminder(s).is_overdue).length
+      await maybeCreateOverdueDigest({
+        recipientId: user.id,
+        organizationId: orgId,
+        overdueCount: selfOverdueCount,
+        scopeLabel: 'assigned to you',
+        linkRoute: '/leads',
+      })
+
+      let myDealsQuery = supabase
+        .from('deals')
+        .select('id, name, expected_close_date, deal_stages(is_closed)')
+        .eq('owner_id', user.id)
+        .not('expected_close_date', 'is', null)
+      myDealsQuery = scopeToOrg(myDealsQuery as any, orgId) as any
+      const { data: myDeals } = await myDealsQuery
+
+      const now = new Date()
+      const soonThreshold = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000)
+      for (const d of (myDeals ?? []) as any[]) {
+        if (d.deal_stages?.is_closed || !d.expected_close_date) continue
+        const closeDate = new Date(d.expected_close_date)
+        if (closeDate <= soonThreshold) {
+          await maybeNotifyDealDate({
+            recipientId: user.id,
+            organizationId: orgId,
+            dealId: d.id,
+            dealName: d.name,
+            isOverdue: closeDate < now,
+          })
+        }
+      }
+    }
+  }
 
   let industriesQuery = supabase.from('industries').select('id, name')
   industriesQuery = scopeToOrg(industriesQuery as any, orgId) as any

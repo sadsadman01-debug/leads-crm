@@ -75,6 +75,12 @@ import {
   resolvePasswordResetRequest,
 } from './routes/passwordResetRequests.js'
 import {
+  listNotifications,
+  getUnreadCount,
+  markNotificationRead,
+  markAllNotificationsRead,
+} from './routes/notifications.js'
+import {
   listOrganizations,
   getOrganization,
   createOrganizationWithAdmin,
@@ -153,6 +159,23 @@ export const handler: Handler = async (event) => {
         if (!id && method === 'GET') response = await listPasswordResetRequests(event, user)
         else if (id && sub === 'resolve' && method === 'POST') response = await resolvePasswordResetRequest(id, event, user)
         else throw new HttpError(404, 'Not found')
+      }
+    } else if (resource === 'notifications') {
+      const user = await requireUser(event)
+      if (!id) {
+        if (method === 'GET') response = await listNotifications(event, user)
+        else throw new HttpError(405, 'Method not allowed')
+      } else if (id === 'unread-count') {
+        if (method === 'GET') response = await getUnreadCount(user)
+        else throw new HttpError(405, 'Method not allowed')
+      } else if (id === 'mark-all-read') {
+        if (method === 'POST') response = await markAllNotificationsRead(user)
+        else throw new HttpError(405, 'Method not allowed')
+      } else if (sub === 'read') {
+        if (method === 'POST') response = await markNotificationRead(id, user)
+        else throw new HttpError(405, 'Method not allowed')
+      } else {
+        throw new HttpError(404, 'Not found')
       }
     } else if (resource === 'leads') {
       const user = await requireUser(event)

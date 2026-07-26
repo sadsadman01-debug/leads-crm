@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
 import { requireSuperAdmin } from '../lib/permissions.js'
 import { generateTempPassword } from '../lib/passwordGen.js'
+import { notifySuperAdmins } from '../lib/notifications.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const COLUMNS =
@@ -34,6 +35,16 @@ export async function createSignupRequest(event: HandlerEvent) {
     .single()
 
   if (error) throw new HttpError(500, error.message)
+
+  await notifySuperAdmins({
+    type: 'signup_request',
+    title: 'New signup request',
+    message: `${organization_name} (${contact_name}) requested access.`,
+    link_route: '/signup-requests',
+    related_entity_id: data.id,
+    related_entity_type: 'signup_request',
+  })
+
   return json(201, data)
 }
 

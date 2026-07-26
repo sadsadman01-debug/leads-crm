@@ -29,6 +29,7 @@ import type { CustomFieldDefinition, AppliesTo, FieldType } from '@/types/custom
 import type { SavedReport, ReportRunResult, ReportType, ChartType, ReportFilters } from '@/types/report'
 import type { SignupRequest, ApproveSignupRequestResult } from '@/types/signupRequest'
 import type { PasswordResetRequest, PasswordResetResult } from '@/types/passwordResetRequest'
+import type { AppNotification, NotificationListResponse } from '@/types/notification'
 import { withOrgScope } from './orgScope'
 
 class ApiError extends Error {
@@ -391,6 +392,23 @@ export const passwordResetRequestsApi = {
     request<{ request: PasswordResetRequest; admin: PasswordResetResult }>(`/password-reset-requests/${id}/resolve`, {
       method: 'POST',
     }),
+}
+
+export const notificationsApi = {
+  list: (params: { page?: number; pageSize?: number; status?: 'unread' | 'read' | 'all'; type?: string } = {}) => {
+    const qs = new URLSearchParams()
+    if (params.page) qs.set('page', String(params.page))
+    if (params.pageSize) qs.set('pageSize', String(params.pageSize))
+    if (params.status) qs.set('status', params.status)
+    if (params.type) qs.set('type', params.type)
+    return request<NotificationListResponse>(`/notifications?${qs.toString()}`)
+  },
+
+  unreadCount: () => request<{ count: number }>('/notifications/unread-count'),
+
+  markRead: (id: string) => request<AppNotification>(`/notifications/${id}/read`, { method: 'POST' }),
+
+  markAllRead: () => request<{ success: true }>('/notifications/mark-all-read', { method: 'POST' }),
 }
 
 export const teamApi = {

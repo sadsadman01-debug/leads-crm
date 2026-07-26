@@ -14,6 +14,7 @@ import { TeamList } from '@/pages/Team/TeamList'
 import { OrganizationsOverview } from '@/pages/Organizations/OrganizationsOverview'
 import { SignupRequestsPage } from '@/pages/SignupRequests/SignupRequestsPage'
 import { PasswordResetRequestsPage } from '@/pages/PasswordResetRequests/PasswordResetRequestsPage'
+import { NotificationsPage } from '@/pages/NotificationsPage'
 
 // Charting (recharts) is only needed here — code-split so it doesn't bloat every route.
 const Dashboard = lazy(() => import('@/pages/Dashboard').then((m) => ({ default: m.Dashboard })))
@@ -70,6 +71,7 @@ export default function App() {
               }
             />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/notifications" element={<NotificationsPage />} />
             <Route element={<RequireAdmin />}>
               <Route path="/team" element={<TeamList />} />
             </Route>
