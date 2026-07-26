@@ -3,8 +3,10 @@ import { Link } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { Building2, ArrowLeft, AlertCircle, Loader2, CheckCircle2 } from 'lucide-react'
 import { signupRequestsApi } from '@/lib/api'
+import { usePlatformBranding } from '@/hooks/usePlatformBranding'
 
 export function RequestAccess() {
+  usePlatformBranding()
   const [organizationName, setOrganizationName] = useState('')
   const [contactName, setContactName] = useState('')
   const [email, setEmail] = useState('')

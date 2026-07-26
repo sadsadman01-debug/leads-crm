@@ -105,6 +105,12 @@ import { getForecast } from './routes/forecast.js'
 import { getTrends, getPeriodComparisons } from './routes/trends.js'
 import { listQuotas, upsertQuota, deleteQuota } from './routes/quotas.js'
 import { getBranding, createLogoSignedUpload, updateBranding, resetBranding } from './routes/branding.js'
+import {
+  getPlatformBranding,
+  createPlatformLogoSignedUpload,
+  updatePlatformBranding,
+  resetPlatformBranding,
+} from './routes/platformBranding.js'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -159,6 +165,19 @@ export const handler: Handler = async (event) => {
         const user = await requireUser(event)
         if (!id && method === 'GET') response = await listPasswordResetRequests(event, user)
         else if (id && sub === 'resolve' && method === 'POST') response = await resolvePasswordResetRequest(id, event, user)
+        else throw new HttpError(404, 'Not found')
+      }
+    } else if (resource === 'platform-branding') {
+      // GET is the only unauthenticated read in this API — the Login/Request
+      // Access/Forgot Password pages need Platform Default Branding before any
+      // session exists. Every write is Super-Admin-only, enforced inside each function.
+      if (!id && method === 'GET') {
+        response = await getPlatformBranding()
+      } else {
+        const user = await requireUser(event)
+        if (!id && method === 'PATCH') response = await updatePlatformBranding(event, user)
+        else if (id === 'logo' && sub === 'sign' && method === 'POST') response = await createPlatformLogoSignedUpload(event, user)
+        else if (id === 'reset' && method === 'POST') response = await resetPlatformBranding(event, user)
         else throw new HttpError(404, 'Not found')
       }
     } else if (resource === 'notifications') {

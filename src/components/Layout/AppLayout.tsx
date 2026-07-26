@@ -3,22 +3,26 @@ import { Outlet } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
-import { brandingApi } from '@/lib/api'
+import { brandingApi, platformBrandingApi } from '@/lib/api'
 import { applyAccentColor } from '@/lib/brandColors'
 
 export function AppLayout() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   const { data: branding } = useQuery({ queryKey: ['org-branding'], queryFn: brandingApi.get })
+  const { data: platformBranding } = useQuery({ queryKey: ['platform-branding'], queryFn: platformBrandingApi.get })
 
+  // Fallback chain: the org's own accent color, then the Super Admin's
+  // Platform Default, then the hardcoded indigo (applyAccentColor(null)).
   // Applied to `document.documentElement` (rather than a wrapper div) so the
   // CSS vars are still in scope for portal-rendered content (modals, etc.).
   // Cleanup on unmount guarantees a later Login/RequestAccess/ForgotPassword
-  // render (which mounts outside this layout) never inherits a stale org's color.
+  // render (which mounts outside this layout) never inherits a stale color.
+  const resolvedAccent = branding?.accent_color ?? platformBranding?.accent_color ?? null
   useEffect(() => {
-    applyAccentColor(branding?.accent_color)
+    applyAccentColor(resolvedAccent)
     return () => applyAccentColor(null)
-  }, [branding?.accent_color])
+  }, [resolvedAccent])
 
   return (
     <div className="flex h-screen overflow-hidden bg-base-950">

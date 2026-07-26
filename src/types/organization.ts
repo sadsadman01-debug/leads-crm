@@ -25,3 +25,10 @@ export interface OrgBranding {
   display_name: string | null
   palette: BrandPaletteColor[]
 }
+
+export interface PlatformBranding {
+  logo_url: string | null
+  accent_color: string | null
+  platform_name: string | null
+  palette: BrandPaletteColor[]
+}

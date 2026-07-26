@@ -24,7 +24,7 @@ import type {
   WinLossReason,
 } from '@/types/deal'
 import type { TeamMember, Role, UserPermissions } from '@/types/team'
-import type { Organization, OrganizationSummary, OrgBranding } from '@/types/organization'
+import type { Organization, OrganizationSummary, OrgBranding, PlatformBranding } from '@/types/organization'
 import type { CustomFieldDefinition, AppliesTo, FieldType } from '@/types/customField'
 import type { SavedReport, ReportRunResult, ReportType, ChartType, ReportFilters } from '@/types/report'
 import type { SignupRequest, ApproveSignupRequestResult } from '@/types/signupRequest'
@@ -380,6 +380,23 @@ export const brandingApi = {
     request<OrgBranding>('/branding', { method: 'PATCH', body: JSON.stringify(payload) }),
 
   reset: () => request<OrgBranding>('/branding/reset', { method: 'POST' }),
+}
+
+export const platformBrandingApi = {
+  /** Public — reachable from Login/Request Access/Forgot Password before any
+   * session exists (also used post-login, e.g. by the Sidebar's fallback chain). */
+  get: () => requestPublic<PlatformBranding>('/platform-branding'),
+
+  createLogoSignedUpload: (fileName: string) =>
+    request<{ signedUrl: string; token: string; storage_path: string }>('/platform-branding/logo/sign', {
+      method: 'POST',
+      body: JSON.stringify({ file_name: fileName }),
+    }),
+
+  update: (payload: { logo_storage_path?: string | null; accent_color?: string | null; platform_name?: string | null }) =>
+    request<PlatformBranding>('/platform-branding', { method: 'PATCH', body: JSON.stringify(payload) }),
+
+  reset: () => request<PlatformBranding>('/platform-branding/reset', { method: 'POST' }),
 }
 
 export const signupRequestsApi = {

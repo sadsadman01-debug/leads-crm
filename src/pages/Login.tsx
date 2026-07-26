@@ -2,10 +2,12 @@ import { useState, type FormEvent } from 'react'
 import { Navigate, useLocation, Link } from 'react-router-dom'
 import { Target, AlertCircle, Eye, EyeOff, Loader2 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { usePlatformBranding } from '@/hooks/usePlatformBranding'
 
 export function Login() {
   const { session, signIn } = useAuth()
   const location = useLocation()
+  const platformBranding = usePlatformBranding()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -45,10 +47,18 @@ export function Login() {
 
       <div className="card relative w-full max-w-sm p-8 animate-slideUp">
         <div className="mb-8 flex flex-col items-center text-center">
-          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-accent-500 shadow-glow">
-            <Target size={24} className="text-white" />
-          </div>
-          <h1 className="text-xl font-semibold text-base-100">Leads CRM</h1>
+          {platformBranding?.logo_url ? (
+            <img
+              src={platformBranding.logo_url}
+              alt={platformBranding?.platform_name || 'Leads CRM'}
+              className="mb-4 h-12 w-12 rounded-xl object-cover"
+            />
+          ) : (
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-accent-500 shadow-glow">
+              <Target size={24} className="text-white" />
+            </div>
+          )}
+          <h1 className="text-xl font-semibold text-base-100">{platformBranding?.platform_name || 'Leads CRM'}</h1>
           <p className="mt-1 text-sm text-base-400">Sign in to manage your sales pipeline</p>
         </div>
 

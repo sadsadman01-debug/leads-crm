@@ -13,6 +13,7 @@ import { DefaultCurrencySettings } from '@/components/DefaultCurrencySettings'
 import { CustomFieldsSettings } from '@/components/CustomFieldsSettings'
 import { QuotaSettings } from '@/components/QuotaSettings'
 import { BrandingSettings } from '@/components/BrandingSettings'
+import { PlatformBrandingSettings } from '@/components/PlatformBrandingSettings'
 
 /** Wraps a settings section in a disabled fieldset unless the caller passes
  * (or is granted) write access — same "view only, greyed out" convention
@@ -58,6 +59,11 @@ export function Settings() {
       )}
 
       <div className="space-y-6">
+        {isSuperAdmin && (
+          <Section canWrite>
+            <PlatformBrandingSettings />
+          </Section>
+        )}
         {showBranding && (
           <Section canWrite>
             <BrandingSettings />

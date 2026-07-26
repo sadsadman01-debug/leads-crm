@@ -3,8 +3,10 @@ import { Link } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { KeyRound, ArrowLeft, AlertCircle, Loader2, MailCheck } from 'lucide-react'
 import { passwordResetRequestsApi } from '@/lib/api'
+import { usePlatformBranding } from '@/hooks/usePlatformBranding'
 
 export function ForgotPassword() {
+  usePlatformBranding()
   const [email, setEmail] = useState('')
 
   const mutation = useMutation({

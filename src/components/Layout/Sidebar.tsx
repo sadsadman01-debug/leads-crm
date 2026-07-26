@@ -23,7 +23,7 @@ import clsx from 'clsx'
 import { useAuth } from '@/contexts/AuthContext'
 import { useOrg } from '@/contexts/OrgContext'
 import { RoleBadge, Avatar } from '@/components/ui/RoleBadge'
-import { signupRequestsApi, passwordResetRequestsApi, brandingApi } from '@/lib/api'
+import { signupRequestsApi, passwordResetRequestsApi, brandingApi, platformBrandingApi } from '@/lib/api'
 
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -64,6 +64,9 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   const pendingPasswordResetCount = (passwordResetData?.requests ?? []).filter((r) => r.status === 'pending').length
 
   const { data: branding } = useQuery({ queryKey: ['org-branding'], queryFn: brandingApi.get })
+  const { data: platformBranding } = useQuery({ queryKey: ['platform-branding'], queryFn: platformBrandingApi.get })
+  const resolvedLogoUrl = branding?.logo_url ?? platformBranding?.logo_url ?? null
+  const appName = platformBranding?.platform_name || 'Leads CRM'
 
   const navItems =
     profile && (profile.role === 'admin' || profile.role === 'super_admin')
@@ -144,10 +147,10 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
         <div className={clsx('px-6 py-6', !railExpanded && 'md:px-3', 'lg:px-6')}>
           <div className={clsx('flex items-center', railExpanded ? 'justify-between' : 'md:justify-center lg:justify-between', 'justify-between')}>
             <div className="flex items-center gap-2.5">
-              {branding?.logo_url ? (
+              {resolvedLogoUrl ? (
                 <img
-                  src={branding.logo_url}
-                  alt={workspaceLabel ?? 'Organization logo'}
+                  src={resolvedLogoUrl}
+                  alt={workspaceLabel ?? appName}
                   className="h-8 w-8 shrink-0 rounded-lg object-cover"
                 />
               ) : (
@@ -155,7 +158,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
                   <Target size={18} className="text-white" />
                 </div>
               )}
-              <span className={clsx('text-base font-semibold tracking-tight text-base-100', labelClass)}>Leads CRM</span>
+              <span className={clsx('text-base font-semibold tracking-tight text-base-100', labelClass)}>{appName}</span>
             </div>
             <button onClick={onClose} className="btn-ghost -mr-2 h-11 w-11 px-0 md:hidden" aria-label="Close menu">
               <X size={20} />

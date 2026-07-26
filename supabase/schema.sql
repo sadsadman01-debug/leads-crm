@@ -377,6 +377,19 @@ create trigger app_settings_set_updated_at
   for each row execute procedure public.set_updated_at();
 
 -- ----------------------------------------------------------------------------
+-- platform_settings: Platform Default Branding — a single platform-wide row
+-- (not per-organization), Super-Admin-only. Logos live in the 'org-logos'
+-- bucket under a `platform/` path prefix (no separate bucket needed).
+-- ----------------------------------------------------------------------------
+create table if not exists public.platform_settings (
+  id uuid primary key default gen_random_uuid(),
+  platform_logo_storage_path text,
+  platform_accent_color text,
+  platform_name text,
+  created_at timestamptz not null default now()
+);
+
+-- ----------------------------------------------------------------------------
 -- templates: reusable outreach copy (subject/body) with {{placeholder}} tokens
 -- filled in client-side per lead. No email-sending infra — copy-to-clipboard only.
 -- ----------------------------------------------------------------------------
@@ -672,6 +685,15 @@ $$;
 -- organizations: only the Super Admin can read/write it.
 create policy "organizations super admin only"
   on public.organizations for all
+  using (public.is_super_admin())
+  with check (public.is_super_admin());
+
+-- platform_settings: only the Super Admin can read/write it (the public
+-- pre-login pages read Platform Default Branding via a service-role-backed
+-- Netlify Function instead, bypassing RLS, same as organizations.name today).
+alter table public.platform_settings enable row level security;
+create policy "platform_settings super admin only"
+  on public.platform_settings for all
   using (public.is_super_admin())
   with check (public.is_super_admin());
 
