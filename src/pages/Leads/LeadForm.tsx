@@ -12,6 +12,7 @@ import { useAuth, isAdminOrAbove } from '@/contexts/AuthContext'
 
 const EMPTY_FORM: LeadFormInput = {
   company_name: '',
+  contact_name: '',
   address: '',
   phone: '',
   email: '',
@@ -47,6 +48,7 @@ export function LeadForm() {
     if (existingLead && !initialized) {
       setForm({
         company_name: existingLead.company_name,
+        contact_name: existingLead.contact_name ?? '',
         address: existingLead.address ?? '',
         phone: existingLead.phone ?? '',
         email: existingLead.email ?? '',
@@ -91,7 +93,7 @@ export function LeadForm() {
 
   const saveMutation = useMutation({
     mutationFn: () => {
-      const payload = { ...form, address: form.address || null, phone: form.phone || null,
+      const payload = { ...form, contact_name: form.contact_name || null, address: form.address || null, phone: form.phone || null,
         email: form.email || null, website: form.website || null, notes: form.notes || null,
         industry_id: form.industry_id || null }
       return isEdit ? leadsApi.update(id!, payload as any) : leadsApi.create(payload as any)
@@ -152,6 +154,16 @@ export function LeadForm() {
               required
               value={form.company_name}
               onChange={(e) => set('company_name', e.target.value)}
+            />
+          </div>
+
+          <div className="sm:col-span-2">
+            <label className="label">Contact Person Name</label>
+            <input
+              className="input"
+              placeholder="e.g. Jane Smith"
+              value={form.contact_name}
+              onChange={(e) => set('contact_name', e.target.value)}
             />
           </div>
 

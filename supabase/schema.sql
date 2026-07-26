@@ -101,6 +101,7 @@ create unique index if not exists industries_org_name_unique on public.industrie
 create table if not exists public.leads (
   id uuid primary key default gen_random_uuid(),
   company_name text not null,
+  contact_name text,
   address text,
   phone text,
   email text,
@@ -309,12 +310,15 @@ create table if not exists public.templates (
   name text not null,
   subject text not null default '',
   body text not null default '',
+  template_type text not null default 'cold_email'
+    check (template_type in ('cold_email', 'followup1', 'followup2', 'followup3', 'whatsapp', 'linkedin', 'sms')),
   organization_id uuid references public.organizations(id) on delete cascade,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 create index if not exists templates_organization_id_idx on public.templates (organization_id);
+create index if not exists templates_template_type_idx on public.templates (template_type);
 
 drop trigger if exists templates_set_updated_at on public.templates;
 create trigger templates_set_updated_at

@@ -72,6 +72,7 @@ export type ScoreBand = 'Hot' | 'Warm' | 'Cold'
 export interface Lead {
   id: string
   company_name: string
+  contact_name: string | null
   address: string | null
   phone: string | null
   email: string | null
@@ -99,11 +100,24 @@ export interface Industry {
   name: string
 }
 
+export type TemplateType = 'cold_email' | 'followup1' | 'followup2' | 'followup3' | 'whatsapp' | 'linkedin' | 'sms'
+
+export const TEMPLATE_TYPES: Array<{ value: TemplateType; label: string; hasSubject: boolean }> = [
+  { value: 'cold_email', label: 'Cold Email', hasSubject: true },
+  { value: 'followup1', label: 'Follow-up 1', hasSubject: true },
+  { value: 'followup2', label: 'Follow-up 2', hasSubject: true },
+  { value: 'followup3', label: 'Follow-up 3', hasSubject: true },
+  { value: 'whatsapp', label: 'WhatsApp Message', hasSubject: false },
+  { value: 'linkedin', label: 'LinkedIn Message', hasSubject: false },
+  { value: 'sms', label: 'SMS', hasSubject: false },
+]
+
 export interface Template {
   id: string
   name: string
   subject: string
   body: string
+  template_type: TemplateType
   created_at: string
   updated_at: string
 }
@@ -170,6 +184,7 @@ export interface LeadListResponse {
 
 export interface LeadFormInput {
   company_name: string
+  contact_name: string
   address: string
   phone: string
   email: string

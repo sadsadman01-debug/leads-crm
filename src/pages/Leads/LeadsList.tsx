@@ -215,6 +215,12 @@ export function LeadsList() {
     }
   }
 
+  function openLead(leadId: string) {
+    navigate(`/leads/${leadId}`, {
+      state: { navContext: { search: debouncedSearch, filters, sortBy, sortOrder } },
+    })
+  }
+
   function selectIndustry(industryId: string | undefined) {
     setFilters((prev) => ({ ...prev, industryId }))
     setPage(1)
@@ -542,7 +548,7 @@ export function LeadsList() {
                 {data?.leads.map((lead) => (
                   <tr
                     key={lead.id}
-                    onClick={() => navigate(`/leads/${lead.id}`)}
+                    onClick={() => openLead(lead.id)}
                     className="cursor-pointer border-b border-base-800 transition-colors hover:bg-base-850"
                   >
                     <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
@@ -582,7 +588,7 @@ export function LeadsList() {
             {data?.leads.map((lead) => (
               <div
                 key={lead.id}
-                onClick={() => navigate(`/leads/${lead.id}`)}
+                onClick={() => openLead(lead.id)}
                 className="card flex cursor-pointer items-start gap-1 p-3 active:bg-base-850"
               >
                 <label

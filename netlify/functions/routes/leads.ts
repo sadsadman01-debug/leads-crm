@@ -11,7 +11,7 @@ import { requireCanModifyRecord, isAdminOrAbove, resolveOrganizationId, scopeToO
 import { loadActiveDefinitions, requireRequiredFieldsFilled, mergeCustomFieldValues } from '../lib/customFieldValues.js'
 
 export const LEAD_SELECT = `
-  id, company_name, address, phone, email, website, notes, lead_source, priority,
+  id, company_name, contact_name, address, phone, email, website, notes, lead_source, priority,
   stage_id, industry_id, created_by, assigned_to, organization_id, custom_fields, created_at, updated_at,
   lead_status ( * ),
   lead_tags ( tags ( id, name ) ),
@@ -243,6 +243,7 @@ export async function createLead(event: HandlerEvent, user: AuthedUser) {
     .from('leads')
     .insert({
       company_name: body.company_name.trim(),
+      contact_name: body.contact_name ?? null,
       address: body.address ?? null,
       phone: body.phone ?? null,
       email: body.email ?? null,
@@ -308,7 +309,7 @@ export async function updateLead(id: string, event: HandlerEvent, user: AuthedUs
   requireCanModifyRecord(user, existing)
 
   const updatable: Record<string, any> = {}
-  for (const key of ['company_name', 'address', 'phone', 'email', 'website', 'notes', 'lead_source', 'priority', 'industry_id']) {
+  for (const key of ['company_name', 'contact_name', 'address', 'phone', 'email', 'website', 'notes', 'lead_source', 'priority', 'industry_id']) {
     if (key in body) updatable[key] = body[key]
   }
 

@@ -12,6 +12,7 @@ import type {
   PipelineStage,
   Tag,
   Template,
+  TemplateType,
 } from '@/types/lead'
 import type {
   Deal,
@@ -393,10 +394,10 @@ export const industriesApi = {
 export const templatesApi = {
   list: () => request<{ templates: Template[] }>('/templates'),
 
-  create: (payload: { name: string; subject: string; body: string }) =>
+  create: (payload: { name: string; subject: string; body: string; template_type: TemplateType }) =>
     request<Template>('/templates', { method: 'POST', body: JSON.stringify(payload) }),
 
-  update: (id: string, payload: Partial<{ name: string; subject: string; body: string }>) =>
+  update: (id: string, payload: Partial<{ name: string; subject: string; body: string; template_type: TemplateType }>) =>
     request<Template>(`/templates/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
 
   remove: (id: string) => request<{ success: true }>(`/templates/${id}`, { method: 'DELETE' }),

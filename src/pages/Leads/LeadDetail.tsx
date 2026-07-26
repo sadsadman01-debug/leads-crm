@@ -1,14 +1,17 @@
 import { useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
   Pencil,
   Trash2,
   Globe,
   Mail,
   Phone,
   MapPin,
+  User,
   Facebook,
   Linkedin,
   Twitter,
@@ -18,6 +21,7 @@ import {
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { leadsApi, pipelineStagesApi, industriesApi, dealsApi, teamApi, customFieldsApi } from '@/lib/api'
+import type { LeadFilters } from '@/types/lead'
 import { CustomFieldsDisplay } from '@/components/CustomFieldsDisplay'
 import { PriorityBadge, TagPill, Badge, ScoreBadge } from '@/components/ui/Badge'
 import { StatusPanel } from '@/components/StatusPanel'
@@ -36,12 +40,48 @@ const PLATFORM_ICON: Record<string, typeof Globe> = {
   LinkedIn: Linkedin,
 }
 
+interface NavContext {
+  search?: string
+  filters?: LeadFilters
+  sortBy?: string
+  sortOrder?: 'asc' | 'desc'
+}
+
+const DEFAULT_NAV_CONTEXT: NavContext = { search: '', filters: {}, sortBy: 'created_at', sortOrder: 'desc' }
+const NAV_WINDOW_SIZE = 100
+
 export function LeadDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const queryClient = useQueryClient()
   const { profile } = useAuth()
   const [confirmDelete, setConfirmDelete] = useState(false)
+
+  const navContext = (location.state as { navContext?: NavContext } | null)?.navContext ?? DEFAULT_NAV_CONTEXT
+
+  const { data: navData } = useQuery({
+    queryKey: ['leads-nav', navContext],
+    queryFn: () =>
+      leadsApi.list({
+        search: navContext.search,
+        filters: navContext.filters,
+        sortBy: navContext.sortBy,
+        sortOrder: navContext.sortOrder,
+        page: 1,
+        pageSize: NAV_WINDOW_SIZE,
+      }),
+  })
+
+  const navLeads = navData?.leads ?? []
+  const navIndex = navLeads.findIndex((l) => l.id === id)
+  const hasNavWindow = navIndex !== -1
+  const prevLead = hasNavWindow && navIndex > 0 ? navLeads[navIndex - 1] : null
+  const nextLead = hasNavWindow && navIndex < navLeads.length - 1 ? navLeads[navIndex + 1] : null
+
+  function goToLead(leadId: string) {
+    navigate(`/leads/${leadId}`, { state: { navContext } })
+  }
 
   const { data: lead, isLoading } = useQuery({
     queryKey: ['lead', id],
@@ -107,10 +147,38 @@ export function LeadDetail() {
 
   return (
     <div>
-      <button className="btn-ghost mb-4 -ml-2" onClick={() => navigate('/leads')}>
-        <ArrowLeft size={16} />
-        Back to Leads
-      </button>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <button className="btn-ghost -ml-2" onClick={() => navigate('/leads')}>
+          <ArrowLeft size={16} />
+          Back to Leads
+        </button>
+
+        {hasNavWindow && (
+          <div className="flex items-center gap-2 text-sm">
+            <button
+              className="btn-secondary px-2.5"
+              disabled={!prevLead}
+              onClick={() => prevLead && goToLead(prevLead.id)}
+              title="Previous lead"
+            >
+              <ChevronLeft size={16} />
+              <span className="hidden sm:inline">Previous</span>
+            </button>
+            <span className="whitespace-nowrap text-xs text-base-400">
+              Lead {navIndex + 1} of {navData?.total ?? navLeads.length}
+            </span>
+            <button
+              className="btn-secondary px-2.5"
+              disabled={!nextLead}
+              onClick={() => nextLead && goToLead(nextLead.id)}
+              title="Next lead"
+            >
+              <span className="hidden sm:inline">Next</span>
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        )}
+      </div>
 
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
@@ -223,6 +291,7 @@ export function LeadDetail() {
             <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-base-300">
               Contact Info
             </h2>
+            <InfoRow icon={User} value={lead.contact_name} />
             <InfoRow icon={MapPin} value={lead.address} />
             <InfoRow icon={Phone} value={lead.phone} href={lead.phone ? `tel:${lead.phone}` : undefined} />
             <InfoRow icon={Mail} value={lead.email} href={lead.email ? `mailto:${lead.email}` : undefined} />
@@ -270,11 +339,11 @@ export function LeadDetail() {
 
           <CustomFieldsDisplay fields={leadCustomFields} values={lead.custom_fields ?? {}} />
           <AttachmentsPanel leadId={lead.id} attachments={lead.attachments ?? []} />
-          <TemplateUsePanel lead={lead} />
         </div>
 
         <div className="space-y-6 lg:col-span-2">
           <StatusPanel lead={lead} readOnly={!canEdit} />
+          <TemplateUsePanel lead={lead} />
           <LeadDealsPanel leadId={lead.id} companyName={lead.company_name} />
           <LeadTimeline leadId={lead.id} />
         </div>

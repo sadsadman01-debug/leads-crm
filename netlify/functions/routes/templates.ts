@@ -4,10 +4,13 @@ import { HttpError, json } from '../lib/http.js'
 import { requireAdminOrAbove, resolveOrganizationId, scopeToOrg, requireRowInOrgScope } from '../lib/permissions.js'
 import type { AuthedUser } from '../lib/auth.js'
 
+const TEMPLATE_TYPES = ['cold_email', 'followup1', 'followup2', 'followup3', 'whatsapp', 'linkedin', 'sms']
+const COLUMNS = 'id, name, subject, body, template_type, created_at, updated_at'
+
 export async function listTemplates(event: HandlerEvent, user: AuthedUser) {
   const supabase = getSupabaseAdmin()
   const orgId = resolveOrganizationId(user, event)
-  let query = supabase.from('templates').select('id, name, subject, body, created_at, updated_at')
+  let query = supabase.from('templates').select(COLUMNS)
   query = scopeToOrg(query as any, orgId) as any
   const { data, error } = await query.order('name', { ascending: true })
   if (error) throw new HttpError(500, error.message)
@@ -21,11 +24,20 @@ export async function createTemplate(event: HandlerEvent, user: AuthedUser) {
   const body = JSON.parse(event.body || '{}')
   const name = (body.name ?? '').trim()
   if (!name) throw new HttpError(400, 'name is required')
+  if (!TEMPLATE_TYPES.includes(body.template_type)) {
+    throw new HttpError(400, `template_type must be one of: ${TEMPLATE_TYPES.join(', ')}`)
+  }
 
   const { data, error } = await supabase
     .from('templates')
-    .insert({ name, subject: body.subject ?? '', body: body.body ?? '', organization_id: orgId })
-    .select('id, name, subject, body, created_at, updated_at')
+    .insert({
+      name,
+      subject: body.subject ?? '',
+      body: body.body ?? '',
+      template_type: body.template_type,
+      organization_id: orgId,
+    })
+    .select(COLUMNS)
     .single()
 
   if (error) throw new HttpError(500, error.message)
@@ -46,16 +58,16 @@ export async function updateTemplate(id: string, event: HandlerEvent, user: Auth
   }
   if ('subject' in body) update.subject = body.subject ?? ''
   if ('body' in body) update.body = body.body ?? ''
+  if ('template_type' in body) {
+    if (!TEMPLATE_TYPES.includes(body.template_type)) {
+      throw new HttpError(400, `template_type must be one of: ${TEMPLATE_TYPES.join(', ')}`)
+    }
+    update.template_type = body.template_type
+  }
 
   if (Object.keys(update).length === 0) throw new HttpError(400, 'Nothing to update')
 
-  const { data, error } = await supabase
-    .from('templates')
-    .update(update)
-    .eq('id', id)
-    .select('id, name, subject, body, created_at, updated_at')
-    .single()
-
+  const { data, error } = await supabase.from('templates').update(update).eq('id', id).select(COLUMNS).single()
   if (error) throw new HttpError(500, error.message)
   return json(200, data)
 }
