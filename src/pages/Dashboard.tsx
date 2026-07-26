@@ -153,7 +153,7 @@ export function Dashboard() {
 
       <RemindersWidget reminders={data.reminders} />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 desktop:grid-cols-4">
         <StatTile label="Total Leads" value={data.totals.leads} icon={Users} tone="accent" onClick={() => drillDown(undefined, 'Total Leads')} />
         <StatTile
           label="Cold Emails Sent"

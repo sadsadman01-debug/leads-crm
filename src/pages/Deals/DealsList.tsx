@@ -178,13 +178,13 @@ export function DealsList() {
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-base-700/60 text-xs uppercase tracking-wide text-base-400">
-                  <th className="px-5 py-3 font-medium">Deal</th>
-                  <th className="px-5 py-3 font-medium">Company</th>
-                  <th className="px-5 py-3 font-medium">Value</th>
-                  <th className="px-5 py-3 font-medium">Stage</th>
-                  <th className="px-5 py-3 font-medium">Probability</th>
-                  <th className="px-5 py-3 font-medium">Owner</th>
-                  <th className="px-5 py-3 font-medium">Expected Close</th>
+                  <th className="px-5 py-3 font-medium desktop:px-6 desktop:py-4">Deal</th>
+                  <th className="px-5 py-3 font-medium desktop:w-80 desktop:px-6 desktop:py-4">Company</th>
+                  <th className="px-5 py-3 font-medium desktop:px-6 desktop:py-4">Value</th>
+                  <th className="px-5 py-3 font-medium desktop:px-6 desktop:py-4">Stage</th>
+                  <th className="hidden px-5 py-3 font-medium lg:table-cell desktop:px-6 desktop:py-4">Probability</th>
+                  <th className="hidden px-5 py-3 font-medium lg:table-cell desktop:px-6 desktop:py-4">Owner</th>
+                  <th className="hidden px-5 py-3 font-medium lg:table-cell desktop:px-6 desktop:py-4">Expected Close</th>
                 </tr>
               </thead>
               <tbody>
@@ -197,18 +197,18 @@ export function DealsList() {
                     }}
                     className="cursor-pointer border-b border-base-800 transition-colors hover:bg-base-850"
                   >
-                    <td className="px-5 py-3.5 font-medium text-base-100">{deal.name}</td>
-                    <td className="px-5 py-3.5 text-base-300">{deal.lead?.company_name ?? '—'}</td>
-                    <td className="px-5 py-3.5 font-semibold text-accent-400">
+                    <td className="px-5 py-3.5 font-medium text-base-100 desktop:px-6 desktop:py-4">{deal.name}</td>
+                    <td className="px-5 py-3.5 text-base-300 desktop:px-6 desktop:py-4">{deal.lead?.company_name ?? '—'}</td>
+                    <td className="px-5 py-3.5 font-semibold text-accent-400 desktop:px-6 desktop:py-4">
                       {formatMaskedCurrency(deal.value, deal.currency)}
                     </td>
-                    <td className="px-5 py-3.5">
+                    <td className="px-5 py-3.5 desktop:px-6 desktop:py-4">
                       <Badge tone="neutral">
                         {(deal.stage_id && stageNameById.get(deal.stage_id)) ?? '—'}
                       </Badge>
                     </td>
-                    <td className="px-5 py-3.5 text-base-300">{deal.probability}%</td>
-                    <td className="px-5 py-3.5">
+                    <td className="hidden px-5 py-3.5 text-base-300 lg:table-cell desktop:px-6 desktop:py-4">{deal.probability}%</td>
+                    <td className="hidden px-5 py-3.5 lg:table-cell desktop:px-6 desktop:py-4">
                       {deal.owner_id && nameById.has(deal.owner_id) ? (
                         <div className="flex items-center gap-1.5">
                           <Avatar name={nameById.get(deal.owner_id)} size={5} />
@@ -218,7 +218,7 @@ export function DealsList() {
                         <span className="text-base-400">—</span>
                       )}
                     </td>
-                    <td className="px-5 py-3.5 text-base-400">
+                    <td className="hidden px-5 py-3.5 text-base-400 lg:table-cell desktop:px-6 desktop:py-4">
                       {deal.expected_close_date ? new Date(deal.expected_close_date).toLocaleDateString() : '—'}
                     </td>
                   </tr>

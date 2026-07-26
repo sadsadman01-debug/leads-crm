@@ -50,17 +50,27 @@ const STANDARD_COLUMNS = [
 ] as const
 
 const DEFAULT_VISIBLE_COLUMNS = ['contact', 'stage', 'tags', 'priority', 'score', 'status', 'assignedTo', 'updated']
+// Tablet gets a reduced default column set (Company is always shown separately)
+// so the table stays readable without horizontal scrolling at 768-1023px.
+const TABLET_DEFAULT_VISIBLE_COLUMNS = ['stage', 'priority', 'updated']
 const COLUMNS_STORAGE_KEY = 'leads-table-columns-v1'
+
+function getDefaultVisibleColumns(): string[] {
+  const isTablet = typeof window !== 'undefined' && window.matchMedia('(min-width: 768px) and (max-width: 1023px)').matches
+  return isTablet ? TABLET_DEFAULT_VISIBLE_COLUMNS : DEFAULT_VISIBLE_COLUMNS
+}
 
 function loadStoredColumns(): Set<string> {
   try {
     const raw = localStorage.getItem(COLUMNS_STORAGE_KEY)
-    if (!raw) return new Set(DEFAULT_VISIBLE_COLUMNS)
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? new Set(parsed) : new Set(DEFAULT_VISIBLE_COLUMNS)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) return new Set(parsed)
+    }
   } catch {
-    return new Set(DEFAULT_VISIBLE_COLUMNS)
+    // fall through to tier-aware default
   }
+  return new Set(getDefaultVisibleColumns())
 }
 
 export function LeadsList() {
@@ -133,7 +143,7 @@ export function LeadsList() {
   }
 
   function resetColumnsToDefault() {
-    setVisibleColumnIds(new Set(DEFAULT_VISIBLE_COLUMNS))
+    setVisibleColumnIds(new Set(getDefaultVisibleColumns()))
   }
 
   function formatCustomFieldCell(value: any): string {
@@ -149,14 +159,14 @@ export function LeadsList() {
     switch (columnId) {
       case 'contact':
         return (
-          <td key={columnId} className="px-5 py-3.5 text-base-300">
+          <td key={columnId} className="px-5 py-3.5 text-base-300 desktop:px-6 desktop:py-4">
             <div>{lead.phone || '—'}</div>
             <div className="text-xs text-base-400">{lead.email || '—'}</div>
           </td>
         )
       case 'stage':
         return (
-          <td key={columnId} className="px-5 py-3.5">
+          <td key={columnId} className="px-5 py-3.5 desktop:px-6 desktop:py-4">
             {lead.stage_id && stageNameById.has(lead.stage_id) ? (
               <Badge tone="neutral">{stageNameById.get(lead.stage_id)}</Badge>
             ) : (
@@ -166,7 +176,7 @@ export function LeadsList() {
         )
       case 'tags':
         return (
-          <td key={columnId} className="px-5 py-3.5">
+          <td key={columnId} className="px-5 py-3.5 desktop:px-6 desktop:py-4">
             <div className="flex flex-wrap gap-1.5">
               {lead.tags.slice(0, 2).map((t) => (
                 <TagPill key={t.id} label={t.name} />
@@ -177,21 +187,21 @@ export function LeadsList() {
         )
       case 'priority':
         return (
-          <td key={columnId} className="px-5 py-3.5">
+          <td key={columnId} className="px-5 py-3.5 desktop:px-6 desktop:py-4">
             <PriorityBadge priority={lead.priority} />
           </td>
         )
       case 'score':
         return (
-          <td key={columnId} className="px-5 py-3.5">
+          <td key={columnId} className="px-5 py-3.5 desktop:px-6 desktop:py-4">
             <ScoreBadge score={lead.score} band={lead.band} />
           </td>
         )
       case 'status':
-        return <td key={columnId} className="px-5 py-3.5">{statusSummary(lead)}</td>
+        return <td key={columnId} className="px-5 py-3.5 desktop:px-6 desktop:py-4">{statusSummary(lead)}</td>
       case 'assignedTo':
         return (
-          <td key={columnId} className="px-5 py-3.5">
+          <td key={columnId} className="px-5 py-3.5 desktop:px-6 desktop:py-4">
             {lead.assigned_to && assigneeNameById.has(lead.assigned_to) ? (
               <div className="flex items-center gap-1.5">
                 <Avatar name={assigneeNameById.get(lead.assigned_to)} size={5} />
@@ -204,13 +214,13 @@ export function LeadsList() {
         )
       case 'industry':
         return (
-          <td key={columnId} className="px-5 py-3.5 text-base-300">
+          <td key={columnId} className="px-5 py-3.5 text-base-300 desktop:px-6 desktop:py-4">
             {lead.industry_id ? industryNameById.get(lead.industry_id) ?? '—' : '—'}
           </td>
         )
       case 'updated':
         return (
-          <td key={columnId} className="px-5 py-3.5 text-base-400">
+          <td key={columnId} className="px-5 py-3.5 text-base-400 desktop:px-6 desktop:py-4">
             {new Date(lead.updated_at).toLocaleDateString()}
           </td>
         )
@@ -535,7 +545,7 @@ export function LeadsList() {
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-base-700/60 text-xs uppercase tracking-wide text-base-400">
-                  <th className="w-10 px-5 py-3">
+                  <th className="w-10 px-5 py-3 desktop:px-6 desktop:py-4">
                     <input
                       type="checkbox"
                       checked={allOnPageSelected}
@@ -543,12 +553,12 @@ export function LeadsList() {
                       className="h-4 w-4 rounded border-base-600 bg-base-800 text-accent-500 focus:ring-accent-500"
                     />
                   </th>
-                  <th className="w-64 min-w-[220px] px-5 py-3 font-medium">Company</th>
+                  <th className="w-64 min-w-[220px] px-5 py-3 font-medium desktop:w-96 desktop:px-6 desktop:py-4">Company</th>
                   {visibleStandardColumns.map((c) => (
-                    <th key={c.id} className="px-5 py-3 font-medium">{c.label}</th>
+                    <th key={c.id} className="px-5 py-3 font-medium desktop:px-6 desktop:py-4">{c.label}</th>
                   ))}
                   {visibleCustomFields.map((f) => (
-                    <th key={f.id} className="px-5 py-3 font-medium">{f.label}</th>
+                    <th key={f.id} className="px-5 py-3 font-medium desktop:px-6 desktop:py-4">{f.label}</th>
                   ))}
                 </tr>
               </thead>
@@ -559,7 +569,7 @@ export function LeadsList() {
                     onClick={() => openLead(lead.id)}
                     className="cursor-pointer border-b border-base-800 transition-colors hover:bg-base-850"
                   >
-                    <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-5 py-3.5 desktop:px-6 desktop:py-4" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         checked={selectedIds.has(lead.id)}
@@ -567,7 +577,7 @@ export function LeadsList() {
                         className="h-4 w-4 rounded border-base-600 bg-base-800 text-accent-500 focus:ring-accent-500"
                       />
                     </td>
-                    <td className="w-64 min-w-[220px] px-5 py-3.5">
+                    <td className="w-64 min-w-[220px] px-5 py-3.5 desktop:w-96 desktop:px-6 desktop:py-4">
                       <div className="flex items-center gap-1.5">
                         {lead.status?.is_overdue && (
                           <span className="h-2 w-2 shrink-0 rounded-full bg-danger" title="Overdue follow-up" />
@@ -581,7 +591,7 @@ export function LeadsList() {
                     </td>
                     {visibleStandardColumns.map((c) => renderStandardCell(c.id, lead))}
                     {visibleCustomFields.map((f) => (
-                      <td key={f.id} className="px-5 py-3.5 text-base-300">
+                      <td key={f.id} className="px-5 py-3.5 text-base-300 desktop:px-6 desktop:py-4">
                         {formatCustomFieldCell(lead.custom_fields?.[f.id])}
                       </td>
                     ))}

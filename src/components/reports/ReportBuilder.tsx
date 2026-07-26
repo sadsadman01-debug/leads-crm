@@ -72,14 +72,14 @@ export function ReportBuilder({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[380px_1fr] lg:items-start desktop:grid-cols-[420px_1fr]">
       <div className="card space-y-5 p-6">
         <div>
           <label className="label">Report Name</label>
           <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Leads by Source" />
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-1">
           <div>
             <label className="label">1. Report Type</label>
             <select className="input" value={reportType} onChange={(e) => { setReportType(e.target.value as ReportType); setGroupBy('') }}>
@@ -112,7 +112,7 @@ export function ReportBuilder({
 
         <div>
           <label className="label">4. Filters</label>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-2">
             <input type="date" className="input" value={filters.dateFrom ?? ''} onChange={(e) => setFilter('dateFrom', e.target.value)} title="Date from" />
             <input type="date" className="input" value={filters.dateTo ?? ''} onChange={(e) => setFilter('dateTo', e.target.value)} title="Date to" />
             {reportType === 'leads' && (

@@ -1,9 +1,12 @@
 import { type ReactNode, useEffect } from 'react'
 import { X } from 'lucide-react'
 
+// Laptop+ (lg:) width per `size`; Tablet gets its own distinct ~85-90vw
+// capped width below, so it's neither the small phone card nor the fixed
+// Laptop width.
 const MAX_WIDTH: Record<'md' | 'lg', string> = {
-  md: 'sm:max-w-md',
-  lg: 'sm:max-w-2xl',
+  md: 'lg:max-w-md',
+  lg: 'lg:max-w-2xl',
 }
 
 export function Modal({
@@ -32,7 +35,7 @@ export function Modal({
   return (
     <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/60 backdrop-blur-sm animate-fadeIn sm:items-center sm:p-4">
       <div
-        className={`card w-full max-w-md animate-slideUp overflow-y-auto rounded-none p-5 sm:max-h-[85vh] sm:rounded-xl2 sm:p-6 ${MAX_WIDTH[size]}`}
+        className={`card w-full max-w-md animate-slideUp overflow-y-auto rounded-none p-5 sm:max-h-[85vh] sm:rounded-xl2 sm:p-6 md:max-w-[min(90vw,40rem)] ${MAX_WIDTH[size]}`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">

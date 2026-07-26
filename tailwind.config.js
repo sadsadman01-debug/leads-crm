@@ -4,6 +4,13 @@ export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
+      // 4-tier breakpoint system: Mobile (<768, default), Tablet (md, 768-1023),
+      // Laptop (lg, 1024-1439), Desktop (this custom `desktop` tier, >=1440).
+      // Appended after the Tailwind defaults so it's emitted last in the
+      // generated stylesheet and correctly wins over xl:/2xl: at the same width.
+      screens: {
+        desktop: '1440px',
+      },
       colors: {
         base: {
           950: '#0a0a0d',
