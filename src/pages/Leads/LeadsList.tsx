@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Search,
@@ -13,6 +13,8 @@ import {
   Rows3,
   Columns3,
   SlidersHorizontal,
+  LayoutDashboard,
+  X,
 } from 'lucide-react'
 import { bulkApi, exportApi, industriesApi, leadsApi, pipelineStagesApi, teamApi, customFieldsApi } from '@/lib/api'
 import { PriorityBadge, ScoreBadge, TagPill, Badge } from '@/components/ui/Badge'
@@ -34,14 +36,56 @@ const SORT_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'priority', label: 'Priority' },
 ]
 
+const STANDARD_COLUMNS = [
+  { id: 'contact', label: 'Contact' },
+  { id: 'stage', label: 'Stage' },
+  { id: 'tags', label: 'Tags' },
+  { id: 'priority', label: 'Priority' },
+  { id: 'score', label: 'Lead Score' },
+  { id: 'status', label: 'Status' },
+  { id: 'assignedTo', label: 'Assigned To' },
+  { id: 'industry', label: 'Industry' },
+  { id: 'updated', label: 'Updated' },
+] as const
+
+const DEFAULT_VISIBLE_COLUMNS = ['contact', 'stage', 'tags', 'priority', 'score', 'status', 'assignedTo', 'updated']
+const COLUMNS_STORAGE_KEY = 'leads-table-columns-v1'
+
+function loadStoredColumns(): Set<string> {
+  try {
+    const raw = localStorage.getItem(COLUMNS_STORAGE_KEY)
+    if (!raw) return new Set(DEFAULT_VISIBLE_COLUMNS)
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? new Set(parsed) : new Set(DEFAULT_VISIBLE_COLUMNS)
+  } catch {
+    return new Set(DEFAULT_VISIBLE_COLUMNS)
+  }
+}
+
 export function LeadsList() {
   const navigate = useNavigate()
+  const location = useLocation()
   const queryClient = useQueryClient()
+  const drillState = location.state as { initialFilters?: LeadFilters; drillLabel?: string } | null
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [sortBy, setSortBy] = useState('created_at')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
-  const [filters, setFilters] = useState<LeadFilters>({})
+  const [filters, setFilters] = useState<LeadFilters>(() => drillState?.initialFilters ?? {})
+  const [drillLabel, setDrillLabel] = useState<string | null>(drillState?.drillLabel ?? null)
+
+  // Clear the navigation state once consumed so a later browser back/forward
+  // doesn't re-apply a stale drill-down context.
+  useEffect(() => {
+    if (drillState) navigate(location.pathname, { replace: true, state: null })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  function clearDrillFilter() {
+    setFilters({})
+    setDrillLabel(null)
+    setPage(1)
+  }
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [importOpen, setImportOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -67,15 +111,108 @@ export function LeadsList() {
 
   const { data: customFieldsData } = useQuery({ queryKey: ['custom-fields'], queryFn: customFieldsApi.list })
   const leadCustomFields = (customFieldsData?.fields ?? []).filter((f) => f.applies_to === 'leads' || f.applies_to === 'both')
-  const [visibleColumnIds, setVisibleColumnIds] = useState<Set<string>>(new Set())
+  const [visibleColumnIds, setVisibleColumnIds] = useState<Set<string>>(() => loadStoredColumns())
   const [columnsMenuOpen, setColumnsMenuOpen] = useState(false)
   const visibleCustomFields = leadCustomFields.filter((f) => visibleColumnIds.has(f.id))
+  const visibleStandardColumns = STANDARD_COLUMNS.filter((c) => visibleColumnIds.has(c.id))
+
+  useEffect(() => {
+    localStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify([...visibleColumnIds]))
+  }, [visibleColumnIds])
+
+  function toggleColumn(id: string) {
+    setVisibleColumnIds((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  function resetColumnsToDefault() {
+    setVisibleColumnIds(new Set(DEFAULT_VISIBLE_COLUMNS))
+  }
 
   function formatCustomFieldCell(value: any): string {
     if (value === null || value === undefined || value === '') return '—'
     if (Array.isArray(value)) return value.length > 0 ? value.join(', ') : '—'
     if (typeof value === 'boolean') return value ? 'Yes' : 'No'
     return String(value)
+  }
+
+  const industryNameById = new Map(industries.map((i) => [i.id, i.name]))
+
+  function renderStandardCell(columnId: string, lead: NonNullable<typeof data>['leads'][number]) {
+    switch (columnId) {
+      case 'contact':
+        return (
+          <td key={columnId} className="px-5 py-3.5 text-base-300">
+            <div>{lead.phone || '—'}</div>
+            <div className="text-xs text-base-400">{lead.email || '—'}</div>
+          </td>
+        )
+      case 'stage':
+        return (
+          <td key={columnId} className="px-5 py-3.5">
+            {lead.stage_id && stageNameById.has(lead.stage_id) ? (
+              <Badge tone="neutral">{stageNameById.get(lead.stage_id)}</Badge>
+            ) : (
+              <span className="text-base-400">—</span>
+            )}
+          </td>
+        )
+      case 'tags':
+        return (
+          <td key={columnId} className="px-5 py-3.5">
+            <div className="flex flex-wrap gap-1.5">
+              {lead.tags.slice(0, 2).map((t) => (
+                <TagPill key={t.id} label={t.name} />
+              ))}
+              {lead.tags.length > 2 && <span className="text-xs text-base-400">+{lead.tags.length - 2}</span>}
+            </div>
+          </td>
+        )
+      case 'priority':
+        return (
+          <td key={columnId} className="px-5 py-3.5">
+            <PriorityBadge priority={lead.priority} />
+          </td>
+        )
+      case 'score':
+        return (
+          <td key={columnId} className="px-5 py-3.5">
+            <ScoreBadge score={lead.score} band={lead.band} />
+          </td>
+        )
+      case 'status':
+        return <td key={columnId} className="px-5 py-3.5">{statusSummary(lead)}</td>
+      case 'assignedTo':
+        return (
+          <td key={columnId} className="px-5 py-3.5">
+            {lead.assigned_to && assigneeNameById.has(lead.assigned_to) ? (
+              <div className="flex items-center gap-1.5">
+                <Avatar name={assigneeNameById.get(lead.assigned_to)} size={5} />
+                <span className="truncate text-xs text-base-300">{assigneeNameById.get(lead.assigned_to)}</span>
+              </div>
+            ) : (
+              <span className="text-base-400">—</span>
+            )}
+          </td>
+        )
+      case 'industry':
+        return (
+          <td key={columnId} className="px-5 py-3.5 text-base-300">
+            {lead.industry_id ? industryNameById.get(lead.industry_id) ?? '—' : '—'}
+          </td>
+        )
+      case 'updated':
+        return (
+          <td key={columnId} className="px-5 py-3.5 text-base-400">
+            {new Date(lead.updated_at).toLocaleDateString()}
+          </td>
+        )
+      default:
+        return null
+    }
   }
 
   function selectIndustry(industryId: string | undefined) {
@@ -167,6 +304,22 @@ export function LeadsList() {
 
   return (
     <div>
+      {drillLabel && (
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg bg-accent-500/10 px-4 py-3 text-sm text-accent-300">
+          <LayoutDashboard size={16} className="shrink-0" />
+          <span className="flex-1">
+            Showing leads where: <strong className="text-accent-200">{drillLabel}</strong>
+          </span>
+          <button className="flex items-center gap-1 text-accent-300 hover:text-accent-100" onClick={clearDrillFilter}>
+            <X size={14} />
+            Clear filter
+          </button>
+          <button className="btn-ghost px-2 text-accent-300 hover:text-accent-100" onClick={() => navigate('/dashboard')}>
+            Back to Dashboard
+          </button>
+        </div>
+      )}
+
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-base-100">Leads</h1>
@@ -193,33 +346,57 @@ export function LeadsList() {
               Kanban
             </button>
           </div>
-          {leadCustomFields.length > 0 && view === 'table' && (
+          {view === 'table' && (
             <div className="relative">
               <button className="btn-secondary" onClick={() => setColumnsMenuOpen((o) => !o)}>
                 <SlidersHorizontal size={16} />
-                Manage Columns
+                Columns
               </button>
               {columnsMenuOpen && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setColumnsMenuOpen(false)} />
-                  <div className="card absolute right-0 z-50 mt-2 w-56 space-y-2 p-3">
-                    {leadCustomFields.map((f) => (
-                      <label key={f.id} className="flex items-center gap-2 text-sm text-base-200">
+                  <div className="card absolute right-0 z-50 mt-2 max-h-[70vh] w-64 overflow-y-auto p-3 sm:right-0">
+                    <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-base-400">Columns</p>
+                    <label className="flex cursor-not-allowed items-center gap-2 rounded-md px-1 py-1.5 text-sm text-base-400 opacity-60">
+                      <input type="checkbox" checked disabled className="h-4 w-4 rounded border-base-600 bg-base-800" />
+                      Company (always shown)
+                    </label>
+                    <div className="my-1.5 border-t border-base-700/60" />
+                    {STANDARD_COLUMNS.map((c) => (
+                      <label key={c.id} className="flex items-center gap-2 rounded-md px-1 py-1.5 text-sm text-base-200 hover:bg-base-800">
                         <input
                           type="checkbox"
-                          checked={visibleColumnIds.has(f.id)}
-                          onChange={() =>
-                            setVisibleColumnIds((prev) => {
-                              const next = new Set(prev)
-                              next.has(f.id) ? next.delete(f.id) : next.add(f.id)
-                              return next
-                            })
-                          }
+                          checked={visibleColumnIds.has(c.id)}
+                          onChange={() => toggleColumn(c.id)}
                           className="h-4 w-4 rounded border-base-600 bg-base-800 text-accent-500 focus:ring-accent-500"
                         />
-                        {f.label}
+                        {c.label}
                       </label>
                     ))}
+                    {leadCustomFields.length > 0 && (
+                      <>
+                        <div className="my-1.5 border-t border-base-700/60" />
+                        <p className="mb-1 px-1 text-xs font-semibold uppercase tracking-wide text-base-400">Custom Fields</p>
+                        {leadCustomFields.map((f) => (
+                          <label key={f.id} className="flex items-center gap-2 rounded-md px-1 py-1.5 text-sm text-base-200 hover:bg-base-800">
+                            <input
+                              type="checkbox"
+                              checked={visibleColumnIds.has(f.id)}
+                              onChange={() => toggleColumn(f.id)}
+                              className="h-4 w-4 rounded border-base-600 bg-base-800 text-accent-500 focus:ring-accent-500"
+                            />
+                            {f.label}
+                          </label>
+                        ))}
+                      </>
+                    )}
+                    <div className="my-1.5 border-t border-base-700/60" />
+                    <button
+                      className="w-full rounded-md px-1 py-1.5 text-left text-sm text-accent-400 hover:bg-base-800"
+                      onClick={resetColumnsToDefault}
+                    >
+                      Reset to Default
+                    </button>
                   </div>
                 </>
               )}
@@ -329,11 +506,13 @@ export function LeadsList() {
       ) : data && data.leads.length === 0 ? (
         <div className="card flex flex-col items-center gap-3 p-16 text-center">
           <Building2 size={32} className="text-base-500" />
-          <p className="text-base-300">No leads found.</p>
-          <button className="btn-primary" onClick={() => navigate('/leads/new')}>
-            <Plus size={16} />
-            Add your first lead
-          </button>
+          <p className="text-base-300">{drillLabel ? 'No leads match this filter yet.' : 'No leads found.'}</p>
+          {!drillLabel && (
+            <button className="btn-primary" onClick={() => navigate('/leads/new')}>
+              <Plus size={16} />
+              Add your first lead
+            </button>
+          )}
         </div>
       ) : (
         <>
@@ -350,14 +529,10 @@ export function LeadsList() {
                       className="h-4 w-4 rounded border-base-600 bg-base-800 text-accent-500 focus:ring-accent-500"
                     />
                   </th>
-                  <th className="px-5 py-3 font-medium">Company</th>
-                  <th className="px-5 py-3 font-medium">Contact</th>
-                  <th className="px-5 py-3 font-medium">Stage</th>
-                  <th className="px-5 py-3 font-medium">Tags</th>
-                  <th className="px-5 py-3 font-medium">Priority</th>
-                  <th className="px-5 py-3 font-medium">Status</th>
-                  <th className="px-5 py-3 font-medium">Assigned To</th>
-                  <th className="px-5 py-3 font-medium">Updated</th>
+                  <th className="w-64 min-w-[220px] px-5 py-3 font-medium">Company</th>
+                  {visibleStandardColumns.map((c) => (
+                    <th key={c.id} className="px-5 py-3 font-medium">{c.label}</th>
+                  ))}
                   {visibleCustomFields.map((f) => (
                     <th key={f.id} className="px-5 py-3 font-medium">{f.label}</th>
                   ))}
@@ -378,7 +553,7 @@ export function LeadsList() {
                         className="h-4 w-4 rounded border-base-600 bg-base-800 text-accent-500 focus:ring-accent-500"
                       />
                     </td>
-                    <td className="px-5 py-3.5">
+                    <td className="w-64 min-w-[220px] px-5 py-3.5">
                       <div className="flex items-center gap-1.5">
                         {lead.status?.is_overdue && (
                           <span className="h-2 w-2 shrink-0 rounded-full bg-danger" title="Overdue follow-up" />
@@ -390,49 +565,7 @@ export function LeadsList() {
                       </div>
                       <div className="text-xs text-base-400">{lead.address || '—'}</div>
                     </td>
-                    <td className="px-5 py-3.5 text-base-300">
-                      <div>{lead.phone || '—'}</div>
-                      <div className="text-xs text-base-400">{lead.email || '—'}</div>
-                    </td>
-                    <td className="px-5 py-3.5">
-                      {lead.stage_id && stageNameById.has(lead.stage_id) ? (
-                        <Badge tone="neutral">{stageNameById.get(lead.stage_id)}</Badge>
-                      ) : (
-                        <span className="text-base-400">—</span>
-                      )}
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <div className="flex flex-wrap gap-1.5">
-                        {lead.tags.slice(0, 2).map((t) => (
-                          <TagPill key={t.id} label={t.name} />
-                        ))}
-                        {lead.tags.length > 2 && (
-                          <span className="text-xs text-base-400">+{lead.tags.length - 2}</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <div className="flex flex-wrap gap-1.5">
-                        <PriorityBadge priority={lead.priority} />
-                        <ScoreBadge score={lead.score} band={lead.band} />
-                      </div>
-                    </td>
-                    <td className="px-5 py-3.5">{statusSummary(lead)}</td>
-                    <td className="px-5 py-3.5">
-                      {lead.assigned_to && assigneeNameById.has(lead.assigned_to) ? (
-                        <div className="flex items-center gap-1.5">
-                          <Avatar name={assigneeNameById.get(lead.assigned_to)} size={5} />
-                          <span className="truncate text-xs text-base-300">
-                            {assigneeNameById.get(lead.assigned_to)}
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-base-400">—</span>
-                      )}
-                    </td>
-                    <td className="px-5 py-3.5 text-base-400">
-                      {new Date(lead.updated_at).toLocaleDateString()}
-                    </td>
+                    {visibleStandardColumns.map((c) => renderStandardCell(c.id, lead))}
                     {visibleCustomFields.map((f) => (
                       <td key={f.id} className="px-5 py-3.5 text-base-300">
                         {formatCustomFieldCell(lead.custom_fields?.[f.id])}

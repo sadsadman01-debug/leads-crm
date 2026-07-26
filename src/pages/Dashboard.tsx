@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   Users,
@@ -28,6 +28,7 @@ import { DashboardPeriodComparisons } from '@/components/DashboardPeriodComparis
 import { LEAD_SOURCE_COLORS, PRIORITY_COLORS, SENTIMENT_COLORS, STATUS_DIST_COLORS } from '@/lib/chartColors'
 import { useAuth, isAdminOrAbove } from '@/contexts/AuthContext'
 import type { RevenueSummary } from '@/types/deal'
+import type { LeadFilters } from '@/types/lead'
 
 const GRANULARITIES: Array<{ value: 'day' | 'week' | 'month'; label: string }> = [
   { value: 'day', label: 'Daily (30d)' },
@@ -38,6 +39,7 @@ const GRANULARITIES: Array<{ value: 'day' | 'week' | 'month'; label: string }> =
 export function Dashboard() {
   const { profile } = useAuth()
   const location = useLocation()
+  const navigate = useNavigate()
   const isAdmin = isAdminOrAbove(profile?.role)
   const [granularity, setGranularity] = useState<'day' | 'week' | 'month'>('day')
   const [industryId, setIndustryId] = useState('')
@@ -71,6 +73,18 @@ export function Dashboard() {
   const members = teamData?.members.filter((m) => m.is_active) ?? []
 
   const accessDenied = Boolean((location.state as any)?.accessDenied) && !accessDeniedDismissed
+
+  /** Drills down from a stat card into the Leads table, pre-filtered to match
+   * exactly what the card counted — carrying over the Dashboard's own
+   * Industry/Team-Member scoping so the results stay consistent with the number. */
+  function drillDown(statusField: keyof import('@/types/lead').LeadStatus | undefined, label: string) {
+    const drillFilters: LeadFilters = {
+      industryId: industryId || undefined,
+      assignedTo: effectiveAssignedTo || undefined,
+      statusChecks: statusField ? [{ field: statusField, value: true }] : undefined,
+    }
+    navigate('/leads', { state: { initialFilters: drillFilters, drillLabel: label } })
+  }
 
   if (isLoading && !data) {
     return <div className="p-12 text-center text-base-400">Loading dashboard…</div>
@@ -140,13 +154,14 @@ export function Dashboard() {
       <RemindersWidget reminders={data.reminders} />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-        <StatTile label="Total Leads" value={data.totals.leads} icon={Users} tone="accent" />
+        <StatTile label="Total Leads" value={data.totals.leads} icon={Users} tone="accent" onClick={() => drillDown(undefined, 'Total Leads')} />
         <StatTile
           label="Cold Emails Sent"
           value={data.outreach.cold_email_sent.count}
           subvalue={`${data.outreach.cold_email_sent.pct}%`}
           icon={Mail}
           tone="accent"
+          onClick={() => drillDown('cold_email_sent', 'Cold Email Sent ✓')}
         />
         <StatTile
           label="1st Follow-up"
@@ -154,6 +169,7 @@ export function Dashboard() {
           subvalue={`${data.outreach.followup1_sent.pct}%`}
           icon={Send}
           tone="neutral"
+          onClick={() => drillDown('followup1_sent', '1st Follow-up Sent ✓')}
         />
         <StatTile
           label="2nd Follow-up"
@@ -161,6 +177,7 @@ export function Dashboard() {
           subvalue={`${data.outreach.followup2_sent.pct}%`}
           icon={Send}
           tone="neutral"
+          onClick={() => drillDown('followup2_sent', '2nd Follow-up Sent ✓')}
         />
         <StatTile
           label="3rd Follow-up"
@@ -168,6 +185,7 @@ export function Dashboard() {
           subvalue={`${data.outreach.followup3_sent.pct}%`}
           icon={Send}
           tone="neutral"
+          onClick={() => drillDown('followup3_sent', '3rd Follow-up Sent ✓')}
         />
         <StatTile
           label="Replies"
@@ -175,6 +193,7 @@ export function Dashboard() {
           subvalue={`${data.replies.rate}% rate`}
           icon={Reply}
           tone="accent"
+          onClick={() => drillDown('replied', 'Replied ✓')}
         />
         <StatTile
           label="Converted to Client"
@@ -182,6 +201,7 @@ export function Dashboard() {
           subvalue={`${data.conversion.rate}% rate`}
           icon={Trophy}
           tone="success"
+          onClick={() => drillDown('converted', 'Converted to Client ✓')}
         />
         <StatTile
           label="WhatsApp Sent"
@@ -189,6 +209,7 @@ export function Dashboard() {
           subvalue={`${data.outreach.whatsapp_sent.pct}%`}
           icon={MessageCircle}
           tone="success"
+          onClick={() => drillDown('whatsapp_sent', 'WhatsApp Sent ✓')}
         />
         <StatTile
           label="LinkedIn Sent"
@@ -196,6 +217,7 @@ export function Dashboard() {
           subvalue={`${data.outreach.linkedin_sent.pct}%`}
           icon={Linkedin}
           tone="success"
+          onClick={() => drillDown('linkedin_sent', 'LinkedIn Sent ✓')}
         />
         <StatTile
           label="SMS Sent"
@@ -203,6 +225,7 @@ export function Dashboard() {
           subvalue={`${data.outreach.sms_sent.pct}%`}
           icon={Send}
           tone="success"
+          onClick={() => drillDown('sms_sent', 'SMS Sent ✓')}
         />
         <StatTile
           label="Cold Calls Made"
@@ -210,6 +233,7 @@ export function Dashboard() {
           subvalue={`${data.outreach.cold_call_made.pct}%`}
           icon={Phone}
           tone="success"
+          onClick={() => drillDown('cold_call_made', 'Cold Call Made ✓')}
         />
         <StatTile
           label="No WhatsApp Available"
@@ -217,6 +241,7 @@ export function Dashboard() {
           subvalue={`${data.outreach.no_whatsapp.pct}%`}
           icon={PhoneOff}
           tone="warn"
+          onClick={() => drillDown('no_whatsapp', 'No WhatsApp Available ✓')}
         />
         <StatTile
           label="Invalid Email"
@@ -224,6 +249,7 @@ export function Dashboard() {
           subvalue={`${data.outreach.email_invalid.pct}%`}
           icon={MailWarning}
           tone="danger"
+          onClick={() => drillDown('email_invalid', 'Email Invalid ✓')}
         />
         <StatTile
           label="Invalid Phone"
@@ -231,6 +257,7 @@ export function Dashboard() {
           subvalue={`${data.outreach.phone_invalid.pct}%`}
           icon={PhoneMissed}
           tone="danger"
+          onClick={() => drillDown('phone_invalid', 'Phone Invalid ✓')}
         />
       </div>
 

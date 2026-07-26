@@ -17,15 +17,27 @@ export function StatTile({
   subvalue,
   icon: Icon,
   tone = 'accent',
+  onClick,
 }: {
   label: string
   value: string | number
   subvalue?: string
   icon: LucideIcon
   tone?: Tone
+  /** When provided, the whole card becomes a single tap target that navigates to a drill-down view. */
+  onClick?: () => void
 }) {
+  const Wrapper = onClick ? 'button' : 'div'
+
   return (
-    <div className="card p-5">
+    <Wrapper
+      type={onClick ? 'button' : undefined}
+      onClick={onClick}
+      className={clsx(
+        'card w-full p-5 text-left',
+        onClick && 'cursor-pointer transition-all duration-150 hover:-translate-y-0.5 hover:shadow-glow focus-visible:-translate-y-0.5 focus-visible:shadow-glow focus-visible:outline-none'
+      )}
+    >
       <div className="mb-3 flex items-center justify-between">
         <span className="text-xs font-medium uppercase tracking-wide text-base-400">{label}</span>
         <div className={clsx('flex h-8 w-8 items-center justify-center rounded-lg', TONE_CLASSES[tone])}>
@@ -36,6 +48,6 @@ export function StatTile({
         <span className="text-2xl font-semibold text-base-100">{value}</span>
         {subvalue && <span className="text-sm text-base-400">{subvalue}</span>}
       </div>
-    </div>
+    </Wrapper>
   )
 }
