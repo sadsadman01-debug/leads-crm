@@ -15,6 +15,25 @@ export interface AuthedUser {
    * never consult it, since every permission check short-circuits on role first. */
   permissions: UserPermissions
   force_password_change: boolean
+  /** Authenticator Assurance Level read straight off the access token's own
+   * claims — 'aal2' means this specific session completed an MFA challenge.
+   * `supabase.auth.getUser()` doesn't surface this, so it's decoded manually
+   * from the JWT payload (signature already verified by getUser() above). */
+  aal: 'aal1' | 'aal2'
+}
+
+/** Decodes (does not verify — the token was already verified via
+ * `supabase.auth.getUser()` immediately before this is called) the JWT payload
+ * to read the `aal` claim Supabase Auth includes on every access token. */
+function decodeAal(token: string): 'aal1' | 'aal2' {
+  try {
+    const payload = token.split('.')[1]
+    const json = Buffer.from(payload, 'base64url').toString('utf8')
+    const claims = JSON.parse(json)
+    return claims.aal === 'aal2' ? 'aal2' : 'aal1'
+  } catch {
+    return 'aal1'
+  }
 }
 
 /**
@@ -59,6 +78,7 @@ export async function requireUser(event: HandlerEvent): Promise<AuthedUser> {
     organization_id: profile.organization_id,
     permissions: normalizePermissions(profile.permissions),
     force_password_change: Boolean(profile.force_password_change),
+    aal: decodeAal(token),
   }
 }
 

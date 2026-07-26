@@ -22,6 +22,7 @@ import { TrendChart } from '@/components/charts/TrendChart'
 import { DonutChart } from '@/components/charts/DonutChart'
 import { RemindersWidget } from '@/components/RemindersWidget'
 import { OnboardingChecklist } from '@/components/OnboardingChecklist'
+import { MfaNudgeBanner } from '@/components/MfaNudgeBanner'
 import { IndustryComparisonTable } from '@/components/IndustryComparisonTable'
 import { TeamPerformanceTable } from '@/components/TeamPerformanceTable'
 import { RevenueSection } from '@/components/RevenueSection'
@@ -107,6 +108,8 @@ export function Dashboard() {
           </button>
         </div>
       )}
+
+      <MfaNudgeBanner />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>

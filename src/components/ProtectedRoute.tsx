@@ -59,6 +59,28 @@ export function RequireSuperAdmin() {
   return <Outlet />
 }
 
+/** Blocks access to the rest of the app until this session completes its MFA
+ * challenge (the account has 2FA enabled but this specific session is still
+ * only aal1) — sends them to the code-entry screen instead. Accounts without
+ * 2FA enabled are entirely unaffected (mfaPending is simply always false). */
+export function RequireMfaVerified() {
+  const { mfaPending, loading } = useAuth()
+
+  if (loading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-base-950">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent-500 border-t-transparent" />
+      </div>
+    )
+  }
+
+  if (mfaPending) {
+    return <Navigate to="/mfa-challenge" replace />
+  }
+
+  return <Outlet />
+}
+
 /** Blocks access to the rest of the app until a mandatory password change
  * (set on the profile by the Signup Request approve flow) is completed. */
 export function RequirePasswordSet() {

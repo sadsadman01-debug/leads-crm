@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { usePlatformBranding } from '@/hooks/usePlatformBranding'
 
 export function Login() {
-  const { session, signIn } = useAuth()
+  const { session, mfaPending, signIn } = useAuth()
   const location = useLocation()
   const platformBranding = usePlatformBranding()
   const [email, setEmail] = useState('')
@@ -16,7 +16,7 @@ export function Login() {
 
   if (session) {
     const from = (location.state as any)?.from?.pathname ?? '/leads'
-    return <Navigate to={from} replace />
+    return <Navigate to={mfaPending ? '/mfa-challenge' : from} replace />
   }
 
   async function handleSubmit(e: FormEvent) {

@@ -1,7 +1,7 @@
 import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
-import { requireSuperAdmin } from '../lib/permissions.js'
+import { requireSuperAdmin, requireAal2IfEnrolled } from '../lib/permissions.js'
 import { generateTempPassword } from '../lib/passwordGen.js'
 import { notifySuperAdmins } from '../lib/notifications.js'
 import type { AuthedUser } from '../lib/auth.js'
@@ -71,6 +71,7 @@ async function getRequestOrThrow(id: string) {
  * it is never stored anywhere and never sent by this app via email. */
 export async function approveSignupRequest(id: string, event: HandlerEvent, user: AuthedUser) {
   requireSuperAdmin(user)
+  await requireAal2IfEnrolled(user)
   const supabase = getSupabaseAdmin()
   const request = await getRequestOrThrow(id)
   if (request.status !== 'pending') throw new HttpError(400, 'This request has already been reviewed')
@@ -128,6 +129,7 @@ export async function approveSignupRequest(id: string, event: HandlerEvent, user
 /** Body: { rejection_reason?: string } — an internal-only note, never sent anywhere. */
 export async function rejectSignupRequest(id: string, event: HandlerEvent, user: AuthedUser) {
   requireSuperAdmin(user)
+  await requireAal2IfEnrolled(user)
   const request = await getRequestOrThrow(id)
   if (request.status !== 'pending') throw new HttpError(400, 'This request has already been reviewed')
 

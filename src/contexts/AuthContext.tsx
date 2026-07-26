@@ -20,9 +20,15 @@ interface AuthContextValue {
   session: Session | null
   profile: CurrentProfile | null
   loading: boolean
+  /** True once email+password succeeds but this session hasn't completed an
+   * MFA challenge yet (the account has a verified TOTP factor, current AAL is
+   * still aal1). While true, the rest of the app is inaccessible — see
+   * `RequireMfaVerified` in ProtectedRoute.tsx. */
+  mfaPending: boolean
   signIn: (email: string, password: string) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
   refreshProfile: () => Promise<void>
+  refreshMfaStatus: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
@@ -31,6 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<CurrentProfile | null>(null)
   const [loading, setLoading] = useState(true)
+  const [mfaPending, setMfaPending] = useState(false)
 
   async function loadProfile() {
     try {
@@ -41,17 +48,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function refreshMfaStatus() {
+    const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+    setMfaPending(Boolean(data && data.nextLevel === 'aal2' && data.currentLevel !== data.nextLevel))
+  }
+
+  async function syncAuthState(newSession: Session | null) {
+    setSession(newSession)
+    if (newSession) {
+      await Promise.all([loadProfile(), refreshMfaStatus()])
+    } else {
+      setProfile(null)
+      setMfaPending(false)
+    }
+  }
+
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data }) => {
-      setSession(data.session)
-      if (data.session) await loadProfile()
+      await syncAuthState(data.session)
       setLoading(false)
     })
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession)
-      if (newSession) loadProfile()
-      else setProfile(null)
+      syncAuthState(newSession)
     })
 
     return () => listener.subscription.unsubscribe()
@@ -67,7 +86,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ session, profile, loading, signIn, signOut, refreshProfile: loadProfile }}>
+    <AuthContext.Provider
+      value={{ session, profile, loading, mfaPending, signIn, signOut, refreshProfile: loadProfile, refreshMfaStatus }}
+    >
       {children}
     </AuthContext.Provider>
   )

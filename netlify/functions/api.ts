@@ -75,6 +75,11 @@ import {
   resolvePasswordResetRequest,
 } from './routes/passwordResetRequests.js'
 import {
+  createMfaResetRequest,
+  listMfaResetRequests,
+  resolveMfaResetRequest,
+} from './routes/mfaResetRequests.js'
+import {
   listNotifications,
   getUnreadCount,
   markNotificationRead,
@@ -179,6 +184,18 @@ export const handler: Handler = async (event) => {
         if (!id && method === 'PATCH') response = await updatePlatformBranding(event, user)
         else if (id === 'logo' && sub === 'sign' && method === 'POST') response = await createPlatformLogoSignedUpload(event, user)
         else if (id === 'reset' && method === 'POST') response = await resetPlatformBranding(event, user)
+        else throw new HttpError(404, 'Not found')
+      }
+    } else if (resource === 'mfa-reset-requests') {
+      // Same public/authenticated split as password-reset-requests: the
+      // "Locked out of Two-Factor Authentication?" submission needs no
+      // session; viewing/resolving is Admin-or-above, scoped per role inside.
+      if (!id && method === 'POST') {
+        response = await createMfaResetRequest(event)
+      } else {
+        const user = await requireUser(event)
+        if (!id && method === 'GET') response = await listMfaResetRequests(event, user)
+        else if (id && sub === 'resolve' && method === 'POST') response = await resolveMfaResetRequest(id, event, user)
         else throw new HttpError(404, 'Not found')
       }
     } else if (resource === 'notifications') {

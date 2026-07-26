@@ -29,6 +29,7 @@ import type { CustomFieldDefinition, AppliesTo, FieldType } from '@/types/custom
 import type { SavedReport, ReportRunResult, ReportType, ChartType, ReportFilters } from '@/types/report'
 import type { SignupRequest, ApproveSignupRequestResult } from '@/types/signupRequest'
 import type { PasswordResetRequest, PasswordResetResult } from '@/types/passwordResetRequest'
+import type { MfaResetRequest, MfaResetResult } from '@/types/mfaResetRequest'
 import type { AppNotification, NotificationListResponse } from '@/types/notification'
 import type { OnboardingStatus } from '@/types/onboarding'
 import { withOrgScope } from './orgScope'
@@ -429,6 +430,21 @@ export const passwordResetRequestsApi = {
 
   resolve: (id: string) =>
     request<{ request: PasswordResetRequest; admin: PasswordResetResult }>(`/password-reset-requests/${id}/resolve`, {
+      method: 'POST',
+    }),
+}
+
+export const mfaResetRequestsApi = {
+  /** Public — reachable from the Login page's MFA challenge screen before any
+   * session exists. Always resolves the same way whether or not a matching
+   * account was found. */
+  create: (email: string) =>
+    requestPublic<{ message: string }>('/mfa-reset-requests', { method: 'POST', body: JSON.stringify({ email }) }),
+
+  list: () => request<{ requests: MfaResetRequest[] }>('/mfa-reset-requests'),
+
+  resolve: (id: string) =>
+    request<{ request: MfaResetRequest; account: MfaResetResult }>(`/mfa-reset-requests/${id}/resolve`, {
       method: 'POST',
     }),
 }

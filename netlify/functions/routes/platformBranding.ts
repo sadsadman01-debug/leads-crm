@@ -1,7 +1,7 @@
 import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
-import { requireSuperAdmin } from '../lib/permissions.js'
+import { requireSuperAdmin, requireAal2IfEnrolled } from '../lib/permissions.js'
 import { CURATED_PALETTE, ALLOWED_HEX } from '../lib/brandPalette.js'
 import type { AuthedUser } from '../lib/auth.js'
 
@@ -75,6 +75,7 @@ export async function createPlatformLogoSignedUpload(event: HandlerEvent, user: 
 
 export async function updatePlatformBranding(event: HandlerEvent, user: AuthedUser) {
   requireSuperAdmin(user)
+  await requireAal2IfEnrolled(user)
   const supabase = getSupabaseAdmin()
   const body = JSON.parse(event.body || '{}')
   const update: Record<string, string | null> = {}
@@ -128,6 +129,7 @@ export async function updatePlatformBranding(event: HandlerEvent, user: AuthedUs
  * SOME valid branding even if this row is empty. */
 export async function resetPlatformBranding(event: HandlerEvent, user: AuthedUser) {
   requireSuperAdmin(user)
+  await requireAal2IfEnrolled(user)
   const supabase = getSupabaseAdmin()
   const row = await getOrCreatePlatformSettingsRow()
 

@@ -61,6 +61,22 @@ export function requireSuperAdmin(user: AuthedUser) {
   if (!isSuperAdmin(user)) throw new HttpError(403, 'Super Admin access required')
 }
 
+/** Opt-in step-up auth check for the most sensitive actions (Team Management
+ * mutations, Branding, Signup/Password-Reset/MFA-Reset resolution): if this
+ * account has ever verified a TOTP factor, its CURRENT session must have
+ * actually completed an MFA challenge (aal2) — an old aal1 session token
+ * can't be used to bypass 2FA just because it's still technically valid.
+ * Accounts that never enrolled MFA are entirely unaffected (still aal1-only). */
+export async function requireAal2IfEnrolled(user: AuthedUser) {
+  if (user.aal === 'aal2') return
+  const supabase = getSupabaseAdmin()
+  const { data } = await supabase.auth.admin.mfa.listFactors({ userId: user.id })
+  const hasVerifiedFactor = (data?.factors ?? []).some((f) => f.status === 'verified')
+  if (hasVerifiedFactor) {
+    throw new HttpError(401, 'Please complete two-factor verification to continue. Sign out and back in to refresh your session.')
+  }
+}
+
 export type OwnedRecord = { assigned_to?: string | null; created_by?: string | null; owner_id?: string | null }
 export type VisibilityScope = 'lead' | 'deal'
 

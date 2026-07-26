@@ -2,18 +2,16 @@ import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
 import { isAdminOrAbove, isSuperAdmin, requireSuperAdmin, requireAal2IfEnrolled } from '../lib/permissions.js'
-import { generateTempPassword } from '../lib/passwordGen.js'
 import { notifySuperAdmins, notifyOrgAdmins } from '../lib/notifications.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const COLUMNS =
   'id, target_profile_id, target_email, target_role, organization_id, status, requested_at, resolved_at, resolved_by'
 
-/** POST /password-reset-requests — public, unauthenticated. Always returns the
- * same generic response, whether or not a matching account exists, so this can
- * never be used to probe which emails are registered. A Super Admin target (or
- * an inactive account) never gets a row — there's no one to route it to. */
-export async function createPasswordResetRequest(event: HandlerEvent) {
+/** POST /mfa-reset-requests — public, unauthenticated, reached from the Login
+ * page's MFA challenge screen. Same shape and same email-enumeration
+ * protection as createPasswordResetRequest: always the same generic response. */
+export async function createMfaResetRequest(event: HandlerEvent) {
   const supabase = getSupabaseAdmin()
   const body = JSON.parse(event.body || '{}')
   const email = (body.email ?? '').trim()
@@ -27,7 +25,7 @@ export async function createPasswordResetRequest(event: HandlerEvent) {
 
     if (target && target.is_active && (target.role === 'admin' || target.role === 'user')) {
       const { data: created } = await supabase
-        .from('password_reset_requests')
+        .from('mfa_reset_requests')
         .insert({
           target_profile_id: target.id,
           target_email: target.email,
@@ -37,16 +35,15 @@ export async function createPasswordResetRequest(event: HandlerEvent) {
         .select('id')
         .single()
 
-      // Per the routing rules: an Admin target only the Super Admin can act on
-      // (only Super Admin manages Admin accounts); a User target goes to
-      // their own org's Admin(s).
+      // Same routing rule as password resets: an Admin target only the Super
+      // Admin can act on; a User target goes to their own org's Admin(s).
       const notifyFields = {
-        type: 'password_reset_request' as const,
-        title: 'Password reset requested',
-        message: `${target.email} requested a password reset.`,
-        link_route: target.role === 'admin' ? '/password-reset-requests' : '/team',
+        type: 'mfa_reset_request' as const,
+        title: 'Two-factor authentication reset requested',
+        message: `${target.email} is locked out of their authenticator app and requested a 2FA reset.`,
+        link_route: target.role === 'admin' ? '/mfa-reset-requests' : '/team',
         related_entity_id: created?.id ?? null,
-        related_entity_type: 'password_reset_request',
+        related_entity_type: 'mfa_reset_request',
       }
       if (target.role === 'admin') {
         await notifySuperAdmins(notifyFields)
@@ -57,18 +54,17 @@ export async function createPasswordResetRequest(event: HandlerEvent) {
   }
 
   return json(200, {
-    message: "If an account exists with this email, a request has been sent to your admin. They'll provide you a new password soon.",
+    message: "If an account exists with this email, a request has been sent to your admin. They'll help you regain access soon.",
   })
 }
 
 /** Admin sees only pending/resolved requests targeting Users in their own
- * organization; Super Admin sees every request platform-wide, including
- * every Admin-role request (grouped by organization for User-role ones). */
-export async function listPasswordResetRequests(event: HandlerEvent, user: AuthedUser) {
+ * organization; Super Admin sees every request platform-wide. */
+export async function listMfaResetRequests(event: HandlerEvent, user: AuthedUser) {
   if (!isAdminOrAbove(user)) throw new HttpError(403, 'Admin access required')
   const supabase = getSupabaseAdmin()
 
-  let query = supabase.from('password_reset_requests').select(COLUMNS).order('requested_at', { ascending: false })
+  let query = supabase.from('mfa_reset_requests').select(COLUMNS).order('requested_at', { ascending: false })
   if (!isSuperAdmin(user)) {
     query = query.eq('target_role', 'user').eq('organization_id', user.organization_id)
   }
@@ -101,12 +97,11 @@ export async function listPasswordResetRequests(event: HandlerEvent, user: Authe
   })
 }
 
-/** The single source of truth for actually resetting a password — used by both
- * the request-resolve flow below and the direct "Reset Password" button on a
- * Team Management row (netlify/functions/routes/team.ts). Independently
- * re-verifies the caller is permitted against the target's live role/org on
- * every call, regardless of what the caller already checked. */
-export async function performPasswordReset(targetProfileId: string, resolver: AuthedUser) {
+/** The single source of truth for actually clearing a locked-out account's
+ * 2FA — removes every MFA factor on the target's Supabase Auth user via the
+ * Service Role key, so they can log in with just email+password again and
+ * re-enroll a new authenticator from Settings → Security afterward. */
+export async function performMfaReset(targetProfileId: string, resolver: AuthedUser) {
   const supabase = getSupabaseAdmin()
   const { data: target, error } = await supabase
     .from('profiles')
@@ -117,42 +112,42 @@ export async function performPasswordReset(targetProfileId: string, resolver: Au
   if (!target) throw new HttpError(404, 'Account not found')
 
   if (target.role === 'super_admin') {
-    throw new HttpError(403, 'A Super Admin password cannot be reset through this flow')
+    throw new HttpError(403, "A Super Admin's two-factor authentication cannot be reset through this flow")
   }
   if (target.role === 'admin') {
     requireSuperAdmin(resolver)
   } else {
-    if (!isAdminOrAbove(resolver)) throw new HttpError(403, 'You do not have permission to reset this password')
+    if (!isAdminOrAbove(resolver)) throw new HttpError(403, 'You do not have permission to reset this account’s two-factor authentication')
     if (!isSuperAdmin(resolver) && target.organization_id !== resolver.organization_id) {
       throw new HttpError(404, 'Account not found')
     }
   }
 
-  const temporary_password = generateTempPassword()
+  const { data: factorsData, error: factorsErr } = await supabase.auth.admin.mfa.listFactors({ userId: target.id })
+  if (factorsErr) throw new HttpError(500, factorsErr.message)
 
-  const { error: pwErr } = await supabase.auth.admin.updateUserById(target.id, { password: temporary_password })
-  if (pwErr) throw new HttpError(500, pwErr.message)
-
-  const { error: flagErr } = await supabase.from('profiles').update({ force_password_change: true }).eq('id', target.id)
-  if (flagErr) throw new HttpError(500, flagErr.message)
+  for (const factor of factorsData?.factors ?? []) {
+    const { error: deleteErr } = await supabase.auth.admin.mfa.deleteFactor({ id: factor.id, userId: target.id })
+    if (deleteErr) throw new HttpError(500, deleteErr.message)
+  }
 
   // Superseded by this reset — clear out any other pending requests for the
   // same account so they don't linger as actionable after the fact.
   await supabase
-    .from('password_reset_requests')
+    .from('mfa_reset_requests')
     .update({ status: 'resolved', resolved_at: new Date().toISOString(), resolved_by: resolver.id })
     .eq('target_profile_id', target.id)
     .eq('status', 'pending')
 
-  return { email: target.email, nickname: target.nickname || target.email, temporary_password }
+  return { email: target.email, nickname: target.nickname || target.email }
 }
 
-export async function resolvePasswordResetRequest(id: string, event: HandlerEvent, user: AuthedUser) {
+export async function resolveMfaResetRequest(id: string, event: HandlerEvent, user: AuthedUser) {
   if (!isAdminOrAbove(user)) throw new HttpError(403, 'Admin access required')
   await requireAal2IfEnrolled(user)
   const supabase = getSupabaseAdmin()
 
-  const { data: reqRow, error } = await supabase.from('password_reset_requests').select(COLUMNS).eq('id', id).maybeSingle()
+  const { data: reqRow, error } = await supabase.from('mfa_reset_requests').select(COLUMNS).eq('id', id).maybeSingle()
   if (error) throw new HttpError(500, error.message)
   if (!reqRow) throw new HttpError(404, 'Request not found')
   if (reqRow.status !== 'pending') throw new HttpError(400, 'This request has already been resolved')
@@ -161,10 +156,10 @@ export async function resolvePasswordResetRequest(id: string, event: HandlerEven
     throw new HttpError(404, 'Request not found')
   }
 
-  const result = await performPasswordReset(reqRow.target_profile_id, user)
+  const result = await performMfaReset(reqRow.target_profile_id, user)
 
-  const { data: updated, error: reqErr } = await supabase.from('password_reset_requests').select(COLUMNS).eq('id', id).single()
+  const { data: updated, error: reqErr } = await supabase.from('mfa_reset_requests').select(COLUMNS).eq('id', id).single()
   if (reqErr) throw new HttpError(500, reqErr.message)
 
-  return json(200, { request: updated, admin: result })
+  return json(200, { request: updated, account: result })
 }

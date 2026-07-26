@@ -16,6 +16,7 @@ import {
   BarChart3,
   UserPlus2,
   KeyRound,
+  ShieldAlert,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react'
@@ -23,7 +24,7 @@ import clsx from 'clsx'
 import { useAuth } from '@/contexts/AuthContext'
 import { useOrg } from '@/contexts/OrgContext'
 import { RoleBadge, Avatar } from '@/components/ui/RoleBadge'
-import { signupRequestsApi, passwordResetRequestsApi, brandingApi, platformBrandingApi } from '@/lib/api'
+import { signupRequestsApi, passwordResetRequestsApi, mfaResetRequestsApi, brandingApi, platformBrandingApi } from '@/lib/api'
 
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -62,6 +63,14 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
     refetchInterval: 60_000,
   })
   const pendingPasswordResetCount = (passwordResetData?.requests ?? []).filter((r) => r.status === 'pending').length
+
+  const { data: mfaResetData } = useQuery({
+    queryKey: ['mfa-reset-requests'],
+    queryFn: mfaResetRequestsApi.list,
+    enabled: isSuperAdmin,
+    refetchInterval: 60_000,
+  })
+  const pendingMfaResetCount = (mfaResetData?.requests ?? []).filter((r) => r.status === 'pending').length
 
   const { data: branding } = useQuery({ queryKey: ['org-branding'], queryFn: brandingApi.get })
   const { data: platformBranding } = useQuery({ queryKey: ['platform-branding'], queryFn: platformBrandingApi.get })
@@ -206,6 +215,11 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           {isSuperAdmin && (
             <NavItem to="/password-reset-requests" icon={KeyRound} badge={pendingPasswordResetCount}>
               Password Reset Requests
+            </NavItem>
+          )}
+          {isSuperAdmin && (
+            <NavItem to="/mfa-reset-requests" icon={ShieldAlert} badge={pendingMfaResetCount}>
+              MFA Reset Requests
             </NavItem>
           )}
           {navItems.map(({ to, label, icon: Icon }) => (

@@ -1,7 +1,7 @@
 import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
-import { requireAdminOrAbove, resolveOrganizationId } from '../lib/permissions.js'
+import { requireAdminOrAbove, resolveOrganizationId, requireAal2IfEnrolled } from '../lib/permissions.js'
 import { CURATED_PALETTE, ALLOWED_HEX } from '../lib/brandPalette.js'
 import type { AuthedUser } from '../lib/auth.js'
 
@@ -67,6 +67,7 @@ export async function createLogoSignedUpload(event: HandlerEvent, user: AuthedUs
 
 export async function updateBranding(event: HandlerEvent, user: AuthedUser) {
   requireAdminOrAbove(user)
+  await requireAal2IfEnrolled(user)
   const orgId = resolveOrganizationId(user, event)
   if (orgId === null) throw new HttpError(400, 'Branding is only available within an organization')
 
@@ -118,6 +119,7 @@ export async function updateBranding(event: HandlerEvent, user: AuthedUser) {
 
 export async function resetBranding(event: HandlerEvent, user: AuthedUser) {
   requireAdminOrAbove(user)
+  await requireAal2IfEnrolled(user)
   const orgId = resolveOrganizationId(user, event)
   if (orgId === null) throw new HttpError(400, 'Branding is only available within an organization')
 

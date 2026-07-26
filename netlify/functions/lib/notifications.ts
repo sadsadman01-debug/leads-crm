@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from './supabaseAdmin.js'
 export type NotificationType =
   | 'signup_request'
   | 'password_reset_request'
+  | 'mfa_reset_request'
   | 'lead_assigned'
   | 'deal_assigned'
   | 'follow_up_overdue'

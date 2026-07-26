@@ -1,7 +1,7 @@
 import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
-import { requireAdminOrAbove, requireSuperAdmin, isSuperAdmin, resolveOrganizationId, scopeToOrg } from '../lib/permissions.js'
+import { requireAdminOrAbove, requireSuperAdmin, isSuperAdmin, resolveOrganizationId, scopeToOrg, requireAal2IfEnrolled } from '../lib/permissions.js'
 import { DEFAULT_USER_PERMISSIONS, normalizePermissions } from '../lib/userPermissions.js'
 import { performPasswordReset } from './passwordResetRequests.js'
 import type { AuthedUser } from '../lib/auth.js'
@@ -87,6 +87,7 @@ export async function listTeamMembers(event: HandlerEvent, user: AuthedUser) {
  * this endpoint always forces role='user', never trusting the client. */
 export async function createTeamMember(event: HandlerEvent, user: AuthedUser) {
   requireAdminOrAbove(user)
+  await requireAal2IfEnrolled(user)
   const supabase = getSupabaseAdmin()
   const orgId = resolveOrganizationId(user, event)
   if (orgId === null) throw new HttpError(400, 'Select an organization before adding a team member')
@@ -138,6 +139,7 @@ async function getTargetProfile(id: string, orgId: string | null) {
  * "does this row exist for you at all" gate that every other team.ts route uses). */
 export async function resetTeamMemberPassword(id: string, event: HandlerEvent, user: AuthedUser) {
   requireAdminOrAbove(user)
+  await requireAal2IfEnrolled(user)
   const orgId = resolveOrganizationId(user, event)
   const target = await getTargetProfile(id, orgId)
   if (target.id === user.id) throw new HttpError(400, 'Use your own account settings to change your own password')
@@ -162,6 +164,7 @@ export async function getTeamMemberPermissions(id: string, event: HandlerEvent, 
 
 export async function updateTeamMemberPermissions(id: string, event: HandlerEvent, user: AuthedUser) {
   requireAdminOrAbove(user)
+  await requireAal2IfEnrolled(user)
   const supabase = getSupabaseAdmin()
   const orgId = resolveOrganizationId(user, event)
   const target = await getTargetProfile(id, orgId)
@@ -197,6 +200,7 @@ async function reassignRecords(fromId: string, toId: string | null) {
  * currently-assigned leads/deals move to reassignTo (or are unassigned if omitted). */
 export async function updateTeamMember(id: string, event: HandlerEvent, user: AuthedUser) {
   requireAdminOrAbove(user)
+  await requireAal2IfEnrolled(user)
   const supabase = getSupabaseAdmin()
   const orgId = resolveOrganizationId(user, event)
   const body = JSON.parse(event.body || '{}')
@@ -250,6 +254,7 @@ export async function updateTeamMember(id: string, event: HandlerEvent, user: Au
  * member's email as a safety net; the actual authorization is the role check. */
 export async function deleteTeamMember(id: string, event: HandlerEvent, user: AuthedUser) {
   requireSuperAdmin(user)
+  await requireAal2IfEnrolled(user)
   const supabase = getSupabaseAdmin()
   const orgId = resolveOrganizationId(user, event)
   const body = JSON.parse(event.body || '{}')
