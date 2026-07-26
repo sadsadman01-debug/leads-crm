@@ -146,11 +146,18 @@ export async function getForecast(event: HandlerEvent, user: AuthedUser) {
     computeForPeriod(nextQuarter),
   ])
 
+  const canViewValues = isAdminOrAbove(user) || user.permissions.canViewDealValues
+  function maskPeriod(p: Awaited<ReturnType<typeof computeForPeriod>>) {
+    if (canViewValues) return p
+    return { ...p, forecast: null, openWeighted: null, closedWon: null, quota: null, progressPct: null }
+  }
+
   return json(200, {
     displayCurrency,
     ratesUpdatedAt: liveRates.fetchedAt,
-    thisMonth: monthResult,
-    thisQuarter: quarterResult,
-    nextQuarter: nextQuarterResult,
+    values_masked: canViewValues ? undefined : true,
+    thisMonth: maskPeriod(monthResult),
+    thisQuarter: maskPeriod(quarterResult),
+    nextQuarter: maskPeriod(nextQuarterResult),
   })
 }

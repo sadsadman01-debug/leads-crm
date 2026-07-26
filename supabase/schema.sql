@@ -31,6 +31,7 @@ create table if not exists public.profiles (
   role text not null default 'user' check (role in ('super_admin', 'admin', 'user')),
   is_active boolean not null default true,
   organization_id uuid references public.organizations(id) on delete cascade,
+  permissions jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
 
@@ -585,6 +586,15 @@ as $$
   select coalesce((select role from public.profiles where id = auth.uid()) = 'super_admin', false);
 $$;
 
+-- Reads the caller's permissions jsonb (empty object for admins/super admins —
+-- they never consult it, since is_admin_or_above() always short-circuits first).
+create or replace function public.my_permissions()
+returns jsonb
+language sql stable security definer set search_path = public
+as $$
+  select coalesce(permissions, '{}'::jsonb) from public.profiles where id = auth.uid();
+$$;
+
 -- organizations: only the Super Admin can read/write it.
 create policy "organizations super admin only"
   on public.organizations for all
@@ -648,41 +658,116 @@ create policy "authenticated users can read lead_activities"
     and (public.is_super_admin() or l.organization_id = public.current_org_id())
   ));
 
--- leads/deals: insert requires organization scoping; update/delete additionally
--- require admin-or-above or being the record's assigned owner/creator.
+-- leads: select additionally respects leadVisibility ('all' default vs 'own');
+-- insert requires organization scoping; update/delete respect canEditAny
+-- (only meaningful when visibility='all') and canDelete, plus the existing
+-- admin-or-above / assigned-owner-or-creator checks. The plain "select scoped"
+-- policy from the generic org-scoped loop above is replaced by this one.
+drop policy if exists "leads select scoped" on public.leads;
+create policy "leads select scoped"
+  on public.leads for select
+  using (
+    public.is_super_admin()
+    or (
+      organization_id = public.current_org_id()
+      and (
+        public.is_admin_or_above()
+        or coalesce(public.my_permissions()->>'leadVisibility', 'all') = 'all'
+        or assigned_to = auth.uid()
+        or created_by = auth.uid()
+      )
+    )
+  );
 create policy "leads insert scoped" on public.leads for insert
   with check (public.is_super_admin() or organization_id = public.current_org_id());
 create policy "leads update by owner or admin scoped" on public.leads for update
   using (
     (public.is_super_admin() or organization_id = public.current_org_id())
-    and (public.is_admin_or_above() or assigned_to = auth.uid() or created_by = auth.uid())
+    and (
+      public.is_admin_or_above()
+      or assigned_to = auth.uid()
+      or created_by = auth.uid()
+      or (
+        coalesce(public.my_permissions()->>'leadVisibility', 'all') = 'all'
+        and coalesce((public.my_permissions()->>'canEditAny')::boolean, false)
+      )
+    )
   );
 create policy "leads delete by owner or admin scoped" on public.leads for delete
   using (
     (public.is_super_admin() or organization_id = public.current_org_id())
-    and (public.is_admin_or_above() or assigned_to = auth.uid() or created_by = auth.uid())
+    and (
+      public.is_admin_or_above()
+      or (
+        coalesce((public.my_permissions()->>'canDelete')::boolean, true)
+        and (
+          assigned_to = auth.uid()
+          or created_by = auth.uid()
+          or (
+            coalesce(public.my_permissions()->>'leadVisibility', 'all') = 'all'
+            and coalesce((public.my_permissions()->>'canEditAny')::boolean, false)
+          )
+        )
+      )
+    )
   );
 
+-- deals: same pattern, keyed on dealVisibility/owner_id (deals have no
+-- separate created_by column — owner_id is the sole ownership field).
+drop policy if exists "deals select scoped" on public.deals;
+create policy "deals select scoped"
+  on public.deals for select
+  using (
+    public.is_super_admin()
+    or (
+      organization_id = public.current_org_id()
+      and (
+        public.is_admin_or_above()
+        or coalesce(public.my_permissions()->>'dealVisibility', 'all') = 'all'
+        or owner_id = auth.uid()
+      )
+    )
+  );
 create policy "deals insert scoped" on public.deals for insert
   with check (public.is_super_admin() or organization_id = public.current_org_id());
 create policy "deals update by owner or admin scoped" on public.deals for update
   using (
     (public.is_super_admin() or organization_id = public.current_org_id())
-    and (public.is_admin_or_above() or owner_id = auth.uid())
+    and (
+      public.is_admin_or_above()
+      or owner_id = auth.uid()
+      or (
+        coalesce(public.my_permissions()->>'dealVisibility', 'all') = 'all'
+        and coalesce((public.my_permissions()->>'canEditAny')::boolean, false)
+      )
+    )
   );
 create policy "deals delete by owner or admin scoped" on public.deals for delete
   using (
     (public.is_super_admin() or organization_id = public.current_org_id())
-    and (public.is_admin_or_above() or owner_id = auth.uid())
+    and (
+      public.is_admin_or_above()
+      or (
+        coalesce((public.my_permissions()->>'canDelete')::boolean, true)
+        and (
+          owner_id = auth.uid()
+          or (
+            coalesce(public.my_permissions()->>'dealVisibility', 'all') = 'all'
+            and coalesce((public.my_permissions()->>'canEditAny')::boolean, false)
+          )
+        )
+      )
+    )
   );
 
--- Settings-type tables: readable within your org (above), writable only by
--- admins/super admins within that same organization.
+-- Settings-type tables that stay permanently admin-only (not delegatable via
+-- granular User permissions): readable within your org (above), writable only
+-- by admins/super admins within that same organization.
 do $$
 declare
   t text;
 begin
-  foreach t in array array['pipeline_stages', 'industries', 'templates', 'deal_stages', 'win_loss_reasons', 'app_settings', 'custom_field_definitions', 'quotas']
+  foreach t in array array['win_loss_reasons', 'app_settings', 'quotas']
   loop
     execute format(
       'create policy "%s insert admin scoped" on public.%I for insert with check (public.is_super_admin() or (public.is_admin_or_above() and organization_id = public.current_org_id()))',
@@ -699,6 +784,42 @@ begin
   end loop;
 end $$;
 
+-- Settings-type tables that a User can be granted delegated write access to via
+-- the matching granular permission flag, on top of the existing admin-or-above check.
+do $$
+declare
+  cfg record;
+begin
+  for cfg in
+    select * from (values
+      ('templates', 'canManageTemplates'),
+      ('pipeline_stages', 'canManageStages'),
+      ('deal_stages', 'canManageStages'),
+      ('industries', 'canManageIndustries'),
+      ('custom_field_definitions', 'canManageCustomFields')
+    ) as t(table_name, perm_key)
+  loop
+    execute format(
+      'create policy "%s insert admin scoped" on public.%I for insert with check (' ||
+      'public.is_super_admin() or (public.is_admin_or_above() and organization_id = public.current_org_id()) ' ||
+      'or (organization_id = public.current_org_id() and coalesce((public.my_permissions()->>%L)::boolean, false)))',
+      cfg.table_name, cfg.table_name, cfg.perm_key
+    );
+    execute format(
+      'create policy "%s update admin scoped" on public.%I for update using (' ||
+      'public.is_super_admin() or (public.is_admin_or_above() and organization_id = public.current_org_id()) ' ||
+      'or (organization_id = public.current_org_id() and coalesce((public.my_permissions()->>%L)::boolean, false)))',
+      cfg.table_name, cfg.table_name, cfg.perm_key
+    );
+    execute format(
+      'create policy "%s delete admin scoped" on public.%I for delete using (' ||
+      'public.is_super_admin() or (public.is_admin_or_above() and organization_id = public.current_org_id()) ' ||
+      'or (organization_id = public.current_org_id() and coalesce((public.my_permissions()->>%L)::boolean, false)))',
+      cfg.table_name, cfg.table_name, cfg.perm_key
+    );
+  end loop;
+end $$;
+
 -- No insert/update/delete policies are defined for the remaining lead-scoped
 -- sub-tables (social profiles, tags, attachments, status, activities): all
 -- writes to those go through the service-role key inside Netlify Functions,
@@ -706,8 +827,9 @@ end $$;
 -- before writing.
 
 -- saved_reports: readable by its creator, any admin-or-above in the org, or
--- anyone in the org when explicitly marked visible_to_all; writable only by
--- admins/super admins (custom select logic, so not part of the generic loops above).
+-- anyone in the org when explicitly marked visible_to_all. Writable by
+-- admins/super admins, or by a User granted canAccessReportBuilder — but such
+-- a User may only update/delete reports they themselves created.
 create policy "saved_reports select scoped"
   on public.saved_reports for select
   using (
@@ -715,11 +837,31 @@ create policy "saved_reports select scoped"
     or (organization_id = public.current_org_id() and (visible_to_all or created_by = auth.uid() or public.is_admin_or_above()))
   );
 create policy "saved_reports insert admin scoped" on public.saved_reports for insert
-  with check (public.is_super_admin() or (public.is_admin_or_above() and organization_id = public.current_org_id()));
+  with check (
+    public.is_super_admin()
+    or (public.is_admin_or_above() and organization_id = public.current_org_id())
+    or (organization_id = public.current_org_id() and coalesce((public.my_permissions()->>'canAccessReportBuilder')::boolean, false))
+  );
 create policy "saved_reports update admin scoped" on public.saved_reports for update
-  using (public.is_super_admin() or (public.is_admin_or_above() and organization_id = public.current_org_id()));
+  using (
+    public.is_super_admin()
+    or (public.is_admin_or_above() and organization_id = public.current_org_id())
+    or (
+      organization_id = public.current_org_id()
+      and created_by = auth.uid()
+      and coalesce((public.my_permissions()->>'canAccessReportBuilder')::boolean, false)
+    )
+  );
 create policy "saved_reports delete admin scoped" on public.saved_reports for delete
-  using (public.is_super_admin() or (public.is_admin_or_above() and organization_id = public.current_org_id()));
+  using (
+    public.is_super_admin()
+    or (public.is_admin_or_above() and organization_id = public.current_org_id())
+    or (
+      organization_id = public.current_org_id()
+      and created_by = auth.uid()
+      and coalesce((public.my_permissions()->>'canAccessReportBuilder')::boolean, false)
+    )
+  );
 
 -- ----------------------------------------------------------------------------
 -- exchange_rates: platform-wide (not organization-scoped) cache of the free

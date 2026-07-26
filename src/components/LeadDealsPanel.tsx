@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Handshake } from 'lucide-react'
 import { dealsApi } from '@/lib/api'
-import { formatCurrency } from '@/lib/currency'
+import { formatMaskedCurrency } from '@/lib/currency'
 import { Badge } from '@/components/ui/Badge'
 import { DealForm } from '@/components/DealForm'
 import { useDealStageNames } from '@/hooks/useDealStageNames'
@@ -56,7 +56,7 @@ export function LeadDealsPanel({ leadId, companyName }: { leadId: string; compan
               <div className="flex items-center justify-between gap-2">
                 <p className="truncate text-sm font-medium text-base-100">{deal.name}</p>
                 <span className="shrink-0 text-sm font-semibold text-accent-400">
-                  {formatCurrency(Number(deal.value), deal.currency)}
+                  {formatMaskedCurrency(deal.value, deal.currency)}
                 </span>
               </div>
               <div className="mt-1.5 flex flex-wrap items-center gap-1.5">

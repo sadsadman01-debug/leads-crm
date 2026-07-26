@@ -2,7 +2,7 @@ import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
 import { computeReminder } from '../lib/reminders.js'
-import { isAdminOrAbove, resolveOrganizationId, scopeToOrg } from '../lib/permissions.js'
+import { isAdminOrAbove, hasFeaturePermission, resolveOrganizationId, scopeToOrg } from '../lib/permissions.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const MAX_REMINDER_ITEMS = 50
@@ -231,7 +231,8 @@ export async function getDashboardSummary(event: HandlerEvent, user: AuthedUser)
     .sort((a, b) => b.totalLeads - a.totalLeads)
 
   let teamPerformance: any[] | undefined
-  if (isAdminOrAbove(user)) {
+  if (hasFeaturePermission(user, 'canViewTeamPerformance')) {
+    const canViewValues = isAdminOrAbove(user) || user.permissions.canViewDealValues
     let membersQuery = supabase.from('profiles').select('id, nickname, email').eq('is_active', true)
     membersQuery = scopeToOrg(membersQuery as any, orgId) as any
     const { data: members } = await membersQuery
@@ -264,7 +265,7 @@ export async function getDashboardSummary(event: HandlerEvent, user: AuthedUser)
         conversionRate: pct(convertedCountMember, memberLeads.length),
         totalDeals: memberDeals.length,
         dealsWon: wonDeals.length,
-        revenueClosed,
+        revenueClosed: canViewValues ? revenueClosed : null,
         winRate: pct(wonDeals.length, closedDeals.length),
       }
     })

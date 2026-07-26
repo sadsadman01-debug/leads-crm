@@ -1,7 +1,7 @@
 import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
-import { requireAdminOrAbove, resolveOrganizationId, scopeToOrg, requireRowInOrgScope } from '../lib/permissions.js'
+import { requireFeaturePermission, resolveOrganizationId, scopeToOrg, requireRowInOrgScope } from '../lib/permissions.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const COLUMNS = 'id, applies_to, label, field_type, options, required, default_value, display_order'
@@ -39,7 +39,7 @@ function validateBody(body: any, isCreate: boolean) {
 }
 
 export async function createCustomField(event: HandlerEvent, user: AuthedUser) {
-  requireAdminOrAbove(user)
+  requireFeaturePermission(user, 'canManageCustomFields')
   const supabase = getSupabaseAdmin()
   const orgId = resolveOrganizationId(user, event)
   const body = JSON.parse(event.body || '{}')
@@ -70,7 +70,7 @@ export async function createCustomField(event: HandlerEvent, user: AuthedUser) {
 }
 
 export async function updateCustomField(id: string, event: HandlerEvent, user: AuthedUser) {
-  requireAdminOrAbove(user)
+  requireFeaturePermission(user, 'canManageCustomFields')
   const supabase = getSupabaseAdmin()
   const orgId = resolveOrganizationId(user, event)
   await requireRowInOrgScope('custom_field_definitions', id, orgId)
@@ -99,7 +99,7 @@ export async function updateCustomField(id: string, event: HandlerEvent, user: A
 
 /** Body: { orderedIds: string[] } — full ordering, display_order becomes each id's index. */
 export async function reorderCustomFields(event: HandlerEvent, user: AuthedUser) {
-  requireAdminOrAbove(user)
+  requireFeaturePermission(user, 'canManageCustomFields')
   const supabase = getSupabaseAdmin()
   const orgId = resolveOrganizationId(user, event)
   const body = JSON.parse(event.body || '{}')
@@ -127,7 +127,7 @@ export async function reorderCustomFields(event: HandlerEvent, user: AuthedUser)
  * already stored in leads/deals.custom_fields untouched (they just become
  * orphaned data — never corrupted, per the spec). */
 export async function deleteCustomField(id: string, event: HandlerEvent, user: AuthedUser) {
-  requireAdminOrAbove(user)
+  requireFeaturePermission(user, 'canManageCustomFields')
   const orgId = resolveOrganizationId(user, event)
   await requireRowInOrgScope('custom_field_definitions', id, orgId)
 

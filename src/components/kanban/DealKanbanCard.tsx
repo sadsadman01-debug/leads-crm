@@ -2,7 +2,7 @@ import { useDraggable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
 import { MoveRight, CalendarClock } from 'lucide-react'
 import clsx from 'clsx'
-import { formatCurrency } from '@/lib/currency'
+import { formatMaskedCurrency } from '@/lib/currency'
 import { Avatar } from '@/components/ui/RoleBadge'
 import type { KanbanDeal } from '@/types/deal'
 import type { DealStage } from '@/types/deal'
@@ -66,7 +66,7 @@ export function DealKanbanCard({
       <p className="mb-2 truncate text-xs text-base-400">{deal.company_name}</p>
 
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-sm font-semibold text-accent-400">{formatCurrency(Number(deal.value), deal.currency)}</span>
+        <span className="text-sm font-semibold text-accent-400">{formatMaskedCurrency(deal.value, deal.currency)}</span>
         <span className="pill bg-base-800 text-base-300">{deal.probability}%</span>
       </div>
 

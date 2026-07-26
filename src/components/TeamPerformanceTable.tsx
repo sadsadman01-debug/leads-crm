@@ -45,7 +45,9 @@ export function TeamPerformanceTable({ rows, currency }: { rows: TeamPerformance
               <td className="px-3 py-3 tabular-nums text-base-300">{row.conversionRate}%</td>
               <td className="px-3 py-3 tabular-nums text-base-300">{row.totalDeals}</td>
               <td className="px-3 py-3 tabular-nums text-base-300">{row.dealsWon}</td>
-              <td className="px-3 py-3 tabular-nums text-base-300">{formatCurrency(row.revenueClosed, currency)}</td>
+              <td className="px-3 py-3 tabular-nums text-base-300">
+                {row.revenueClosed === null ? '•••' : formatCurrency(row.revenueClosed, currency)}
+              </td>
               <td className="px-3 py-3 tabular-nums text-base-300">{row.winRate}%</td>
             </tr>
           ))}

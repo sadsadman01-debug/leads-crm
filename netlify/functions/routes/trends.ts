@@ -1,7 +1,7 @@
 import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
-import { resolveOrganizationId, scopeToOrg } from '../lib/permissions.js'
+import { isAdminOrAbove, resolveOrganizationId, scopeToOrg } from '../lib/permissions.js'
 import { getOrRefreshRates, convertAmount } from '../lib/exchangeRates.js'
 import type { AuthedUser } from '../lib/auth.js'
 
@@ -93,14 +93,22 @@ export async function getTrends(event: HandlerEvent, user: AuthedUser) {
     computeMetricsForRange(orgId, previous, displayCurrency, liveRates),
   ])
 
-  const metrics = (['leadsAdded', 'conversionRate', 'revenue', 'avgDealSize'] as const).map((key) => ({
-    key,
-    current: currentMetrics[key],
-    previous: previousMetrics[key],
-    pctChange: pctChange(currentMetrics[key] as number, previousMetrics[key] as number),
-  }))
+  const canViewValues = isAdminOrAbove(user) || user.permissions.canViewDealValues
+  const monetaryKeys = new Set(['revenue', 'avgDealSize'])
 
-  return json(200, { granularity, displayCurrency, metrics })
+  const metrics = (['leadsAdded', 'conversionRate', 'revenue', 'avgDealSize'] as const).map((key) => {
+    if (monetaryKeys.has(key) && !canViewValues) {
+      return { key, current: null, previous: null, pctChange: null }
+    }
+    return {
+      key,
+      current: currentMetrics[key],
+      previous: previousMetrics[key],
+      pctChange: pctChange(currentMetrics[key] as number, previousMetrics[key] as number),
+    }
+  })
+
+  return json(200, { granularity, displayCurrency, metrics, values_masked: canViewValues ? undefined : true })
 }
 
 /** GET /trends/period-comparisons?displayCurrency=... — Dashboard quick-comparison
@@ -117,10 +125,13 @@ export async function getPeriodComparisons(event: HandlerEvent, user: AuthedUser
       computeMetricsForRange(orgId, current, displayCurrency, liveRates),
       computeMetricsForRange(orgId, previous, displayCurrency, liveRates),
     ])
+    const canViewValues = isAdminOrAbove(user) || user.permissions.canViewDealValues
     return {
       leadsAdded: { current: currentMetrics.leadsAdded, previous: previousMetrics.leadsAdded, pctChange: pctChange(currentMetrics.leadsAdded, previousMetrics.leadsAdded) },
       conversionRate: { current: currentMetrics.conversionRate, previous: previousMetrics.conversionRate, pctChange: pctChange(currentMetrics.conversionRate, previousMetrics.conversionRate) },
-      revenue: { current: currentMetrics.revenue, previous: previousMetrics.revenue, pctChange: pctChange(currentMetrics.revenue, previousMetrics.revenue) },
+      revenue: canViewValues
+        ? { current: currentMetrics.revenue, previous: previousMetrics.revenue, pctChange: pctChange(currentMetrics.revenue, previousMetrics.revenue) }
+        : { current: null, previous: null, pctChange: null },
     }
   }
 

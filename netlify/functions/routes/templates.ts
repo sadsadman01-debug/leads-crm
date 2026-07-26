@@ -1,7 +1,7 @@
 import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
-import { requireAdminOrAbove, resolveOrganizationId, scopeToOrg, requireRowInOrgScope } from '../lib/permissions.js'
+import { requireFeaturePermission, resolveOrganizationId, scopeToOrg, requireRowInOrgScope } from '../lib/permissions.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const TEMPLATE_TYPES = ['cold_email', 'followup1', 'followup2', 'followup3', 'whatsapp', 'linkedin', 'sms']
@@ -18,7 +18,7 @@ export async function listTemplates(event: HandlerEvent, user: AuthedUser) {
 }
 
 export async function createTemplate(event: HandlerEvent, user: AuthedUser) {
-  requireAdminOrAbove(user)
+  requireFeaturePermission(user, 'canManageTemplates')
   const supabase = getSupabaseAdmin()
   const orgId = resolveOrganizationId(user, event)
   const body = JSON.parse(event.body || '{}')
@@ -45,7 +45,7 @@ export async function createTemplate(event: HandlerEvent, user: AuthedUser) {
 }
 
 export async function updateTemplate(id: string, event: HandlerEvent, user: AuthedUser) {
-  requireAdminOrAbove(user)
+  requireFeaturePermission(user, 'canManageTemplates')
   const supabase = getSupabaseAdmin()
   await requireRowInOrgScope('templates', id, resolveOrganizationId(user, event))
   const body = JSON.parse(event.body || '{}')
@@ -73,7 +73,7 @@ export async function updateTemplate(id: string, event: HandlerEvent, user: Auth
 }
 
 export async function deleteTemplate(id: string, event: HandlerEvent, user: AuthedUser) {
-  requireAdminOrAbove(user)
+  requireFeaturePermission(user, 'canManageTemplates')
   const supabase = getSupabaseAdmin()
   await requireRowInOrgScope('templates', id, resolveOrganizationId(user, event))
   const { error } = await supabase.from('templates').delete().eq('id', id)

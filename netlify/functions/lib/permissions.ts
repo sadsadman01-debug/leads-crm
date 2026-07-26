@@ -2,6 +2,7 @@ import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from './supabaseAdmin.js'
 import { HttpError } from './http.js'
 import type { AuthedUser } from './auth.js'
+import type { UserPermissions } from './userPermissions.js'
 
 /** Sentinel query-param value meaning "the Super Admin's own personal/sandbox scope" (organization_id IS NULL). */
 export const PERSONAL_SCOPE = '__personal__'
@@ -60,20 +61,78 @@ export function requireSuperAdmin(user: AuthedUser) {
   if (!isSuperAdmin(user)) throw new HttpError(403, 'Super Admin access required')
 }
 
-/** Admins/super admins can modify any record; otherwise only the assigned owner or original creator can. */
-export function canModifyRecord(
-  user: AuthedUser,
-  record: { assigned_to?: string | null; created_by?: string | null; owner_id?: string | null }
-): boolean {
-  if (isAdminOrAbove(user)) return true
+export type OwnedRecord = { assigned_to?: string | null; created_by?: string | null; owner_id?: string | null }
+export type VisibilityScope = 'lead' | 'deal'
+
+function isOwnerOf(user: AuthedUser, record: OwnedRecord): boolean {
   return record.assigned_to === user.id || record.created_by === user.id || record.owner_id === user.id
 }
 
-export function requireCanModifyRecord(
-  user: AuthedUser,
-  record: { assigned_to?: string | null; created_by?: string | null; owner_id?: string | null }
-) {
-  if (!canModifyRecord(user, record)) {
+function visibilityOf(user: AuthedUser, scope: VisibilityScope): 'all' | 'own' {
+  return scope === 'lead' ? user.permissions.leadVisibility : user.permissions.dealVisibility
+}
+
+/** Whether this user can see this specific record at all (used for single-record
+ * fetches — list endpoints instead apply applyLeadVisibility/applyDealVisibility
+ * directly to the query). Admins always see everything; a User sees it if their
+ * visibility scope is 'all', or if they're the assigned owner/creator. */
+export function isRecordVisible(user: AuthedUser, record: OwnedRecord, scope: VisibilityScope): boolean {
+  if (isAdminOrAbove(user)) return true
+  if (visibilityOf(user, scope) === 'all') return true
+  return isOwnerOf(user, record)
+}
+
+/** Admins/super admins can modify any record. A User can always modify their own
+ * (assigned/created); with canEditAny ON *and* visibility scope 'all', they can
+ * modify any record they can see — canEditAny has no extra effect under 'own'
+ * visibility, since that scope is already limited to their own records. */
+export function canModifyRecord(user: AuthedUser, record: OwnedRecord, scope: VisibilityScope): boolean {
+  if (isAdminOrAbove(user)) return true
+  if (isOwnerOf(user, record)) return true
+  return visibilityOf(user, scope) === 'all' && user.permissions.canEditAny
+}
+
+export function requireCanModifyRecord(user: AuthedUser, record: OwnedRecord, scope: VisibilityScope) {
+  if (!canModifyRecord(user, record, scope)) {
     throw new HttpError(403, 'You do not have permission to modify this record')
+  }
+}
+
+/** Deletion is always bounded by whatever edit scope the user already has —
+ * canDelete alone never grants deleting a record they couldn't otherwise edit. */
+export function canDeleteRecord(user: AuthedUser, record: OwnedRecord, scope: VisibilityScope): boolean {
+  if (isAdminOrAbove(user)) return true
+  return user.permissions.canDelete && canModifyRecord(user, record, scope)
+}
+
+export function requireCanDeleteRecord(user: AuthedUser, record: OwnedRecord, scope: VisibilityScope) {
+  if (!canDeleteRecord(user, record, scope)) {
+    throw new HttpError(403, 'You do not have permission to delete this record')
+  }
+}
+
+/** Restricts a leads query to the caller's visible scope — a no-op for
+ * admins/super admins or when leadVisibility is 'all' (the default). */
+export function applyLeadVisibility<T extends { or: (s: string) => T }>(query: T, user: AuthedUser): T {
+  if (isAdminOrAbove(user) || user.permissions.leadVisibility === 'all') return query
+  return query.or(`assigned_to.eq.${user.id},created_by.eq.${user.id}`)
+}
+
+/** Same as applyLeadVisibility, for deals (owner_id is the only ownership column). */
+export function applyDealVisibility<T extends { or: (s: string) => T }>(query: T, user: AuthedUser): T {
+  if (isAdminOrAbove(user) || user.permissions.dealVisibility === 'all') return query
+  return query.or(`owner_id.eq.${user.id}`)
+}
+
+/** Feature-access flags (manage templates/custom fields/stages/industries, import,
+ * export, team performance, report builder) — admins/super admins always pass. */
+export function hasFeaturePermission(user: AuthedUser, key: keyof UserPermissions): boolean {
+  if (isAdminOrAbove(user)) return true
+  return Boolean(user.permissions[key])
+}
+
+export function requireFeaturePermission(user: AuthedUser, key: keyof UserPermissions) {
+  if (!hasFeaturePermission(user, key)) {
+    throw new HttpError(403, 'You do not have permission to perform this action')
   }
 }

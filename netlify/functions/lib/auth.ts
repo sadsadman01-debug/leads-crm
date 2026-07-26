@@ -1,5 +1,6 @@
 import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from './supabaseAdmin.js'
+import { normalizePermissions, type UserPermissions } from './userPermissions.js'
 
 export type Role = 'super_admin' | 'admin' | 'user'
 
@@ -10,6 +11,9 @@ export interface AuthedUser {
   nickname: string | null
   is_active: boolean
   organization_id: string | null
+  /** Always populated (defaulted) even for admins/super admins — they simply
+   * never consult it, since every permission check short-circuits on role first. */
+  permissions: UserPermissions
 }
 
 /**
@@ -34,7 +38,7 @@ export async function requireUser(event: HandlerEvent): Promise<AuthedUser> {
 
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('role, nickname, is_active, organization_id')
+    .select('role, nickname, is_active, organization_id, permissions')
     .eq('id', data.user.id)
     .single()
 
@@ -52,6 +56,7 @@ export async function requireUser(event: HandlerEvent): Promise<AuthedUser> {
     nickname: profile.nickname,
     is_active: profile.is_active,
     organization_id: profile.organization_id,
+    permissions: normalizePermissions(profile.permissions),
   }
 }
 

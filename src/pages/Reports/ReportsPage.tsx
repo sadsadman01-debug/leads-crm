@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, BarChart3, Trash2, Pencil, Globe, ArrowLeft } from 'lucide-react'
 import { reportsApi } from '@/lib/api'
-import { useAuth, isAdminOrAbove } from '@/contexts/AuthContext'
+import { useAuth, isAdminOrAbove, hasPermission } from '@/contexts/AuthContext'
 import { Badge } from '@/components/ui/Badge'
 import { ReportBuilder } from '@/components/reports/ReportBuilder'
 import { ReportViewer } from '@/components/reports/ReportViewer'
@@ -15,6 +15,7 @@ type Tab = 'reports' | 'forecast' | 'trends'
 export function ReportsPage() {
   const { profile } = useAuth()
   const isAdmin = isAdminOrAbove(profile?.role)
+  const canBuildReports = isAdmin || hasPermission(profile, 'canAccessReportBuilder')
   const queryClient = useQueryClient()
   const [tab, setTab] = useState<Tab>('reports')
   const [mode, setMode] = useState<'list' | 'builder' | 'view'>('list')
@@ -47,7 +48,7 @@ export function ReportsPage() {
           <h1 className="text-2xl font-semibold text-base-100">Reports</h1>
           <p className="mt-1 text-sm text-base-400">Custom reports, sales forecast, and trend analysis</p>
         </div>
-        {tab === 'reports' && mode === 'list' && isAdmin && (
+        {tab === 'reports' && mode === 'list' && canBuildReports && (
           <button
             className="btn-primary"
             onClick={() => {
@@ -114,7 +115,7 @@ export function ReportsPage() {
 
       {mode === 'list' && tab === 'reports' && (
         <div className="space-y-6">
-          {isAdmin && (
+          {canBuildReports && (
             <div>
               <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-base-300">Starter Templates</h2>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -163,7 +164,7 @@ export function ReportsPage() {
                         <Globe size={14} className="text-base-400" />
                       </span>
                     )}
-                    {isAdmin && (
+                    {(isAdmin || (canBuildReports && r.created_by === profile?.id)) && (
                       <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                         <button
                           className="btn-ghost px-2 text-accent-400"

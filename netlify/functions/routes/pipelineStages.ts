@@ -1,7 +1,7 @@
 import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
-import { requireAdminOrAbove, resolveOrganizationId, scopeToOrg, requireRowInOrgScope } from '../lib/permissions.js'
+import { requireFeaturePermission, resolveOrganizationId, scopeToOrg, requireRowInOrgScope } from '../lib/permissions.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 export async function listStages(event: HandlerEvent, user: AuthedUser) {
@@ -15,7 +15,7 @@ export async function listStages(event: HandlerEvent, user: AuthedUser) {
 }
 
 export async function createStage(event: HandlerEvent, user: AuthedUser) {
-  requireAdminOrAbove(user)
+  requireFeaturePermission(user, 'canManageStages')
   const supabase = getSupabaseAdmin()
   const orgId = resolveOrganizationId(user, event)
   const body = JSON.parse(event.body || '{}')
@@ -39,7 +39,7 @@ export async function createStage(event: HandlerEvent, user: AuthedUser) {
 }
 
 export async function renameStage(id: string, event: HandlerEvent, user: AuthedUser) {
-  requireAdminOrAbove(user)
+  requireFeaturePermission(user, 'canManageStages')
   const supabase = getSupabaseAdmin()
   await requireRowInOrgScope('pipeline_stages', id, resolveOrganizationId(user, event))
   const body = JSON.parse(event.body || '{}')
@@ -59,7 +59,7 @@ export async function renameStage(id: string, event: HandlerEvent, user: AuthedU
 
 /** Body: { orderedIds: string[] } — full ordering, position becomes each id's index. */
 export async function reorderStages(event: HandlerEvent, user: AuthedUser) {
-  requireAdminOrAbove(user)
+  requireFeaturePermission(user, 'canManageStages')
   const supabase = getSupabaseAdmin()
   const orgId = resolveOrganizationId(user, event)
   const body = JSON.parse(event.body || '{}')
@@ -94,7 +94,7 @@ export async function reorderStages(event: HandlerEvent, user: AuthedUser) {
 }
 
 export async function deleteStage(id: string, event: HandlerEvent, user: AuthedUser) {
-  requireAdminOrAbove(user)
+  requireFeaturePermission(user, 'canManageStages')
   const supabase = getSupabaseAdmin()
   await requireRowInOrgScope('pipeline_stages', id, resolveOrganizationId(user, event))
 

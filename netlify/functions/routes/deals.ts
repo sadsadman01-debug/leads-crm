@@ -4,7 +4,15 @@ import { HttpError, json } from '../lib/http.js'
 import { logActivity } from '../lib/activities.js'
 import { getOrRefreshRates } from '../lib/exchangeRates.js'
 import type { AuthedUser } from '../lib/auth.js'
-import { requireCanModifyRecord, isAdminOrAbove, resolveOrganizationId, scopeToOrg } from '../lib/permissions.js'
+import {
+  requireCanModifyRecord,
+  requireCanDeleteRecord,
+  isAdminOrAbove,
+  isRecordVisible,
+  resolveOrganizationId,
+  scopeToOrg,
+  applyDealVisibility,
+} from '../lib/permissions.js'
 import { loadActiveDefinitions, requireRequiredFieldsFilled, mergeCustomFieldValues } from '../lib/customFieldValues.js'
 
 export const DEAL_SELECT = `
@@ -18,6 +26,14 @@ export function normalizeDeal(row: any) {
   if (!row) return row
   const { leads, ...rest } = row
   return { ...rest, lead: leads ?? null }
+}
+
+/** Hides the monetary value everywhere a deal is returned to a User who lacks
+ * canViewDealValues — the field comes back null with a masked flag, never the
+ * real number, so a frontend bug can't accidentally leak it via devtools. */
+function applyValueMask(deal: any, user: AuthedUser) {
+  if (isAdminOrAbove(user) || user.permissions.canViewDealValues) return deal
+  return { ...deal, value: null, value_masked: true }
 }
 
 function formatCurrency(value: number, currency: string): string {
@@ -60,6 +76,7 @@ export async function listDeals(event: HandlerEvent, user: AuthedUser) {
 
   let query = supabase.from('deals').select(DEAL_SELECT, { count: 'exact' })
   query = scopeToOrg(query as any, orgId) as any
+  query = applyDealVisibility(query as any, user) as any
 
   if (filters.leadId) query = query.eq('lead_id', filters.leadId)
   if (filters.stageId) query = query.eq('stage_id', filters.stageId)
@@ -85,15 +102,21 @@ export async function listDeals(event: HandlerEvent, user: AuthedUser) {
   const { data, error, count } = await query.order(sortBy, { ascending: sortOrder }).range(from, to)
   if (error) throw new HttpError(500, error.message)
 
-  return json(200, { deals: (data ?? []).map(normalizeDeal), page, pageSize, total: count ?? 0 })
+  return json(200, {
+    deals: (data ?? []).map(normalizeDeal).map((d) => applyValueMask(d, user)),
+    page,
+    pageSize,
+    total: count ?? 0,
+  })
 }
 
-export async function getDeal(id: string, organizationId: string | null, isSuperAdmin: boolean) {
+export async function getDeal(id: string, organizationId: string | null, user: AuthedUser) {
   const supabase = getSupabaseAdmin()
   const { data, error } = await supabase.from('deals').select(DEAL_SELECT).eq('id', id).single()
   if (error || !data) throw new HttpError(404, 'Deal not found')
-  if (!isSuperAdmin && data.organization_id !== organizationId) throw new HttpError(404, 'Deal not found')
-  return json(200, normalizeDeal(data))
+  if (user.role !== 'super_admin' && data.organization_id !== organizationId) throw new HttpError(404, 'Deal not found')
+  if (!isRecordVisible(user, data, 'deal')) throw new HttpError(404, 'Deal not found')
+  return json(200, applyValueMask(normalizeDeal(data), user))
 }
 
 async function fetchDealInScope(id: string, user: AuthedUser, event: HandlerEvent, columns: string) {
@@ -183,7 +206,7 @@ export async function createDeal(event: HandlerEvent, user: AuthedUser) {
     user.id
   )
 
-  return getDeal(data.id, orgId, user.role === 'super_admin')
+  return getDeal(data.id, orgId, user)
 }
 
 export async function updateDeal(id: string, event: HandlerEvent, user: AuthedUser) {
@@ -191,7 +214,7 @@ export async function updateDeal(id: string, event: HandlerEvent, user: AuthedUs
   const body = JSON.parse(event.body || '{}')
 
   const { existing, orgId } = await fetchDealInScope(id, user, event, 'id, owner_id, organization_id, lead_id, custom_fields')
-  requireCanModifyRecord(user, existing)
+  requireCanModifyRecord(user, existing, 'deal')
 
   const updatable: Record<string, any> = {}
   for (const key of ['name', 'value', 'currency', 'probability', 'expected_close_date', 'notes']) {
@@ -224,7 +247,7 @@ export async function updateDeal(id: string, event: HandlerEvent, user: AuthedUs
     await logActivity(existing.lead_id, 'custom_field', message, user.id)
   }
 
-  return getDeal(id, orgId, user.role === 'super_admin')
+  return getDeal(id, orgId, user)
 }
 
 /** Body: { stage_id, probability?, outcome_reason?, actual_close_date? } */
@@ -240,7 +263,7 @@ export async function updateDealStage(id: string, event: HandlerEvent, user: Aut
     event,
     'id, name, lead_id, value, currency, owner_id, organization_id'
   )
-  requireCanModifyRecord(user, deal)
+  requireCanModifyRecord(user, deal, 'deal')
 
   const { data: stage, error: stageErr } = await supabase
     .from('deal_stages')
@@ -280,13 +303,13 @@ export async function updateDealStage(id: string, event: HandlerEvent, user: Aut
     : `Deal "${deal.name}" moved to ${stage.name}`
   await logActivity(deal.lead_id, 'deal', message, user.id)
 
-  return getDeal(id, orgId, user.role === 'super_admin')
+  return getDeal(id, orgId, user)
 }
 
 export async function deleteDeal(id: string, event: HandlerEvent, user: AuthedUser) {
   const supabase = getSupabaseAdmin()
   const { existing: deal } = await fetchDealInScope(id, user, event, 'id, name, lead_id, owner_id, organization_id')
-  requireCanModifyRecord(user, deal)
+  requireCanDeleteRecord(user, deal, 'deal')
 
   const { error } = await supabase.from('deals').delete().eq('id', id)
   if (error) throw new HttpError(500, error.message)
@@ -310,6 +333,7 @@ export async function getDealsKanban(event: HandlerEvent, user: AuthedUser) {
 
   let query = supabase.from('deals').select(KANBAN_SELECT)
   query = scopeToOrg(query as any, orgId) as any
+  query = applyDealVisibility(query as any, user) as any
   if (assignedTo) query = query.eq('owner_id', assignedTo)
 
   if (industryId) {
@@ -326,10 +350,12 @@ export async function getDealsKanban(event: HandlerEvent, user: AuthedUser) {
   const { data, error } = await query.order('created_at', { ascending: false }).limit(KANBAN_MAX_DEALS)
   if (error) throw new HttpError(500, error.message)
 
+  const canViewValues = isAdminOrAbove(user) || user.permissions.canViewDealValues
   const deals = (data ?? []).map((row: any) => ({
     id: row.id,
     name: row.name,
-    value: row.value,
+    value: canViewValues ? row.value : null,
+    value_masked: canViewValues ? undefined : true,
     currency: row.currency,
     stage_id: row.stage_id,
     probability: row.probability,

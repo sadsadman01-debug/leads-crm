@@ -297,7 +297,7 @@ export function Dashboard() {
 
       {data.industryComparison.length > 0 && <IndustryComparisonTable rows={data.industryComparison} />}
 
-      {isAdmin && data.teamPerformance && data.teamPerformance.length > 0 && (
+      {data.teamPerformance && data.teamPerformance.length > 0 && (
         <TeamPerformanceTable rows={data.teamPerformance} currency={settings?.default_currency ?? 'USD'} />
       )}
 

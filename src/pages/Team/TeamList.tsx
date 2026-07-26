@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, UsersRound } from 'lucide-react'
+import { Plus, UsersRound, ShieldCheck } from 'lucide-react'
 import { teamApi } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { Modal } from '@/components/ui/Modal'
 import { RoleBadge, Avatar } from '@/components/ui/RoleBadge'
 import { Badge } from '@/components/ui/Badge'
-import type { TeamMember } from '@/types/team'
+import { PermissionsPanel } from '@/components/PermissionsPanel'
+import { DEFAULT_USER_PERMISSIONS, permissionsMatchDefault, type TeamMember } from '@/types/team'
 
 export function TeamList() {
   const { profile } = useAuth()
@@ -15,6 +16,7 @@ export function TeamList() {
   const [editing, setEditing] = useState<TeamMember | null>(null)
   const [deactivating, setDeactivating] = useState<TeamMember | null>(null)
   const [deleting, setDeleting] = useState<TeamMember | null>(null)
+  const [managingPermissions, setManagingPermissions] = useState<TeamMember | null>(null)
 
   const { data, isLoading } = useQuery({ queryKey: ['team-members'], queryFn: teamApi.list })
   const members = data?.members ?? []
@@ -57,6 +59,7 @@ export function TeamList() {
                 <th className="px-5 py-3 font-medium">Nickname</th>
                 <th className="px-5 py-3 font-medium">Email</th>
                 <th className="px-5 py-3 font-medium">Role</th>
+                <th className="px-5 py-3 font-medium">Access</th>
                 <th className="px-5 py-3 font-medium">Status</th>
                 <th className="px-5 py-3 font-medium">Date Added</th>
                 <th className="px-5 py-3 font-medium">Last Login</th>
@@ -77,6 +80,13 @@ export function TeamList() {
                     <td className="px-5 py-3.5 text-base-300">{m.email}</td>
                     <td className="px-5 py-3.5"><RoleBadge role={m.role} /></td>
                     <td className="px-5 py-3.5">
+                      {m.role === 'user' && (
+                        <Badge tone={permissionsMatchDefault(m.permissions ?? DEFAULT_USER_PERMISSIONS) ? 'neutral' : 'accent'}>
+                          {permissionsMatchDefault(m.permissions ?? DEFAULT_USER_PERMISSIONS) ? 'Standard' : 'Custom permissions'}
+                        </Badge>
+                      )}
+                    </td>
+                    <td className="px-5 py-3.5">
                       <Badge tone={m.is_active ? 'success' : 'neutral'}>{m.is_active ? 'Active' : 'Deactivated'}</Badge>
                     </td>
                     <td className="px-5 py-3.5 text-base-400">{new Date(m.created_at).toLocaleDateString()}</td>
@@ -89,6 +99,16 @@ export function TeamList() {
                           <button className="btn-ghost px-2 text-accent-400" onClick={() => setEditing(m)}>
                             Edit
                           </button>
+                          {m.role === 'user' && (
+                            <button
+                              className="btn-ghost px-2 text-accent-400"
+                              title="Manage permissions"
+                              onClick={() => setManagingPermissions(m)}
+                            >
+                              <ShieldCheck size={16} />
+                              Permissions
+                            </button>
+                          )}
                           {m.is_active ? (
                             <button className="btn-ghost px-2 text-warn" onClick={() => setDeactivating(m)}>
                               Deactivate
@@ -127,6 +147,12 @@ export function TeamList() {
         onSaved={invalidate}
       />
       <DeleteModal member={deleting} onClose={() => setDeleting(null)} onSaved={invalidate} />
+      <PermissionsPanel
+        key={managingPermissions?.id ?? 'none'}
+        member={managingPermissions}
+        onClose={() => setManagingPermissions(null)}
+        onSaved={invalidate}
+      />
     </div>
   )
 }

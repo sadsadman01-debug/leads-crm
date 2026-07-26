@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowUp, ArrowDown, Minus } from 'lucide-react'
 import { trendsApi, settingsApi } from '@/lib/api'
-import { formatCurrency } from '@/lib/currency'
+import { formatMaskedCurrency } from '@/lib/currency'
 import type { TrendMetric } from '@/lib/api'
 
 const METRIC_LABELS: Record<TrendMetric['key'], string> = {
@@ -12,9 +12,10 @@ const METRIC_LABELS: Record<TrendMetric['key'], string> = {
   avgDealSize: 'Avg Deal Size',
 }
 
-function formatMetricValue(key: TrendMetric['key'], value: number, currency: string): string {
+function formatMetricValue(key: TrendMetric['key'], value: number | null, currency: string): string {
+  if (value === null) return '•••'
   if (key === 'conversionRate') return `${value}%`
-  if (key === 'revenue' || key === 'avgDealSize') return formatCurrency(value, currency)
+  if (key === 'revenue' || key === 'avgDealSize') return formatMaskedCurrency(value, currency)
   return String(value)
 }
 

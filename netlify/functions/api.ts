@@ -51,7 +51,16 @@ import {
   getDealsKanban,
 } from './routes/deals.js'
 import { getRevenueSummary } from './routes/revenue.js'
-import { getMyProfile, listRoster, listTeamMembers, createTeamMember, updateTeamMember, deleteTeamMember } from './routes/team.js'
+import {
+  getMyProfile,
+  listRoster,
+  listTeamMembers,
+  createTeamMember,
+  updateTeamMember,
+  deleteTeamMember,
+  getTeamMemberPermissions,
+  updateTeamMemberPermissions,
+} from './routes/team.js'
 import {
   listOrganizations,
   getOrganization,
@@ -137,7 +146,7 @@ export const handler: Handler = async (event) => {
         if (method === 'GET') response = await getLeadActivities(id, event, user)
         else throw new HttpError(405, 'Method not allowed')
       } else {
-        if (method === 'GET') response = await getLead(id, resolveOrganizationId(user, event), user.role === 'super_admin')
+        if (method === 'GET') response = await getLead(id, resolveOrganizationId(user, event), user)
         else if (method === 'PUT') response = await updateLead(id, event, user)
         else if (method === 'DELETE') response = await deleteLead(id, event, user)
         else throw new HttpError(405, 'Method not allowed')
@@ -167,6 +176,10 @@ export const handler: Handler = async (event) => {
         else throw new HttpError(405, 'Method not allowed')
       } else if (id === 'roster') {
         if (method === 'GET') response = await listRoster(event, user)
+        else throw new HttpError(405, 'Method not allowed')
+      } else if (sub === 'permissions') {
+        if (method === 'GET') response = await getTeamMemberPermissions(id, event, user)
+        else if (method === 'PUT') response = await updateTeamMemberPermissions(id, event, user)
         else throw new HttpError(405, 'Method not allowed')
       } else {
         if (method === 'PUT') response = await updateTeamMember(id, event, user)
@@ -275,7 +288,7 @@ export const handler: Handler = async (event) => {
         if (method === 'PATCH') response = await updateDealStage(id, event, user)
         else throw new HttpError(405, 'Method not allowed')
       } else {
-        if (method === 'GET') response = await getDeal(id, resolveOrganizationId(user, event), user.role === 'super_admin')
+        if (method === 'GET') response = await getDeal(id, resolveOrganizationId(user, event), user)
         else if (method === 'PUT') response = await updateDeal(id, event, user)
         else if (method === 'DELETE') response = await deleteDeal(id, event, user)
         else throw new HttpError(405, 'Method not allowed')

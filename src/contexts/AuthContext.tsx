@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import { teamApi } from '@/lib/api'
-import type { Role } from '@/types/team'
+import { DEFAULT_USER_PERMISSIONS, type Role, type UserPermissions } from '@/types/team'
 
 export interface CurrentProfile {
   id: string
@@ -12,6 +12,7 @@ export interface CurrentProfile {
   is_active: boolean
   organization_id: string | null
   organization_name: string | null
+  permissions: UserPermissions
 }
 
 interface AuthContextValue {
@@ -76,4 +77,12 @@ export function useAuth() {
 
 export function isAdminOrAbove(role: Role | undefined): boolean {
   return role === 'admin' || role === 'super_admin'
+}
+
+/** Admins/super admins always pass; a User's access is gated by their
+ * individually configured permissions jsonb, defaulted server-side. */
+export function hasPermission(profile: CurrentProfile | null | undefined, key: keyof UserPermissions): boolean {
+  if (!profile) return false
+  if (isAdminOrAbove(profile.role)) return true
+  return Boolean(profile.permissions?.[key])
 }

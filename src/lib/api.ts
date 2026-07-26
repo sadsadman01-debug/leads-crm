@@ -23,7 +23,7 @@ import type {
   RevenueSummary,
   WinLossReason,
 } from '@/types/deal'
-import type { TeamMember, Role } from '@/types/team'
+import type { TeamMember, Role, UserPermissions } from '@/types/team'
 import type { Organization, OrganizationSummary } from '@/types/organization'
 import type { CustomFieldDefinition, AppliesTo, FieldType } from '@/types/customField'
 import type { SavedReport, ReportRunResult, ReportType, ChartType, ReportFilters } from '@/types/report'
@@ -254,10 +254,10 @@ export const reportsApi = {
 export interface ForecastPeriod {
   periodKey: string
   label: string
-  forecast: number
-  openWeighted: number
-  closedWon: number
-  quota: number
+  forecast: number | null
+  openWeighted: number | null
+  closedWon: number | null
+  quota: number | null
   progressPct: number | null
   status: 'on_track' | 'at_risk' | 'behind' | 'no_quota'
 }
@@ -265,6 +265,7 @@ export interface ForecastPeriod {
 export interface ForecastResponse {
   displayCurrency: string
   ratesUpdatedAt: string
+  values_masked?: boolean
   thisMonth: ForecastPeriod
   thisQuarter: ForecastPeriod
   nextQuarter: ForecastPeriod
@@ -281,14 +282,14 @@ export const forecastApi = {
 
 export interface TrendMetric {
   key: 'leadsAdded' | 'conversionRate' | 'revenue' | 'avgDealSize'
-  current: number
-  previous: number
+  current: number | null
+  previous: number | null
   pctChange: number | null
 }
 
 export interface PeriodComparisonMetric {
-  current: number
-  previous: number
+  current: number | null
+  previous: number | null
   pctChange: number | null
 }
 
@@ -358,6 +359,7 @@ export const teamApi = {
     is_active: boolean
     organization_id: string | null
     organization_name: string | null
+    permissions: UserPermissions
   }>('/team-members/me'),
 
   roster: () => request<{ members: Array<{ id: string; nickname: string | null; email: string }> }>(
@@ -374,6 +376,14 @@ export const teamApi = {
 
   remove: (id: string, confirm: string) =>
     request<{ success: true }>(`/team-members/${id}`, { method: 'DELETE', body: JSON.stringify({ confirm }) }),
+
+  getPermissions: (id: string) => request<{ permissions: UserPermissions }>(`/team-members/${id}/permissions`),
+
+  updatePermissions: (id: string, permissions: UserPermissions) =>
+    request<TeamMember>(`/team-members/${id}/permissions`, { method: 'PUT', body: JSON.stringify({ permissions }) }),
+
+  resetPermissions: (id: string) =>
+    request<TeamMember>(`/team-members/${id}/permissions`, { method: 'PUT', body: JSON.stringify({ reset: true }) }),
 }
 
 export const tagsApi = {

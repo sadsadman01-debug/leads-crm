@@ -78,7 +78,7 @@ export function DealForm({
         lead_id: deal.lead_id,
         company_name: deal.lead?.company_name ?? '',
         name: deal.name,
-        value: String(deal.value),
+        value: deal.value_masked ? '' : String(deal.value ?? ''),
         currency: deal.currency,
         expected_close_date: deal.expected_close_date ?? '',
         notes: deal.notes ?? '',
@@ -107,7 +107,10 @@ export function DealForm({
       if (isEdit && deal) {
         return dealsApi.update(deal.id, {
           name: form.name.trim(),
-          value: Number(form.value) || 0,
+          // A masked deal's value input is left blank on open (never pre-filled
+          // with the real number) — if the admin didn't type a new value, omit
+          // the field entirely rather than overwriting it with 0.
+          ...(deal.value_masked && !form.value.trim() ? {} : { value: Number(form.value) || 0 }),
           currency: form.currency,
           expected_close_date: form.expected_close_date || null,
           notes: form.notes || null,
@@ -200,9 +203,15 @@ export function DealForm({
               min={0}
               step="0.01"
               className="input"
+              placeholder={deal?.value_masked ? '••• (hidden — leave blank to keep unchanged)' : undefined}
               value={form.value}
               onChange={(e) => set('value', e.target.value)}
             />
+            {deal?.value_masked && (
+              <p className="mt-1 text-xs text-base-500">
+                You don't have permission to view this deal's value. Leave blank to keep it unchanged.
+              </p>
+            )}
           </div>
           <div>
             <label className="label">Currency</label>

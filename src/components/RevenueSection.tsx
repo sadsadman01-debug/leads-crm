@@ -5,7 +5,7 @@ import { DealFunnelChart } from '@/components/charts/DealFunnelChart'
 import { RevenueTrendChart } from '@/components/charts/RevenueTrendChart'
 import { DonutChart } from '@/components/charts/DonutChart'
 import { DealsClosingWidget } from '@/components/DealsClosingWidget'
-import { formatCurrency } from '@/lib/currency'
+import { formatMaskedCurrency } from '@/lib/currency'
 import { CATEGORICAL_PALETTE } from '@/lib/chartColors'
 import { CURRENCIES, currencyLabel, type RevenueSummary } from '@/types/deal'
 
@@ -71,34 +71,34 @@ export function RevenueSection({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
         <StatTile
           label="Open Pipeline Value"
-          value={formatCurrency(totals.openPipelineValue, currency)}
+          value={formatMaskedCurrency(totals.openPipelineValue, currency)}
           subvalue={`${totals.openDealsCount} open`}
           icon={DollarSign}
           tone="accent"
         />
         <StatTile
           label="Weighted Pipeline"
-          value={formatCurrency(totals.weightedPipelineValue, currency)}
+          value={formatMaskedCurrency(totals.weightedPipelineValue, currency)}
           subvalue="forecasted"
           icon={TrendingUp}
           tone="accent"
         />
         <StatTile
           label="Closed Won Revenue"
-          value={formatCurrency(totals.closedWonRevenue, currency)}
+          value={formatMaskedCurrency(totals.closedWonRevenue, currency)}
           subvalue={`${totals.closedWonCount} won`}
           icon={Trophy}
           tone="success"
         />
         <StatTile
           label="Closed Lost Value"
-          value={formatCurrency(totals.closedLostValue, currency)}
+          value={formatMaskedCurrency(totals.closedLostValue, currency)}
           subvalue={`${totals.closedLostCount} lost`}
           icon={XCircle}
           tone="danger"
         />
         <StatTile label="Win Rate" value={`${totals.winRate}%`} icon={Percent} tone="accent" />
-        <StatTile label="Avg Deal Size" value={formatCurrency(totals.avgDealSize, currency)} icon={Ruler} tone="neutral" />
+        <StatTile label="Avg Deal Size" value={formatMaskedCurrency(totals.avgDealSize, currency)} icon={Ruler} tone="neutral" />
         <StatTile label="Avg Sales Cycle" value={`${totals.avgSalesCycleDays}d`} icon={Clock3} tone="neutral" />
       </div>
 

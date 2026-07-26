@@ -24,6 +24,7 @@ import { FiltersBar } from '@/components/FiltersBar'
 import { BulkActionsBar } from '@/components/BulkActionsBar'
 import { ImportModal } from '@/components/ImportModal'
 import { KanbanBoard } from '@/components/kanban/KanbanBoard'
+import { useAuth, hasPermission } from '@/contexts/AuthContext'
 import type { LeadFilters } from '@/types/lead'
 
 const PAGE_SIZE = 20
@@ -66,6 +67,9 @@ export function LeadsList() {
   const navigate = useNavigate()
   const location = useLocation()
   const queryClient = useQueryClient()
+  const { profile } = useAuth()
+  const canImport = hasPermission(profile, 'canImport')
+  const canExport = hasPermission(profile, 'canExport')
   const drillState = location.state as { initialFilters?: LeadFilters; drillLabel?: string } | null
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
@@ -408,14 +412,18 @@ export function LeadsList() {
               )}
             </div>
           )}
-          <button className="btn-secondary" onClick={() => setImportOpen(true)}>
-            <Upload size={16} />
-            Import
-          </button>
-          <button className="btn-secondary" disabled={exporting} onClick={handleExport}>
-            <Download size={16} />
-            {exporting ? 'Exporting…' : 'Export'}
-          </button>
+          {canImport && (
+            <button className="btn-secondary" onClick={() => setImportOpen(true)}>
+              <Upload size={16} />
+              Import
+            </button>
+          )}
+          {canExport && (
+            <button className="btn-secondary" disabled={exporting} onClick={handleExport}>
+              <Download size={16} />
+              {exporting ? 'Exporting…' : 'Export'}
+            </button>
+          )}
           <button className="btn-primary" onClick={() => navigate('/leads/new')}>
             <Plus size={16} />
             Add New Lead

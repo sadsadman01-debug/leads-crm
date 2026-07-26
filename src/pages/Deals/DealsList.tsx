@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Plus, Rows3, Columns3, ChevronLeft, ChevronRight, Handshake } from 'lucide-react'
 import { dealsApi, industriesApi, dealStagesApi, teamApi } from '@/lib/api'
-import { formatCurrency } from '@/lib/currency'
+import { formatMaskedCurrency } from '@/lib/currency'
 import { Badge } from '@/components/ui/Badge'
 import { Avatar } from '@/components/ui/RoleBadge'
 import { DealForm } from '@/components/DealForm'
@@ -200,7 +200,7 @@ export function DealsList() {
                     <td className="px-5 py-3.5 font-medium text-base-100">{deal.name}</td>
                     <td className="px-5 py-3.5 text-base-300">{deal.lead?.company_name ?? '—'}</td>
                     <td className="px-5 py-3.5 font-semibold text-accent-400">
-                      {formatCurrency(Number(deal.value), deal.currency)}
+                      {formatMaskedCurrency(deal.value, deal.currency)}
                     </td>
                     <td className="px-5 py-3.5">
                       <Badge tone="neutral">
@@ -242,7 +242,7 @@ export function DealsList() {
                 <p className="truncate text-xs text-base-400">{deal.lead?.company_name ?? '—'}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
                   <span className="text-sm font-semibold text-accent-400">
-                    {formatCurrency(Number(deal.value), deal.currency)}
+                    {formatMaskedCurrency(deal.value, deal.currency)}
                   </span>
                   <Badge tone="neutral">{(deal.stage_id && stageNameById.get(deal.stage_id)) ?? '—'}</Badge>
                   <span className="pill bg-base-800 text-base-300">{deal.probability}%</span>

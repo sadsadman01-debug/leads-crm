@@ -22,7 +22,9 @@ export interface Deal {
   id: string
   lead_id: string
   name: string
-  value: number
+  /** Null when the viewer lacks "Can view Deal monetary values" — see value_masked. */
+  value: number | null
+  value_masked?: boolean
   currency: string
   stage_id: string | null
   probability: number
@@ -40,7 +42,8 @@ export interface Deal {
 export interface KanbanDeal {
   id: string
   name: string
-  value: number
+  value: number | null
+  value_masked?: boolean
   currency: string
   stage_id: string | null
   probability: number
@@ -82,12 +85,12 @@ export function currencyLabel(code: string): string {
 }
 
 export interface RevenueTotals {
-  openPipelineValue: number
-  weightedPipelineValue: number
-  closedWonRevenue: number
-  closedLostValue: number
+  openPipelineValue: number | null
+  weightedPipelineValue: number | null
+  closedWonRevenue: number | null
+  closedLostValue: number | null
   winRate: number
-  avgDealSize: number
+  avgDealSize: number | null
   avgSalesCycleDays: number
   openDealsCount: number
   closedWonCount: number
@@ -96,15 +99,16 @@ export interface RevenueTotals {
 
 export interface RevenueSummary {
   totals: RevenueTotals
+  values_masked?: boolean
   closedRange: 'all' | 'month' | 'quarter' | 'year'
-  funnel: Array<{ stage: string; count: number; value: number }>
-  trend: Array<{ month: string; revenue: number }>
+  funnel: Array<{ stage: string; count: number; value: number | null }>
+  trend: Array<{ month: string; revenue: number | null }>
   lossReasonBreakdown: Array<{ label: string; count: number }>
   dealsClosingThisMonth: Array<{
     id: string
     name: string
     company_name: string
-    value: number
+    value: number | null
     currency: string
     expected_close_date: string
     is_overdue: boolean

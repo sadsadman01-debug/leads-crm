@@ -1,5 +1,6 @@
+import { type ReactNode } from 'react'
 import { AlertCircle } from 'lucide-react'
-import { useAuth } from '@/contexts/AuthContext'
+import { useAuth, hasPermission } from '@/contexts/AuthContext'
 import { RoleBadge } from '@/components/ui/RoleBadge'
 import { PipelineStagesSettings } from '@/components/PipelineStagesSettings'
 import { FollowUpIntervalSettings } from '@/components/FollowUpIntervalSettings'
@@ -11,9 +12,24 @@ import { DefaultCurrencySettings } from '@/components/DefaultCurrencySettings'
 import { CustomFieldsSettings } from '@/components/CustomFieldsSettings'
 import { QuotaSettings } from '@/components/QuotaSettings'
 
+/** Wraps a settings section in a disabled fieldset unless the caller passes
+ * (or is granted) write access — same "view only, greyed out" convention
+ * used everywhere else in Settings, just decided per-section instead of
+ * blanket by role, since some sections are now delegatable to Users. */
+function Section({ canWrite, children }: { canWrite: boolean; children: ReactNode }) {
+  return <fieldset disabled={!canWrite} className={canWrite ? '' : 'opacity-60'}>{children}</fieldset>
+}
+
 export function Settings() {
   const { session, profile } = useAuth()
-  const readOnly = profile?.role === 'user'
+  const isUser = profile?.role === 'user'
+
+  const canManageTemplates = hasPermission(profile, 'canManageTemplates')
+  const canManageCustomFields = hasPermission(profile, 'canManageCustomFields')
+  const canManageStages = hasPermission(profile, 'canManageStages')
+  const canManageIndustries = hasPermission(profile, 'canManageIndustries')
+
+  const anyDelegated = canManageTemplates || canManageCustomFields || canManageStages || canManageIndustries
 
   return (
     <div className="space-y-6">
@@ -25,24 +41,44 @@ export function Settings() {
         {profile && <div className="mt-1"><RoleBadge role={profile.role} /></div>}
       </div>
 
-      {readOnly && (
+      {isUser && (
         <div className="flex items-center gap-2.5 rounded-lg bg-warn-bg px-4 py-3 text-sm text-warn">
           <AlertCircle size={16} className="shrink-0" />
-          View only — contact your admin to change this.
+          {anyDelegated
+            ? 'Some sections below are view only — contact your admin to change this. Sections your admin has granted you access to are editable.'
+            : 'View only — contact your admin to change this.'}
         </div>
       )}
 
-      <fieldset disabled={readOnly} className={readOnly ? 'space-y-6 opacity-60' : 'space-y-6'}>
-        <PipelineStagesSettings />
-        <FollowUpIntervalSettings />
-        <IndustriesSettings />
-        <TemplatesSettings />
-        <DealStagesSettings />
-        <WinLossReasonsSettings />
-        <DefaultCurrencySettings />
-        <CustomFieldsSettings />
-        <QuotaSettings />
-      </fieldset>
+      <div className="space-y-6">
+        <Section canWrite={canManageStages}>
+          <PipelineStagesSettings />
+        </Section>
+        <Section canWrite={!isUser}>
+          <FollowUpIntervalSettings />
+        </Section>
+        <Section canWrite={canManageIndustries}>
+          <IndustriesSettings />
+        </Section>
+        <Section canWrite={canManageTemplates}>
+          <TemplatesSettings />
+        </Section>
+        <Section canWrite={canManageStages}>
+          <DealStagesSettings />
+        </Section>
+        <Section canWrite={!isUser}>
+          <WinLossReasonsSettings />
+        </Section>
+        <Section canWrite={!isUser}>
+          <DefaultCurrencySettings />
+        </Section>
+        <Section canWrite={canManageCustomFields}>
+          <CustomFieldsSettings />
+        </Section>
+        <Section canWrite={!isUser}>
+          <QuotaSettings />
+        </Section>
+      </div>
     </div>
   )
 }

@@ -4,7 +4,7 @@ import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
 import { ensureTagIds } from '../lib/tags.js'
 import { logActivities } from '../lib/activities.js'
-import { resolveOrganizationId, scopeToOrg } from '../lib/permissions.js'
+import { resolveOrganizationId, scopeToOrg, requireFeaturePermission, applyLeadVisibility } from '../lib/permissions.js'
 import { loadActiveDefinitions, type CustomFieldDefRow } from '../lib/customFieldValues.js'
 import type { AuthedUser } from '../lib/auth.js'
 
@@ -171,6 +171,7 @@ async function insertRows(
 
 /** POST /leads/import — body: { rows: Record<string,string>[] } (already parsed client-side, e.g. from a CSV file). */
 export async function importRows(event: HandlerEvent, user: AuthedUser) {
+  requireFeaturePermission(user, 'canImport')
   const orgId = resolveOrganizationId(user, event)
   const body = JSON.parse(event.body || '{}')
   const rawRows = body.rows
@@ -203,6 +204,7 @@ function extractSheetId(url: string): string | null {
 
 /** POST /leads/import/sheet — body: { sheetUrl: string }. Sheet must be shared "Anyone with the link can view". */
 export async function importFromSheet(event: HandlerEvent, user: AuthedUser) {
+  requireFeaturePermission(user, 'canImport')
   const orgId = resolveOrganizationId(user, event)
   const body = JSON.parse(event.body || '{}')
   const sheetUrl = body.sheetUrl as string | undefined
@@ -276,6 +278,7 @@ const EXPORT_COLUMNS = [
 
 /** GET /leads/export?filters=...&search=... — streams a CSV of all leads matching the current list filters. */
 export async function exportLeads(event: HandlerEvent, user: AuthedUser) {
+  requireFeaturePermission(user, 'canExport')
   // Imported lazily to avoid a require cycle at module init time.
   const { applyColumnFilters, resolveJoinFilteredIds, parseFilters, LEAD_SELECT, normalizeLead } = await import(
     './leads.js'
@@ -295,6 +298,7 @@ export async function exportLeads(event: HandlerEvent, user: AuthedUser) {
   for (let offset = 0; offset < EXPORT_MAX_ROWS; offset += EXPORT_CHUNK_SIZE) {
     let query = supabase.from('leads').select(LEAD_SELECT)
     query = scopeToOrg(query as any, orgId) as any
+    query = applyLeadVisibility(query as any, user) as any
     query = applyColumnFilters(query as any, filters, search) as any
     if (allowedIds !== null) query = query.in('id', [...allowedIds])
 

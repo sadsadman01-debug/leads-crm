@@ -167,24 +167,27 @@ export async function getRevenueSummary(event: HandlerEvent, user: AuthedUser) {
       is_overdue: new Date(d.expected_close_date) < now,
     }))
 
+  const canViewValues = isAdminOrAbove(user) || user.permissions.canViewDealValues
+
   return json(200, {
     totals: {
-      openPipelineValue,
-      weightedPipelineValue,
-      closedWonRevenue,
-      closedLostValue,
+      openPipelineValue: canViewValues ? openPipelineValue : null,
+      weightedPipelineValue: canViewValues ? weightedPipelineValue : null,
+      closedWonRevenue: canViewValues ? closedWonRevenue : null,
+      closedLostValue: canViewValues ? closedLostValue : null,
       winRate,
-      avgDealSize,
+      avgDealSize: canViewValues ? avgDealSize : null,
       avgSalesCycleDays,
       openDealsCount: openDeals.length,
       closedWonCount: closedWonDeals.length,
       closedLostCount: closedLostDeals.length,
     },
+    values_masked: canViewValues ? undefined : true,
     closedRange,
-    funnel,
-    trend,
+    funnel: canViewValues ? funnel : funnel.map((f) => ({ ...f, value: null })),
+    trend: canViewValues ? trend : trend.map((t) => ({ ...t, revenue: null })),
     lossReasonBreakdown,
-    dealsClosingThisMonth,
+    dealsClosingThisMonth: canViewValues ? dealsClosingThisMonth : dealsClosingThisMonth.map((d) => ({ ...d, value: null })),
     displayCurrency,
     ratesUpdatedAt: liveRates.fetchedAt,
   })

@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { AlertCircle } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
-import { formatCurrency } from '@/lib/currency'
+import { formatMaskedCurrency } from '@/lib/currency'
 import type { RevenueSummary } from '@/types/deal'
 
 export function DealsClosingWidget({
@@ -42,7 +42,7 @@ export function DealsClosingWidget({
                 <span className="shrink-0 text-xs text-base-400">{deal.company_name}</span>
               </div>
               <span className="flex shrink-0 items-center gap-2 pl-4 text-xs sm:pl-0">
-                <span className="font-semibold text-accent-400">{formatCurrency(Number(deal.value), deal.currency)}</span>
+                <span className="font-semibold text-accent-400">{formatMaskedCurrency(deal.value, deal.currency)}</span>
                 {displayCurrency && deal.currency !== displayCurrency && (
                   <span
                     className="pill bg-base-800 text-base-400"

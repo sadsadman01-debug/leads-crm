@@ -1,7 +1,7 @@
 import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
-import { requireAdminOrAbove, isAdminOrAbove, resolveOrganizationId, requireRowInOrgScope } from '../lib/permissions.js'
+import { requireFeaturePermission, isAdminOrAbove, resolveOrganizationId } from '../lib/permissions.js'
 import { runLeadsReport, runDealsReport, runActivityReport, type ReportType, type ReportFilters } from '../lib/reportEngine.js'
 import type { AuthedUser } from '../lib/auth.js'
 
@@ -19,7 +19,7 @@ export async function listSavedReports(event: HandlerEvent, user: AuthedUser) {
 }
 
 export async function createSavedReport(event: HandlerEvent, user: AuthedUser) {
-  requireAdminOrAbove(user)
+  requireFeaturePermission(user, 'canAccessReportBuilder')
   const supabase = getSupabaseAdmin()
   const orgId = resolveOrganizationId(user, event)
   const body = JSON.parse(event.body || '{}')
@@ -47,10 +47,24 @@ export async function createSavedReport(event: HandlerEvent, user: AuthedUser) {
   return json(201, data)
 }
 
+/** Admins/super admins may edit any report; a User with canAccessReportBuilder
+ * may only edit reports they themselves created — matching the RLS backstop. */
+async function requireReportEditAccess(id: string, user: AuthedUser, orgId: string | null) {
+  requireFeaturePermission(user, 'canAccessReportBuilder')
+  const supabase = getSupabaseAdmin()
+  const { data, error } = await supabase.from('saved_reports').select('organization_id, created_by').eq('id', id).maybeSingle()
+  if (error) throw new HttpError(500, error.message)
+  if (!data) throw new HttpError(404, 'Not found')
+  const rowOrg = data.organization_id ?? null
+  if (rowOrg !== orgId) throw new HttpError(404, 'Not found')
+  if (!isAdminOrAbove(user) && data.created_by !== user.id) {
+    throw new HttpError(403, 'You can only edit reports you created')
+  }
+}
+
 export async function updateSavedReport(id: string, event: HandlerEvent, user: AuthedUser) {
-  requireAdminOrAbove(user)
   const orgId = resolveOrganizationId(user, event)
-  await requireRowInOrgScope('saved_reports', id, orgId)
+  await requireReportEditAccess(id, user, orgId)
   const supabase = getSupabaseAdmin()
   const body = JSON.parse(event.body || '{}')
 
@@ -70,18 +84,34 @@ export async function updateSavedReport(id: string, event: HandlerEvent, user: A
 }
 
 export async function deleteSavedReport(id: string, event: HandlerEvent, user: AuthedUser) {
-  requireAdminOrAbove(user)
   const orgId = resolveOrganizationId(user, event)
-  await requireRowInOrgScope('saved_reports', id, orgId)
+  await requireReportEditAccess(id, user, orgId)
   const supabase = getSupabaseAdmin()
   const { error } = await supabase.from('saved_reports').delete().eq('id', id)
   if (error) throw new HttpError(500, error.message)
   return json(200, { success: true })
 }
 
+/** Deals-report rows carry monetary fields under different keys depending on
+ * whether the report is grouped (totalValue/avgValue) or a flat list
+ * (value/converted_value) — null both out rather than sending the real number. */
+function maskDealsReportResult(result: any) {
+  return {
+    ...result,
+    values_masked: true,
+    rows: (result.rows ?? []).map((r: any) => {
+      if ('totalValue' in r) return { ...r, totalValue: null, avgValue: null }
+      if ('value' in r) return { ...r, value: null, converted_value: null }
+      return r
+    }),
+  }
+}
+
 /** POST /reports/run — body: { report_type, group_by?, filters?, displayCurrency? }.
  * Any authenticated org member can run a report (read-only aggregation); only
- * admins/super admins can save one. Non-admins are still fully org-scoped. */
+ * admins/super admins (or a User with canAccessReportBuilder) can save one.
+ * Non-admins are still fully org-scoped, and deal monetary fields are masked
+ * for a caller lacking canViewDealValues, same as everywhere else deals show up. */
 export async function runReport(event: HandlerEvent, user: AuthedUser) {
   const orgId = resolveOrganizationId(user, event)
   const body = JSON.parse(event.body || '{}')
@@ -90,7 +120,11 @@ export async function runReport(event: HandlerEvent, user: AuthedUser) {
   const filters: ReportFilters = body.filters ?? {}
 
   if (reportType === 'leads') return json(200, await runLeadsReport(orgId, groupBy, filters))
-  if (reportType === 'deals') return json(200, await runDealsReport(orgId, groupBy, filters, body.displayCurrency || 'USD'))
+  if (reportType === 'deals') {
+    const result = await runDealsReport(orgId, groupBy, filters, body.displayCurrency || 'USD')
+    const canViewValues = isAdminOrAbove(user) || user.permissions.canViewDealValues
+    return json(200, canViewValues ? result : maskDealsReportResult(result))
+  }
   if (reportType === 'activity') return json(200, await runActivityReport(orgId, groupBy, filters))
   throw new HttpError(400, 'Invalid report_type')
 }

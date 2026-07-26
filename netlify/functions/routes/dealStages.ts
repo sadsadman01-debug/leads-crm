@@ -1,7 +1,7 @@
 import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
-import { requireAdminOrAbove, resolveOrganizationId, scopeToOrg, requireRowInOrgScope } from '../lib/permissions.js'
+import { requireFeaturePermission, resolveOrganizationId, scopeToOrg, requireRowInOrgScope } from '../lib/permissions.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const STAGE_COLUMNS = 'id, name, position, default_probability, is_closed, is_won'
@@ -17,7 +17,7 @@ export async function listDealStages(event: HandlerEvent, user: AuthedUser) {
 }
 
 export async function createDealStage(event: HandlerEvent, user: AuthedUser) {
-  requireAdminOrAbove(user)
+  requireFeaturePermission(user, 'canManageStages')
   const supabase = getSupabaseAdmin()
   const orgId = resolveOrganizationId(user, event)
   const body = JSON.parse(event.body || '{}')
@@ -54,7 +54,7 @@ function clampProbability(value: any, fallback: number): number {
 }
 
 export async function updateDealStage(id: string, event: HandlerEvent, user: AuthedUser) {
-  requireAdminOrAbove(user)
+  requireFeaturePermission(user, 'canManageStages')
   const supabase = getSupabaseAdmin()
   await requireRowInOrgScope('deal_stages', id, resolveOrganizationId(user, event))
   const body = JSON.parse(event.body || '{}')
@@ -84,7 +84,7 @@ export async function updateDealStage(id: string, event: HandlerEvent, user: Aut
 
 /** Body: { orderedIds: string[] } — full ordering, position becomes each id's index. */
 export async function reorderDealStages(event: HandlerEvent, user: AuthedUser) {
-  requireAdminOrAbove(user)
+  requireFeaturePermission(user, 'canManageStages')
   const supabase = getSupabaseAdmin()
   const orgId = resolveOrganizationId(user, event)
   const body = JSON.parse(event.body || '{}')
@@ -114,7 +114,7 @@ export async function reorderDealStages(event: HandlerEvent, user: AuthedUser) {
 }
 
 export async function deleteDealStage(id: string, event: HandlerEvent, user: AuthedUser) {
-  requireAdminOrAbove(user)
+  requireFeaturePermission(user, 'canManageStages')
   const supabase = getSupabaseAdmin()
   await requireRowInOrgScope('deal_stages', id, resolveOrganizationId(user, event))
 

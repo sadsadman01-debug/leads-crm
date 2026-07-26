@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
 import { forecastApi, settingsApi, teamApi } from '@/lib/api'
-import { formatCurrency } from '@/lib/currency'
+import { formatMaskedCurrency } from '@/lib/currency'
 import { useAuth, isAdminOrAbove } from '@/contexts/AuthContext'
 import { useState } from 'react'
 import type { ForecastPeriod } from '@/lib/api'
@@ -13,7 +13,7 @@ const STATUS_STYLES: Record<ForecastPeriod['status'], { bar: string; label: stri
   no_quota: { bar: 'bg-base-600', label: 'No Quota Set', tone: 'text-base-400' },
 }
 
-function PeriodCard({ period, currency }: { period: ForecastPeriod; currency: string }) {
+function PeriodCard({ period, currency, valuesMasked }: { period: ForecastPeriod; currency: string; valuesMasked: boolean }) {
   const style = STATUS_STYLES[period.status]
   const pct = Math.min(100, period.progressPct ?? 0)
 
@@ -21,19 +21,21 @@ function PeriodCard({ period, currency }: { period: ForecastPeriod; currency: st
     <div className="card p-6">
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-sm font-semibold uppercase tracking-wide text-base-300">{period.label}</h3>
-        <span className={`text-xs font-medium ${style.tone}`}>{style.label}</span>
+        <span className={`text-xs font-medium ${style.tone}`}>{valuesMasked ? '' : style.label}</span>
       </div>
-      <p className="mb-1 text-2xl font-semibold text-base-100">{formatCurrency(period.forecast, currency)}</p>
+      <p className="mb-1 text-2xl font-semibold text-base-100">{formatMaskedCurrency(period.forecast, currency)}</p>
       <p className="mb-4 text-xs text-base-400">
-        {formatCurrency(period.closedWon, currency)} closed + {formatCurrency(period.openWeighted, currency)} weighted pipeline
+        {formatMaskedCurrency(period.closedWon, currency)} closed + {formatMaskedCurrency(period.openWeighted, currency)} weighted pipeline
       </p>
-      {period.quota > 0 ? (
+      {valuesMasked ? (
+        <p className="text-xs text-base-500">You don't have permission to view deal values.</p>
+      ) : period.quota && period.quota > 0 ? (
         <>
           <div className="mb-1.5 h-2.5 w-full overflow-hidden rounded-full bg-base-800">
             <div className={`h-full rounded-full transition-all duration-500 ${style.bar}`} style={{ width: `${pct}%` }} />
           </div>
           <p className="text-xs text-base-400">
-            {period.progressPct}% of {formatCurrency(period.quota, currency)} quota
+            {period.progressPct}% of {formatMaskedCurrency(period.quota, currency)} quota
           </p>
         </>
       ) : (
@@ -79,9 +81,9 @@ export function ForecastTab() {
       </p>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <PeriodCard period={data.thisMonth} currency={data.displayCurrency} />
-        <PeriodCard period={data.thisQuarter} currency={data.displayCurrency} />
-        <PeriodCard period={data.nextQuarter} currency={data.displayCurrency} />
+        <PeriodCard period={data.thisMonth} currency={data.displayCurrency} valuesMasked={Boolean(data.values_masked)} />
+        <PeriodCard period={data.thisQuarter} currency={data.displayCurrency} valuesMasked={Boolean(data.values_masked)} />
+        <PeriodCard period={data.nextQuarter} currency={data.displayCurrency} valuesMasked={Boolean(data.values_masked)} />
       </div>
 
       <p className="text-xs text-base-500">

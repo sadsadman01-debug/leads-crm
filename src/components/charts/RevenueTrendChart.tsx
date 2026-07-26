@@ -13,10 +13,11 @@ function CustomTooltip({ active, payload, label, currency }: any) {
   )
 }
 
-export function RevenueTrendChart({ points, currency }: { points: Array<{ month: string; revenue: number }>; currency: string }) {
+export function RevenueTrendChart({ points, currency }: { points: Array<{ month: string; revenue: number | null }>; currency: string }) {
+  const data = points.map((p) => ({ ...p, revenue: p.revenue ?? 0 }))
   return (
     <ResponsiveContainer width="100%" height={280}>
-      <BarChart data={points} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
+      <BarChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
         <CartesianGrid stroke={CHART_GRID} strokeDasharray="0" vertical={false} />
         <XAxis
           dataKey="month"

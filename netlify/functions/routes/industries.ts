@@ -1,7 +1,7 @@
 import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
-import { requireAdminOrAbove, resolveOrganizationId, scopeToOrg, requireRowInOrgScope } from '../lib/permissions.js'
+import { requireFeaturePermission, resolveOrganizationId, scopeToOrg, requireRowInOrgScope } from '../lib/permissions.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 export async function listIndustries(event: HandlerEvent, user: AuthedUser) {
@@ -15,7 +15,7 @@ export async function listIndustries(event: HandlerEvent, user: AuthedUser) {
 }
 
 export async function createIndustry(event: HandlerEvent, user: AuthedUser) {
-  requireAdminOrAbove(user)
+  requireFeaturePermission(user, 'canManageIndustries')
   const supabase = getSupabaseAdmin()
   const orgId = resolveOrganizationId(user, event)
   const body = JSON.parse(event.body || '{}')
@@ -36,7 +36,7 @@ export async function createIndustry(event: HandlerEvent, user: AuthedUser) {
 }
 
 export async function renameIndustry(id: string, event: HandlerEvent, user: AuthedUser) {
-  requireAdminOrAbove(user)
+  requireFeaturePermission(user, 'canManageIndustries')
   const supabase = getSupabaseAdmin()
   await requireRowInOrgScope('industries', id, resolveOrganizationId(user, event))
   const body = JSON.parse(event.body || '{}')
@@ -58,7 +58,7 @@ export async function renameIndustry(id: string, event: HandlerEvent, user: Auth
 }
 
 export async function deleteIndustry(id: string, event: HandlerEvent, user: AuthedUser) {
-  requireAdminOrAbove(user)
+  requireFeaturePermission(user, 'canManageIndustries')
   const supabase = getSupabaseAdmin()
   await requireRowInOrgScope('industries', id, resolveOrganizationId(user, event))
 

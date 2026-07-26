@@ -2,9 +2,11 @@ import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
 import { requireAdminOrAbove, requireSuperAdmin, isSuperAdmin, resolveOrganizationId, scopeToOrg } from '../lib/permissions.js'
+import { DEFAULT_USER_PERMISSIONS, normalizePermissions } from '../lib/userPermissions.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const PROFILE_COLUMNS = 'id, email, nickname, role, is_active, created_at'
+const PROFILE_COLUMNS_WITH_PERMISSIONS = `${PROFILE_COLUMNS}, permissions`
 
 // Ban far enough in the future that a deactivated account's existing session
 // (and any attempt to sign back in before its JWT expires) is rejected by
@@ -27,6 +29,7 @@ export async function getMyProfile(user: AuthedUser) {
     is_active: user.is_active,
     organization_id: user.organization_id,
     organization_name: organizationName,
+    permissions: user.permissions,
   })
 }
 
@@ -48,7 +51,7 @@ export async function listTeamMembers(event: HandlerEvent, user: AuthedUser) {
   const supabase = getSupabaseAdmin()
   const orgId = resolveOrganizationId(user, event)
 
-  let query = supabase.from('profiles').select(PROFILE_COLUMNS).neq('role', 'super_admin')
+  let query = supabase.from('profiles').select(PROFILE_COLUMNS_WITH_PERMISSIONS).neq('role', 'super_admin')
   query = scopeToOrg(query as any, orgId) as any
   const { data: profiles, error } = await query.order('created_at', { ascending: true })
   if (error) throw new HttpError(500, error.message)
@@ -58,7 +61,11 @@ export async function listTeamMembers(event: HandlerEvent, user: AuthedUser) {
   const lastLoginById = new Map(authList.users.map((u) => [u.id, u.last_sign_in_at]))
 
   return json(200, {
-    members: (profiles ?? []).map((p) => ({ ...p, last_login_at: lastLoginById.get(p.id) ?? null })),
+    members: (profiles ?? []).map((p) => ({
+      ...p,
+      permissions: normalizePermissions(p.permissions),
+      last_login_at: lastLoginById.get(p.id) ?? null,
+    })),
   })
 }
 
@@ -101,11 +108,50 @@ export async function createTeamMember(event: HandlerEvent, user: AuthedUser) {
 
 async function getTargetProfile(id: string, orgId: string | null) {
   const supabase = getSupabaseAdmin()
-  const { data, error } = await supabase.from('profiles').select(`${PROFILE_COLUMNS}, organization_id`).eq('id', id).maybeSingle()
+  const { data, error } = await supabase
+    .from('profiles')
+    .select(`${PROFILE_COLUMNS_WITH_PERMISSIONS}, organization_id`)
+    .eq('id', id)
+    .maybeSingle()
   if (error) throw new HttpError(500, error.message)
   if (!data) throw new HttpError(404, 'Team member not found')
   if (data.role === 'super_admin' || data.organization_id !== orgId) throw new HttpError(404, 'Team member not found')
   return data
+}
+
+/** Body: a partial UserPermissions object — unspecified keys keep their current
+ * value. Admin/Super Admin permissions are fixed and never configurable: this
+ * endpoint 400s if the target isn't a plain User. */
+export async function getTeamMemberPermissions(id: string, event: HandlerEvent, user: AuthedUser) {
+  requireAdminOrAbove(user)
+  const orgId = resolveOrganizationId(user, event)
+  const target = await getTargetProfile(id, orgId)
+  if (target.role !== 'user') throw new HttpError(400, 'Only User-role accounts have configurable permissions')
+  return json(200, { permissions: normalizePermissions(target.permissions) })
+}
+
+export async function updateTeamMemberPermissions(id: string, event: HandlerEvent, user: AuthedUser) {
+  requireAdminOrAbove(user)
+  const supabase = getSupabaseAdmin()
+  const orgId = resolveOrganizationId(user, event)
+  const target = await getTargetProfile(id, orgId)
+  if (target.role !== 'user') throw new HttpError(400, 'Only User-role accounts have configurable permissions')
+
+  const body = JSON.parse(event.body || '{}')
+  const reset = Boolean(body.reset)
+  const next = reset
+    ? { ...DEFAULT_USER_PERMISSIONS }
+    : normalizePermissions({ ...normalizePermissions(target.permissions), ...(body.permissions ?? {}) })
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({ permissions: next })
+    .eq('id', id)
+    .select(PROFILE_COLUMNS_WITH_PERMISSIONS)
+    .single()
+
+  if (error) throw new HttpError(500, error.message)
+  return json(200, { ...data, permissions: normalizePermissions(data.permissions) })
 }
 
 async function reassignRecords(fromId: string, toId: string | null) {

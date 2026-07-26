@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowUp, ArrowDown, Minus } from 'lucide-react'
 import { trendsApi } from '@/lib/api'
 import type { PeriodComparison } from '@/lib/api'
-import { formatCurrency } from '@/lib/currency'
+import { formatMaskedCurrency } from '@/lib/currency'
 
 function ChangeIndicator({ pctChange }: { pctChange: number | null }) {
   if (pctChange === null) return <span className="text-xs text-base-500">New</span>
@@ -42,7 +42,7 @@ function ComparisonCard({ title, comparison, currency }: { title: string; compar
         <div className="flex items-center justify-between text-sm">
           <span className="text-base-400">Revenue</span>
           <span className="flex items-center gap-2">
-            <span className="font-semibold text-base-100">{formatCurrency(comparison.revenue.current, currency)}</span>
+            <span className="font-semibold text-base-100">{formatMaskedCurrency(comparison.revenue.current, currency)}</span>
             <ChangeIndicator pctChange={comparison.revenue.pctChange} />
           </span>
         </div>

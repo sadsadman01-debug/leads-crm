@@ -237,7 +237,7 @@ export interface TeamPerformanceRow {
   conversionRate: number
   totalDeals: number
   dealsWon: number
-  revenueClosed: number
+  revenueClosed: number | null
   winRate: number
 }
 
