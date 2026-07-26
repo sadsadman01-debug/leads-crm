@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, UsersRound, ShieldCheck, ShieldAlert, KeyRound, Mail } from 'lucide-react'
 import { teamApi, passwordResetRequestsApi, mfaResetRequestsApi } from '@/lib/api'
@@ -18,8 +19,11 @@ type Tab = 'members' | 'password-resets' | 'mfa-resets'
 
 export function TeamList() {
   const { profile } = useAuth()
+  const location = useLocation()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [tab, setTab] = useState<Tab>('members')
+  const [highlightId, setHighlightId] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [editing, setEditing] = useState<TeamMember | null>(null)
   const [deactivating, setDeactivating] = useState<TeamMember | null>(null)
@@ -50,6 +54,23 @@ export function TeamList() {
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: ['team-members'] })
   }
+
+  // Opened via Global Search — highlight that member's row once the roster has loaded.
+  useEffect(() => {
+    const targetId = (location.state as any)?.highlightMemberId
+    if (!targetId) return
+    navigate(location.pathname, { replace: true, state: null })
+    setTab('members')
+    setHighlightId(targetId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (!highlightId || members.length === 0) return
+    document.getElementById(`team-member-${highlightId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    const timer = setTimeout(() => setHighlightId(null), 3000)
+    return () => clearTimeout(timer)
+  }, [highlightId, members.length])
 
   const reactivateMutation = useMutation({
     mutationFn: (id: string) => teamApi.update(id, { is_active: true }),
@@ -210,7 +231,13 @@ export function TeamList() {
               {members.map((m) => {
                 const canManage = m.role !== 'super_admin' && m.id !== profile?.id && (isSuperAdmin || m.role === 'user')
                 return (
-                  <tr key={m.id} className="border-b border-base-800">
+                  <tr
+                    key={m.id}
+                    id={`team-member-${m.id}`}
+                    className={`border-b border-base-800 transition-colors duration-500 ${
+                      highlightId === m.id ? 'bg-accent-500/15' : ''
+                    }`}
+                  >
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-2.5">
                         <Avatar name={m.nickname || m.email} />

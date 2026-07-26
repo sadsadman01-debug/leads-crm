@@ -32,6 +32,7 @@ import type { PasswordResetRequest, PasswordResetResult } from '@/types/password
 import type { MfaResetRequest, MfaResetResult } from '@/types/mfaResetRequest'
 import type { AppNotification, NotificationListResponse } from '@/types/notification'
 import type { OnboardingStatus } from '@/types/onboarding'
+import type { GlobalSearchResponse } from '@/types/search'
 import { withOrgScope } from './orgScope'
 
 class ApiError extends Error {
@@ -405,6 +406,13 @@ export const onboardingApi = {
   get: () => request<OnboardingStatus>('/onboarding'),
 
   dismiss: () => request<{ success: true }>('/onboarding/dismiss', { method: 'POST' }),
+}
+
+export const searchApi = {
+  query: (q: string) => {
+    const qs = new URLSearchParams({ q })
+    return request<GlobalSearchResponse>(`/search?${qs.toString()}`)
+  },
 }
 
 export const signupRequestsApi = {

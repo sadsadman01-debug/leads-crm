@@ -4,6 +4,7 @@
 -- ============================================================================
 
 create extension if not exists "pgcrypto";
+create extension if not exists "pg_trgm";
 
 -- ----------------------------------------------------------------------------
 -- organizations: one row per tenant/customer. The Super Admin belongs to none
@@ -46,6 +47,10 @@ create table if not exists public.profiles (
 
 alter table public.organizations add constraint organizations_created_by_fkey
   foreign key (created_by) references public.profiles(id) on delete set null;
+
+-- Global Search — trigram indexes for fast ILIKE '%term%' substring matching.
+create index if not exists profiles_nickname_trgm_idx on public.profiles using gin (nickname gin_trgm_ops);
+create index if not exists profiles_email_trgm_idx on public.profiles using gin (email gin_trgm_ops);
 
 -- ----------------------------------------------------------------------------
 -- signup_requests: public "Request Access" submissions from the Login page,
@@ -228,6 +233,13 @@ create index if not exists leads_organization_id_idx on public.leads (organizati
 create index if not exists leads_company_name_idx on public.leads using gin (to_tsvector('simple', company_name));
 create index if not exists leads_phone_idx on public.leads (phone);
 create index if not exists leads_email_idx on public.leads (lower(email));
+
+-- Global Search — trigram indexes for fast ILIKE '%term%' substring matching.
+create index if not exists leads_company_name_trgm_idx on public.leads using gin (company_name gin_trgm_ops);
+create index if not exists leads_contact_name_trgm_idx on public.leads using gin (contact_name gin_trgm_ops);
+create index if not exists leads_email_trgm_idx on public.leads using gin (email gin_trgm_ops);
+create index if not exists leads_phone_trgm_idx on public.leads using gin (phone gin_trgm_ops);
+create index if not exists leads_address_trgm_idx on public.leads using gin (address gin_trgm_ops);
 create index if not exists leads_created_at_idx on public.leads (created_at desc);
 
 create or replace function public.set_updated_at()
@@ -611,6 +623,7 @@ create index if not exists deals_stage_id_idx on public.deals (stage_id);
 create index if not exists deals_expected_close_date_idx on public.deals (expected_close_date);
 create index if not exists deals_owner_id_idx on public.deals (owner_id);
 create index if not exists deals_organization_id_idx on public.deals (organization_id);
+create index if not exists deals_name_trgm_idx on public.deals using gin (name gin_trgm_ops);
 
 drop trigger if exists deals_set_updated_at on public.deals;
 create trigger deals_set_updated_at

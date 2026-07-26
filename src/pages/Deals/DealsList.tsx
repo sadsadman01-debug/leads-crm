@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Plus, Rows3, Columns3, ChevronLeft, ChevronRight, Handshake } from 'lucide-react'
 import { dealsApi, industriesApi, dealStagesApi, teamApi } from '@/lib/api'
 import { formatMaskedCurrency } from '@/lib/currency'
@@ -15,11 +16,26 @@ type View = 'table' | 'kanban'
 
 export function DealsList() {
   const { profile } = useAuth()
+  const location = useLocation()
+  const navigate = useNavigate()
   const [view, setView] = useState<View>('table')
   const [page, setPage] = useState(1)
   const [filters, setFilters] = useState<DealFilters>({})
   const [formOpen, setFormOpen] = useState(false)
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null)
+
+  // Opened via Global Search — jump straight to that deal's edit modal, then
+  // clear the state so a later back/forward doesn't reopen it.
+  useEffect(() => {
+    const openDealId = (location.state as any)?.openDealId
+    if (!openDealId) return
+    navigate(location.pathname, { replace: true, state: null })
+    dealsApi.get(openDealId).then((deal) => {
+      setEditingDeal(deal)
+      setFormOpen(true)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['deals', { page, filters }],

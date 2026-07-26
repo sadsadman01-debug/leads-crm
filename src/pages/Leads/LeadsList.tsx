@@ -80,8 +80,8 @@ export function LeadsList() {
   const { profile } = useAuth()
   const canImport = hasPermission(profile, 'canImport')
   const canExport = hasPermission(profile, 'canExport')
-  const drillState = location.state as { initialFilters?: LeadFilters; drillLabel?: string } | null
-  const [search, setSearch] = useState('')
+  const drillState = location.state as { initialFilters?: LeadFilters; drillLabel?: string; prefillSearch?: string } | null
+  const [search, setSearch] = useState(() => drillState?.prefillSearch ?? '')
   const [page, setPage] = useState(1)
   const [sortBy, setSortBy] = useState('created_at')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')

@@ -117,6 +117,7 @@ import {
   resetPlatformBranding,
 } from './routes/platformBranding.js'
 import { getOnboardingStatus, dismissOnboarding } from './routes/onboarding.js'
+import { globalSearch } from './routes/search.js'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -461,6 +462,10 @@ export const handler: Handler = async (event) => {
       } else {
         throw new HttpError(404, 'Not found')
       }
+    } else if (resource === 'search') {
+      const user = await requireUser(event)
+      if (!id && method === 'GET') response = await globalSearch(event, user)
+      else throw new HttpError(404, 'Not found')
     } else if (resource === 'attachments') {
       const user = await requireUser(event)
       if (!id && method === 'POST') response = await saveAttachmentMetadata(event, user)
