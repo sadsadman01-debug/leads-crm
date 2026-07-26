@@ -8,6 +8,14 @@ import { handler as netlifyHandler } from '../netlify/functions/api.js'
  * handler only ever reads event.path/httpMethod/headers/body/queryStringParameters,
  * so a synthetic HandlerEvent built from the incoming request is enough — no
  * route logic needed to change.
+ *
+ * This is a single fixed function (not a `[...path]` filesystem catch-all) —
+ * vercel.json rewrites every /api/* request here explicitly, since Vercel's
+ * bracket catch-all only matched single-segment /api/<resource> paths in
+ * practice and silently 404'd anything with a subresource (/api/leads/:id,
+ * /api/dashboard/summary, etc.) before ever reaching this function. Vercel
+ * preserves the true original path in req.url for rewritten requests, so
+ * the path-parsing below is unaffected by the rewrite.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const url = new URL(req.url ?? '/api', 'http://localhost')
