@@ -124,6 +124,7 @@ import {
   listSupportContacts,
   deleteAllSupportContacts,
 } from './routes/supportContacts.js'
+import { generateFullExport, listExportLog } from './routes/dataExport.js'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -484,6 +485,11 @@ export const handler: Handler = async (event) => {
         else if (!id && method === 'DELETE') response = await deleteAllSupportContacts(user)
         else throw new HttpError(404, 'Not found')
       }
+    } else if (resource === 'data-export') {
+      const user = await requireUser(event)
+      if (!id && method === 'GET') response = await generateFullExport(event, user)
+      else if (id === 'log' && method === 'GET') response = await listExportLog(event, user)
+      else throw new HttpError(404, 'Not found')
     } else if (resource === 'attachments') {
       const user = await requireUser(event)
       if (!id && method === 'POST') response = await saveAttachmentMetadata(event, user)

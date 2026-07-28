@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Building2, Plus, Users, Handshake, DollarSign, ShieldOff, ShieldCheck, ArrowRight } from 'lucide-react'
-import { organizationsApi } from '@/lib/api'
+import { Building2, Plus, Users, Handshake, DollarSign, ShieldOff, ShieldCheck, ArrowRight, Download, Loader2 } from 'lucide-react'
+import { organizationsApi, dataExportApi } from '@/lib/api'
 import { formatCurrency } from '@/lib/currency'
 import { StatTile } from '@/components/charts/StatTile'
 import { Badge } from '@/components/ui/Badge'
@@ -17,6 +17,8 @@ export function OrganizationsOverview() {
   const [addOpen, setAddOpen] = useState(false)
   const [suspending, setSuspending] = useState<OrganizationSummary | null>(null)
   const [deleting, setDeleting] = useState<OrganizationSummary | null>(null)
+  const [exportingId, setExportingId] = useState<string | null>(null)
+  const [exportError, setExportError] = useState<string | null>(null)
 
   const { data, isLoading } = useQuery({ queryKey: ['organizations'], queryFn: organizationsApi.list })
   const orgs = data?.organizations ?? []
@@ -42,6 +44,18 @@ export function OrganizationsOverview() {
   function openPersonalWorkspace() {
     enterPersonalWorkspace()
     navigate('/dashboard')
+  }
+
+  async function handleExportOrg(org: OrganizationSummary) {
+    setExportError(null)
+    setExportingId(org.id)
+    try {
+      await dataExportApi.downloadFull(org.id)
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : 'Export failed')
+    } finally {
+      setExportingId(null)
+    }
   }
 
   const totals = orgs.reduce(
@@ -70,6 +84,10 @@ export function OrganizationsOverview() {
           </button>
         </div>
       </div>
+
+      {exportError && (
+        <div className="rounded-lg bg-danger-bg px-4 py-3 text-sm text-danger">{exportError}</div>
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile label="Organizations" value={orgs.length} icon={Building2} tone="accent" />
@@ -133,6 +151,14 @@ export function OrganizationsOverview() {
                       </button>
                       <button className="btn-ghost px-2 text-danger" onClick={() => setDeleting(org)}>
                         Delete
+                      </button>
+                      <button
+                        className="btn-ghost px-2 text-accent-400"
+                        disabled={exportingId === org.id}
+                        onClick={() => handleExportOrg(org)}
+                      >
+                        {exportingId === org.id ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                        Export
                       </button>
                     </div>
                   </td>

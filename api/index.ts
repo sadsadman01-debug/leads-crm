@@ -48,5 +48,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   for (const [key, value] of Object.entries(result.headers ?? {})) {
     res.setHeader(key, value as string)
   }
-  res.send(result.body ?? '')
+
+  // Binary responses (e.g. the ZIP data export) come back base64-encoded per
+  // the Netlify Functions convention — decode before sending, since res.send
+  // on a plain string would otherwise write the base64 text itself as the
+  // body instead of the actual bytes it represents.
+  if ((result as any).isBase64Encoded) {
+    res.send(Buffer.from(result.body ?? '', 'base64'))
+  } else {
+    res.send(result.body ?? '')
+  }
 }

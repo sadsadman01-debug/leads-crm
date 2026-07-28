@@ -34,6 +34,7 @@ import type { AppNotification, NotificationListResponse } from '@/types/notifica
 import type { OnboardingStatus } from '@/types/onboarding'
 import type { GlobalSearchResponse } from '@/types/search'
 import type { SupportContact } from '@/types/supportContact'
+import type { ExportLogEntry } from '@/types/dataExport'
 import { withOrgScope } from './orgScope'
 
 class ApiError extends Error {
@@ -418,6 +419,37 @@ export const supportContactsApi = {
   list: () => request<{ contacts: SupportContact[] }>('/support-contacts'),
 
   deleteAll: () => request<{ success: true }>('/support-contacts', { method: 'DELETE' }),
+}
+
+export const dataExportApi = {
+  /** `organizationId` lets the Super Admin export a specific Organization
+   * directly from Organizations Overview without "entering" it first — it's
+   * appended as an explicit query param rather than routed through the
+   * global org-scope mechanism, since that page has no active scope set. */
+  async downloadFull(organizationId?: string) {
+    const path = organizationId ? `/data-export?organizationId=${encodeURIComponent(organizationId)}` : '/data-export'
+    const res = await fetch(`/api${withOrgScope(path)}`, { headers: await authHeader() })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      throw new ApiError(res.status, body.error ?? 'Failed to generate export')
+    }
+
+    const disposition = res.headers.get('content-disposition') ?? ''
+    const match = disposition.match(/filename="([^"]+)"/)
+    const filename = match?.[1] ?? `CRM_Export_${new Date().toISOString().slice(0, 10)}.zip`
+
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  },
+
+  listLog: () => request<{ entries: ExportLogEntry[] }>('/data-export/log'),
 }
 
 export const onboardingApi = {

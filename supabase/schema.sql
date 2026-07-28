@@ -454,6 +454,19 @@ create index if not exists support_contacts_org_idx on public.support_contacts (
 create index if not exists support_contacts_source_ip_idx on public.support_contacts (source, request_ip, created_at);
 
 -- ----------------------------------------------------------------------------
+-- export_log: a simple audit trail of Full Data Export downloads — who
+-- triggered one and when, for the organization's own reference.
+-- ----------------------------------------------------------------------------
+create table if not exists public.export_log (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid references public.organizations(id) on delete cascade,
+  triggered_by uuid references public.profiles(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists export_log_org_idx on public.export_log (organization_id, created_at desc);
+
+-- ----------------------------------------------------------------------------
 -- templates: reusable outreach copy (subject/body) with {{placeholder}} tokens
 -- filled in client-side per lead. No email-sending infra — copy-to-clipboard only.
 -- ----------------------------------------------------------------------------
@@ -767,6 +780,16 @@ create policy "support_contacts super admin only"
   on public.support_contacts for all
   using (public.is_super_admin())
   with check (public.is_super_admin());
+
+-- export_log: an Admin sees only their own organization's exports; the
+-- Super Admin sees everything.
+alter table public.export_log enable row level security;
+create policy "export_log select scoped"
+  on public.export_log for select
+  using (
+    public.is_super_admin()
+    or (public.is_admin_or_above() and organization_id = public.current_org_id())
+  );
 
 alter table public.signup_requests enable row level security;
 create policy "signup_requests super admin only"

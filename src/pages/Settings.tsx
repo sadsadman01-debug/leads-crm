@@ -16,6 +16,7 @@ import { BrandingSettings } from '@/components/BrandingSettings'
 import { PlatformBrandingSettings } from '@/components/PlatformBrandingSettings'
 import { SupportContactSettings } from '@/components/SupportContactSettings'
 import { SecuritySettings } from '@/components/SecuritySettings'
+import { DataExportSettings } from '@/components/DataExportSettings'
 
 /** Wraps a settings section in a disabled fieldset unless the caller passes
  * (or is granted) write access — same "view only, greyed out" convention
@@ -78,6 +79,7 @@ export function Settings() {
             <BrandingSettings />
           </Section>
         )}
+        {!isUser && <DataExportSettings />}
         <Section canWrite={canManageStages}>
           <PipelineStagesSettings />
         </Section>
