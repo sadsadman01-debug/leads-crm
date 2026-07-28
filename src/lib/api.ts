@@ -33,6 +33,7 @@ import type { MfaResetRequest, MfaResetResult } from '@/types/mfaResetRequest'
 import type { AppNotification, NotificationListResponse } from '@/types/notification'
 import type { OnboardingStatus } from '@/types/onboarding'
 import type { GlobalSearchResponse } from '@/types/search'
+import type { SupportContact } from '@/types/supportContact'
 import { withOrgScope } from './orgScope'
 
 class ApiError extends Error {
@@ -396,10 +397,22 @@ export const platformBrandingApi = {
       body: JSON.stringify({ file_name: fileName }),
     }),
 
-  update: (payload: { logo_storage_path?: string | null; accent_color?: string | null; platform_name?: string | null }) =>
-    request<PlatformBranding>('/platform-branding', { method: 'PATCH', body: JSON.stringify(payload) }),
+  update: (payload: {
+    logo_storage_path?: string | null
+    accent_color?: string | null
+    platform_name?: string | null
+    support_whatsapp?: string | null
+    support_email?: string | null
+  }) => request<PlatformBranding>('/platform-branding', { method: 'PATCH', body: JSON.stringify(payload) }),
 
   reset: () => request<PlatformBranding>('/platform-branding/reset', { method: 'POST' }),
+}
+
+export const supportContactsApi = {
+  create: (payload: { channel: 'whatsapp' | 'email'; message_preview?: string | null }) =>
+    request<{ success: true }>('/support-contacts', { method: 'POST', body: JSON.stringify(payload) }),
+
+  list: () => request<{ contacts: SupportContact[] }>('/support-contacts'),
 }
 
 export const onboardingApi = {

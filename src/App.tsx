@@ -24,6 +24,7 @@ import { OrganizationsOverview } from '@/pages/Organizations/OrganizationsOvervi
 import { SignupRequestsPage } from '@/pages/SignupRequests/SignupRequestsPage'
 import { PasswordResetRequestsPage } from '@/pages/PasswordResetRequests/PasswordResetRequestsPage'
 import { MfaResetRequestsPage } from '@/pages/MfaResetRequests/MfaResetRequestsPage'
+import { SupportContactsPage } from '@/pages/SupportContacts/SupportContactsPage'
 import { NotificationsPage } from '@/pages/NotificationsPage'
 
 // Charting (recharts) is only needed here — code-split so it doesn't bloat every route.
@@ -55,6 +56,7 @@ export default function App() {
                 <Route path="/signup-requests" element={<SignupRequestsPage />} />
                 <Route path="/password-reset-requests" element={<PasswordResetRequestsPage />} />
                 <Route path="/mfa-reset-requests" element={<MfaResetRequestsPage />} />
+                <Route path="/support-contacts" element={<SupportContactsPage />} />
               </Route>
               <Route
                 path="/dashboard"

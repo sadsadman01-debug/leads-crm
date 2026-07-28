@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
+import { HelpWidget } from '@/components/HelpWidget'
 import { brandingApi, platformBrandingApi } from '@/lib/api'
 import { applyAccentColor } from '@/lib/brandColors'
 
@@ -35,6 +36,7 @@ export function AppLayout() {
           </div>
         </main>
       </div>
+      <HelpWidget />
     </div>
   )
 }

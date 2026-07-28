@@ -14,6 +14,7 @@ import { CustomFieldsSettings } from '@/components/CustomFieldsSettings'
 import { QuotaSettings } from '@/components/QuotaSettings'
 import { BrandingSettings } from '@/components/BrandingSettings'
 import { PlatformBrandingSettings } from '@/components/PlatformBrandingSettings'
+import { SupportContactSettings } from '@/components/SupportContactSettings'
 import { SecuritySettings } from '@/components/SecuritySettings'
 
 /** Wraps a settings section in a disabled fieldset unless the caller passes
@@ -65,6 +66,11 @@ export function Settings() {
         {isSuperAdmin && (
           <Section canWrite>
             <PlatformBrandingSettings />
+          </Section>
+        )}
+        {isSuperAdmin && (
+          <Section canWrite>
+            <SupportContactSettings />
           </Section>
         )}
         {showBranding && (

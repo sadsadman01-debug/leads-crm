@@ -17,6 +17,7 @@ import {
   UserPlus2,
   KeyRound,
   ShieldAlert,
+  LifeBuoy,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react'
@@ -220,6 +221,11 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           {isSuperAdmin && (
             <NavItem to="/mfa-reset-requests" icon={ShieldAlert} badge={pendingMfaResetCount}>
               MFA Reset Requests
+            </NavItem>
+          )}
+          {isSuperAdmin && (
+            <NavItem to="/support-contacts" icon={LifeBuoy}>
+              Support Contacts
             </NavItem>
           )}
           {navItems.map(({ to, label, icon: Icon }) => (

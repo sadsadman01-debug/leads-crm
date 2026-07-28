@@ -30,5 +30,7 @@ export interface PlatformBranding {
   logo_url: string | null
   accent_color: string | null
   platform_name: string | null
+  support_whatsapp: string | null
+  support_email: string | null
   palette: BrandPaletteColor[]
 }

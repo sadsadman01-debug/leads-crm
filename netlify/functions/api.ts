@@ -118,6 +118,7 @@ import {
 } from './routes/platformBranding.js'
 import { getOnboardingStatus, dismissOnboarding } from './routes/onboarding.js'
 import { globalSearch } from './routes/search.js'
+import { createSupportContact, listSupportContacts } from './routes/supportContacts.js'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -465,6 +466,11 @@ export const handler: Handler = async (event) => {
     } else if (resource === 'search') {
       const user = await requireUser(event)
       if (!id && method === 'GET') response = await globalSearch(event, user)
+      else throw new HttpError(404, 'Not found')
+    } else if (resource === 'support-contacts') {
+      const user = await requireUser(event)
+      if (!id && method === 'POST') response = await createSupportContact(event, user)
+      else if (!id && method === 'GET') response = await listSupportContacts(user)
       else throw new HttpError(404, 'Not found')
     } else if (resource === 'attachments') {
       const user = await requireUser(event)

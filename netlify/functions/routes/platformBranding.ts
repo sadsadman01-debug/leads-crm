@@ -12,7 +12,12 @@ type PlatformSettingsRow = {
   platform_logo_storage_path: string | null
   platform_accent_color: string | null
   platform_name: string | null
+  support_whatsapp: string | null
+  support_email: string | null
 }
+
+const SETTINGS_COLUMNS =
+  'id, platform_logo_storage_path, platform_accent_color, platform_name, support_whatsapp, support_email'
 
 function publicLogoUrl(storagePath: string | null): string | null {
   if (!storagePath) return null
@@ -26,7 +31,7 @@ async function getOrCreatePlatformSettingsRow(): Promise<PlatformSettingsRow> {
   const supabase = getSupabaseAdmin()
   const { data: existing, error } = await supabase
     .from('platform_settings')
-    .select('id, platform_logo_storage_path, platform_accent_color, platform_name')
+    .select(SETTINGS_COLUMNS)
     .limit(1)
     .maybeSingle()
   if (error) throw new HttpError(500, error.message)
@@ -35,17 +40,19 @@ async function getOrCreatePlatformSettingsRow(): Promise<PlatformSettingsRow> {
   const { data: created, error: createErr } = await supabase
     .from('platform_settings')
     .insert({})
-    .select('id, platform_logo_storage_path, platform_accent_color, platform_name')
+    .select(SETTINGS_COLUMNS)
     .single()
   if (createErr) throw new HttpError(500, createErr.message)
   return created
 }
 
-function brandingResponse(row: Pick<PlatformSettingsRow, 'platform_logo_storage_path' | 'platform_accent_color' | 'platform_name'>) {
+function brandingResponse(row: PlatformSettingsRow) {
   return {
     logo_url: publicLogoUrl(row.platform_logo_storage_path),
     accent_color: row.platform_accent_color,
     platform_name: row.platform_name,
+    support_whatsapp: row.support_whatsapp,
+    support_email: row.support_email,
     palette: CURATED_PALETTE,
   }
 }
@@ -101,6 +108,20 @@ export async function updatePlatformBranding(event: HandlerEvent, user: AuthedUs
     update.platform_name = body.platform_name === null ? null : body.platform_name.trim() || null
   }
 
+  if ('support_whatsapp' in body) {
+    if (body.support_whatsapp !== null && typeof body.support_whatsapp !== 'string') {
+      throw new HttpError(400, 'support_whatsapp must be a string or null')
+    }
+    update.support_whatsapp = body.support_whatsapp === null ? null : body.support_whatsapp.trim() || null
+  }
+
+  if ('support_email' in body) {
+    if (body.support_email !== null && typeof body.support_email !== 'string') {
+      throw new HttpError(400, 'support_email must be a string or null')
+    }
+    update.support_email = body.support_email === null ? null : body.support_email.trim() || null
+  }
+
   if (Object.keys(update).length === 0) throw new HttpError(400, 'Nothing to update')
 
   const row = await getOrCreatePlatformSettingsRow()
@@ -116,7 +137,7 @@ export async function updatePlatformBranding(event: HandlerEvent, user: AuthedUs
     .from('platform_settings')
     .update(update)
     .eq('id', row.id)
-    .select('platform_logo_storage_path, platform_accent_color, platform_name')
+    .select(SETTINGS_COLUMNS)
     .single()
   if (error) throw new HttpError(500, error.message)
 
@@ -143,5 +164,14 @@ export async function resetPlatformBranding(event: HandlerEvent, user: AuthedUse
     .eq('id', row.id)
   if (error) throw new HttpError(500, error.message)
 
-  return json(200, brandingResponse({ platform_logo_storage_path: null, platform_accent_color: null, platform_name: null }))
+  // Support Contact fields are a separate concern — untouched by this reset.
+  return json(
+    200,
+    brandingResponse({
+      ...row,
+      platform_logo_storage_path: null,
+      platform_accent_color: null,
+      platform_name: null,
+    })
+  )
 }

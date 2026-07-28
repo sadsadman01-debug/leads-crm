@@ -423,8 +423,28 @@ create table if not exists public.platform_settings (
   platform_logo_storage_path text,
   platform_accent_color text,
   platform_name text,
+  -- In-App Help/Support Widget: the Super Admin's own contact info.
+  support_whatsapp text,
+  support_email text,
   created_at timestamptz not null default now()
 );
+
+-- ----------------------------------------------------------------------------
+-- support_contacts: a lightweight log of Help-widget clicks (Admin/User
+-- reaching out via WhatsApp/email), for the Super Admin's own visibility only
+-- — not a ticketing/reply system, the conversation happens outside the app.
+-- ----------------------------------------------------------------------------
+create table if not exists public.support_contacts (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid references public.organizations(id) on delete cascade,
+  profile_id uuid references public.profiles(id) on delete set null,
+  channel text not null check (channel in ('whatsapp', 'email')),
+  message_preview text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists support_contacts_created_at_idx on public.support_contacts (created_at desc);
+create index if not exists support_contacts_org_idx on public.support_contacts (organization_id);
 
 -- ----------------------------------------------------------------------------
 -- templates: reusable outreach copy (subject/body) with {{placeholder}} tokens
@@ -732,6 +752,12 @@ create policy "organizations super admin only"
 alter table public.platform_settings enable row level security;
 create policy "platform_settings super admin only"
   on public.platform_settings for all
+  using (public.is_super_admin())
+  with check (public.is_super_admin());
+
+alter table public.support_contacts enable row level security;
+create policy "support_contacts super admin only"
+  on public.support_contacts for all
   using (public.is_super_admin())
   with check (public.is_super_admin());
 
