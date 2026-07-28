@@ -12,12 +12,10 @@ type PlatformSettingsRow = {
   platform_logo_storage_path: string | null
   platform_accent_color: string | null
   platform_name: string | null
-  support_whatsapp: string | null
   support_email: string | null
 }
 
-const SETTINGS_COLUMNS =
-  'id, platform_logo_storage_path, platform_accent_color, platform_name, support_whatsapp, support_email'
+const SETTINGS_COLUMNS = 'id, platform_logo_storage_path, platform_accent_color, platform_name, support_email'
 
 function publicLogoUrl(storagePath: string | null): string | null {
   if (!storagePath) return null
@@ -51,7 +49,6 @@ function brandingResponse(row: PlatformSettingsRow) {
     logo_url: publicLogoUrl(row.platform_logo_storage_path),
     accent_color: row.platform_accent_color,
     platform_name: row.platform_name,
-    support_whatsapp: row.support_whatsapp,
     support_email: row.support_email,
     palette: CURATED_PALETTE,
   }
@@ -106,13 +103,6 @@ export async function updatePlatformBranding(event: HandlerEvent, user: AuthedUs
       throw new HttpError(400, 'platform_name must be a string or null')
     }
     update.platform_name = body.platform_name === null ? null : body.platform_name.trim() || null
-  }
-
-  if ('support_whatsapp' in body) {
-    if (body.support_whatsapp !== null && typeof body.support_whatsapp !== 'string') {
-      throw new HttpError(400, 'support_whatsapp must be a string or null')
-    }
-    update.support_whatsapp = body.support_whatsapp === null ? null : body.support_whatsapp.trim() || null
   }
 
   if ('support_email' in body) {

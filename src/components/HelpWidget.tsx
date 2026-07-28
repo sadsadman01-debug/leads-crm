@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { LifeBuoy, X, MessageCircle, Mail } from 'lucide-react'
+import { LifeBuoy, X, Mail } from 'lucide-react'
 import { platformBrandingApi, supportContactsApi } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 
 /** Floating Help button — Admin/User only (the Super Admin IS the support
- * contact, so it'd make no sense to show it to them). Hidden entirely until
- * the Super Admin has configured at least one contact channel. */
+ * contact, so it'd make no sense to show it to them). Hidden entirely if the
+ * Super Admin has cleared their support email. */
 export function HelpWidget() {
   const { profile } = useAuth()
   const containerRef = useRef<HTMLDivElement>(null)
@@ -16,8 +16,7 @@ export function HelpWidget() {
   const { data } = useQuery({ queryKey: ['platform-branding'], queryFn: platformBrandingApi.get })
 
   const logMutation = useMutation({
-    mutationFn: (payload: { channel: 'whatsapp' | 'email'; message_preview?: string | null }) =>
-      supportContactsApi.create(payload),
+    mutationFn: (payload: { message_preview?: string | null }) => supportContactsApi.create(payload),
   })
 
   useEffect(() => {
@@ -37,31 +36,18 @@ export function HelpWidget() {
   }, [open])
 
   if (!profile || profile.role === 'super_admin') return null
-  if (!data || (!data.support_whatsapp && !data.support_email)) return null
+  if (!data || !data.support_email) return null
 
   const orgLabel = profile.organization_name || 'their organization'
   const roleLabel = profile.role === 'admin' ? 'Admin' : 'User'
   const contextLine = `${profile.nickname || 'A team member'} (${roleLabel}) — ${orgLabel}`
 
-  function buildMessage() {
-    const base = message.trim() || 'Hi, I need help with Leads CRM.'
-    return `${base}\n\n${contextLine}`
-  }
-
-  function handleWhatsApp() {
-    const digits = data!.support_whatsapp!.replace(/[^\d]/g, '')
-    const text = encodeURIComponent(buildMessage())
-    window.open(`https://wa.me/${digits}?text=${text}`, '_blank', 'noopener,noreferrer')
-    logMutation.mutate({ channel: 'whatsapp', message_preview: message.trim() || null })
-    setOpen(false)
-    setMessage('')
-  }
-
-  function handleEmail() {
+  function handleSendEmail() {
+    const base = message.trim() || 'I need help with Leads CRM.'
     const subject = encodeURIComponent(`Support Request from ${orgLabel}`)
-    const body = encodeURIComponent(buildMessage())
+    const body = encodeURIComponent(`${base}\n\n${contextLine}`)
     window.location.href = `mailto:${data!.support_email}?subject=${subject}&body=${body}`
-    logMutation.mutate({ channel: 'email', message_preview: message.trim() || null })
+    logMutation.mutate({ message_preview: message.trim() || null })
     setOpen(false)
     setMessage('')
   }
@@ -85,20 +71,10 @@ export function HelpWidget() {
             className="input mb-3 resize-none text-sm"
           />
 
-          <div className="space-y-2">
-            {data.support_whatsapp && (
-              <button className="btn-secondary w-full justify-center" onClick={handleWhatsApp}>
-                <MessageCircle size={15} />
-                Chat on WhatsApp
-              </button>
-            )}
-            {data.support_email && (
-              <button className="btn-secondary w-full justify-center" onClick={handleEmail}>
-                <Mail size={15} />
-                Send an Email
-              </button>
-            )}
-          </div>
+          <button className="btn-secondary w-full justify-center" onClick={handleSendEmail}>
+            <Mail size={15} />
+            Send Email
+          </button>
         </div>
       )}
 

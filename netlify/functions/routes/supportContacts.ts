@@ -5,19 +5,14 @@ import { requireSuperAdmin } from '../lib/permissions.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const MAX_PREVIEW_LENGTH = 500
-const COLUMNS = 'id, organization_id, profile_id, channel, message_preview, created_at'
+const COLUMNS = 'id, organization_id, profile_id, message_preview, created_at'
 
-/** Logs a Help-widget click — organization/profile are derived from the
- * caller's own session, never trusted from the request body. Any
+/** Logs a Help-widget "Send Email" click — organization/profile are derived
+ * from the caller's own session, never trusted from the request body. Any
  * authenticated Admin/User (or Super Admin, harmlessly) can log their own
  * click; only the Super Admin can ever read this table back (see RLS). */
 export async function createSupportContact(event: HandlerEvent, user: AuthedUser) {
   const body = JSON.parse(event.body || '{}')
-  const channel = body.channel
-  if (channel !== 'whatsapp' && channel !== 'email') {
-    throw new HttpError(400, "channel must be 'whatsapp' or 'email'")
-  }
-
   const messagePreview =
     typeof body.message_preview === 'string' ? body.message_preview.trim().slice(0, MAX_PREVIEW_LENGTH) || null : null
 
@@ -25,7 +20,6 @@ export async function createSupportContact(event: HandlerEvent, user: AuthedUser
   const { error } = await supabase.from('support_contacts').insert({
     organization_id: user.organization_id,
     profile_id: user.id,
-    channel,
     message_preview: messagePreview,
   })
   if (error) throw new HttpError(500, error.message)

@@ -423,22 +423,21 @@ create table if not exists public.platform_settings (
   platform_logo_storage_path text,
   platform_accent_color text,
   platform_name text,
-  -- In-App Help/Support Widget: the Super Admin's own contact info.
-  support_whatsapp text,
-  support_email text,
+  -- In-App Help/Support Widget: the Super Admin's own contact email —
+  -- defaults so the widget works out of the box without extra setup.
+  support_email text default 'navigantindex@gmail.com',
   created_at timestamptz not null default now()
 );
 
 -- ----------------------------------------------------------------------------
 -- support_contacts: a lightweight log of Help-widget clicks (Admin/User
--- reaching out via WhatsApp/email), for the Super Admin's own visibility only
--- — not a ticketing/reply system, the conversation happens outside the app.
+-- emailing the Super Admin), for the Super Admin's own visibility only —
+-- not a ticketing/reply system, the conversation happens outside the app.
 -- ----------------------------------------------------------------------------
 create table if not exists public.support_contacts (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid references public.organizations(id) on delete cascade,
   profile_id uuid references public.profiles(id) on delete set null,
-  channel text not null check (channel in ('whatsapp', 'email')),
   message_preview text,
   created_at timestamptz not null default now()
 );

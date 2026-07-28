@@ -401,7 +401,6 @@ export const platformBrandingApi = {
     logo_storage_path?: string | null
     accent_color?: string | null
     platform_name?: string | null
-    support_whatsapp?: string | null
     support_email?: string | null
   }) => request<PlatformBranding>('/platform-branding', { method: 'PATCH', body: JSON.stringify(payload) }),
 
@@ -409,7 +408,7 @@ export const platformBrandingApi = {
 }
 
 export const supportContactsApi = {
-  create: (payload: { channel: 'whatsapp' | 'email'; message_preview?: string | null }) =>
+  create: (payload: { message_preview?: string | null }) =>
     request<{ success: true }>('/support-contacts', { method: 'POST', body: JSON.stringify(payload) }),
 
   list: () => request<{ contacts: SupportContact[] }>('/support-contacts'),
