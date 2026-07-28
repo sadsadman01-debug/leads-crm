@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { LifeBuoy } from 'lucide-react'
 import { supportContactsApi } from '@/lib/api'
+import { Badge } from '@/components/ui/Badge'
 
 export function SupportContactsPage() {
   const { data, isLoading } = useQuery({ queryKey: ['support-contacts'], queryFn: supportContactsApi.list })
@@ -39,8 +40,14 @@ export function SupportContactsPage() {
                 <tr key={c.id} className="border-b border-base-800 align-top">
                   <td className="py-3 pr-3 text-base-300">{c.organization_name || '—'}</td>
                   <td className="px-3 py-3">
-                    <div className="font-medium text-base-100">{c.requester_nickname || c.requester_email || '—'}</div>
-                    {c.requester_email && <div className="text-xs text-base-400">{c.requester_email}</div>}
+                    {c.source === 'pre_auth' ? (
+                      <Badge tone="warn">Pre-login</Badge>
+                    ) : (
+                      <>
+                        <div className="font-medium text-base-100">{c.requester_nickname || c.requester_email || '—'}</div>
+                        {c.requester_email && <div className="text-xs text-base-400">{c.requester_email}</div>}
+                      </>
+                    )}
                   </td>
                   <td className="max-w-[360px] px-3 py-3 text-base-300">
                     <span className="line-clamp-2">{c.message_preview || <span className="text-base-500">—</span>}</span>

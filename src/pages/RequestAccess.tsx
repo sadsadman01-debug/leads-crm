@@ -4,6 +4,7 @@ import { useMutation } from '@tanstack/react-query'
 import { Building2, ArrowLeft, AlertCircle, Loader2, CheckCircle2 } from 'lucide-react'
 import { signupRequestsApi } from '@/lib/api'
 import { usePlatformBranding } from '@/hooks/usePlatformBranding'
+import { PreAuthHelpWidget } from '@/components/PreAuthHelpWidget'
 
 export function RequestAccess() {
   usePlatformBranding()
@@ -161,6 +162,12 @@ export function RequestAccess() {
           </>
         )}
       </div>
+      <PreAuthHelpWidget
+        contextLines={[
+          { label: 'Organization', value: organizationName },
+          { label: 'Email', value: email },
+        ]}
+      />
     </div>
   )
 }

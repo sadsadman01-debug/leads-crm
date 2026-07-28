@@ -5,7 +5,23 @@ import { requireSuperAdmin } from '../lib/permissions.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const MAX_PREVIEW_LENGTH = 500
-const COLUMNS = 'id, organization_id, profile_id, message_preview, created_at'
+const COLUMNS = 'id, organization_id, profile_id, message_preview, created_at, source'
+
+// Unauthenticated endpoint throttle — at most this many pre-auth log rows
+// from the same IP within the window. The actual mailto: link still opens
+// client-side regardless; this only limits how much gets logged.
+const PRE_AUTH_RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000
+const PRE_AUTH_RATE_LIMIT_MAX = 5
+
+function clampPreview(value: unknown): string | null {
+  return typeof value === 'string' ? value.trim().slice(0, MAX_PREVIEW_LENGTH) || null : null
+}
+
+function getClientIp(event: HandlerEvent): string | null {
+  const forwarded = event.headers['x-forwarded-for'] || event.headers['X-Forwarded-For']
+  if (forwarded) return forwarded.split(',')[0].trim()
+  return event.headers['x-nf-client-connection-ip'] || event.headers['client-ip'] || null
+}
 
 /** Logs a Help-widget "Send Email" click — organization/profile are derived
  * from the caller's own session, never trusted from the request body. Any
@@ -13,14 +29,50 @@ const COLUMNS = 'id, organization_id, profile_id, message_preview, created_at'
  * click; only the Super Admin can ever read this table back (see RLS). */
 export async function createSupportContact(event: HandlerEvent, user: AuthedUser) {
   const body = JSON.parse(event.body || '{}')
-  const messagePreview =
-    typeof body.message_preview === 'string' ? body.message_preview.trim().slice(0, MAX_PREVIEW_LENGTH) || null : null
+  const messagePreview = clampPreview(body.message_preview)
 
   const supabase = getSupabaseAdmin()
   const { error } = await supabase.from('support_contacts').insert({
     organization_id: user.organization_id,
     profile_id: user.id,
     message_preview: messagePreview,
+    source: 'in_app',
+  })
+  if (error) throw new HttpError(500, error.message)
+
+  return json(201, { success: true })
+}
+
+/** Public — reachable from Login/Request Access/Forgot Password before any
+ * session exists. No org/profile identity to attach, so both are null; a
+ * lightweight per-IP throttle keeps this from being spammed since it's
+ * unauthenticated. Always returns success even when throttled — the widget's
+ * mailto: link opens client-side regardless of whether this log write lands. */
+export async function createPublicSupportContact(event: HandlerEvent) {
+  const body = JSON.parse(event.body || '{}')
+  const messagePreview = clampPreview(body.message_preview)
+  const ip = getClientIp(event)
+  const supabase = getSupabaseAdmin()
+
+  if (ip) {
+    const since = new Date(Date.now() - PRE_AUTH_RATE_LIMIT_WINDOW_MS).toISOString()
+    const { count } = await supabase
+      .from('support_contacts')
+      .select('id', { count: 'exact', head: true })
+      .eq('source', 'pre_auth')
+      .eq('request_ip', ip)
+      .gte('created_at', since)
+    if ((count ?? 0) >= PRE_AUTH_RATE_LIMIT_MAX) {
+      return json(200, { success: true })
+    }
+  }
+
+  const { error } = await supabase.from('support_contacts').insert({
+    organization_id: null,
+    profile_id: null,
+    message_preview: messagePreview,
+    source: 'pre_auth',
+    request_ip: ip,
   })
   if (error) throw new HttpError(500, error.message)
 

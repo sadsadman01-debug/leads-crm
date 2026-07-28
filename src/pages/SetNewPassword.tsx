@@ -4,6 +4,7 @@ import { KeyRound, AlertCircle, Eye, EyeOff, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { teamApi } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
+import { HelpWidget } from '@/components/HelpWidget'
 
 export function SetNewPassword() {
   const { refreshProfile } = useAuth()
@@ -137,6 +138,7 @@ export function SetNewPassword() {
           </button>
         </form>
       </div>
+      <HelpWidget />
     </div>
   )
 }

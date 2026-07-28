@@ -3,6 +3,7 @@ import { Navigate, useLocation, Link } from 'react-router-dom'
 import { Target, AlertCircle, Eye, EyeOff, Loader2 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePlatformBranding } from '@/hooks/usePlatformBranding'
+import { PreAuthHelpWidget } from '@/components/PreAuthHelpWidget'
 
 export function Login() {
   const { session, mfaPending, signIn } = useAuth()
@@ -140,6 +141,7 @@ export function Login() {
           </Link>
         </p>
       </div>
+      <PreAuthHelpWidget />
     </div>
   )
 }

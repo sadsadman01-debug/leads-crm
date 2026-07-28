@@ -4,6 +4,7 @@ import { useMutation } from '@tanstack/react-query'
 import { KeyRound, ArrowLeft, AlertCircle, Loader2, MailCheck } from 'lucide-react'
 import { passwordResetRequestsApi } from '@/lib/api'
 import { usePlatformBranding } from '@/hooks/usePlatformBranding'
+import { PreAuthHelpWidget } from '@/components/PreAuthHelpWidget'
 
 export function ForgotPassword() {
   usePlatformBranding()
@@ -104,6 +105,7 @@ export function ForgotPassword() {
           </>
         )}
       </div>
+      <PreAuthHelpWidget />
     </div>
   )
 }

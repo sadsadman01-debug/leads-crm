@@ -439,11 +439,16 @@ create table if not exists public.support_contacts (
   organization_id uuid references public.organizations(id) on delete cascade,
   profile_id uuid references public.profiles(id) on delete set null,
   message_preview text,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  -- 'pre_auth' rows (no session) have null organization_id/profile_id and
+  -- carry request_ip solely for server-side rate-limiting of that public endpoint.
+  source text not null default 'in_app' check (source in ('in_app', 'pre_auth')),
+  request_ip text
 );
 
 create index if not exists support_contacts_created_at_idx on public.support_contacts (created_at desc);
 create index if not exists support_contacts_org_idx on public.support_contacts (organization_id);
+create index if not exists support_contacts_source_ip_idx on public.support_contacts (source, request_ip, created_at);
 
 -- ----------------------------------------------------------------------------
 -- templates: reusable outreach copy (subject/body) with {{placeholder}} tokens
