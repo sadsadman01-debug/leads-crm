@@ -26,6 +26,9 @@ import { PasswordResetRequestsPage } from '@/pages/PasswordResetRequests/Passwor
 import { MfaResetRequestsPage } from '@/pages/MfaResetRequests/MfaResetRequestsPage'
 import { SupportContactsPage } from '@/pages/SupportContacts/SupportContactsPage'
 import { NotificationsPage } from '@/pages/NotificationsPage'
+import { OfflineBanner } from '@/components/OfflineBanner'
+import { PwaUpdatePrompt } from '@/components/PwaUpdatePrompt'
+import { InstallAppBanner } from '@/components/InstallAppBanner'
 
 // Charting (recharts) is only needed here — code-split so it doesn't bloat every route.
 const Dashboard = lazy(() => import('@/pages/Dashboard').then((m) => ({ default: m.Dashboard })))
@@ -38,65 +41,70 @@ function PageFallback() {
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route path="/request-access" element={<RequestAccess />} />
-      <Route path="/forgot-password" element={<ForgotPassword />} />
-      <Route path="/mfa-locked-out" element={<MfaLockedOut />} />
+    <>
+      <OfflineBanner />
+      <PwaUpdatePrompt />
+      <InstallAppBanner />
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/request-access" element={<RequestAccess />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/mfa-locked-out" element={<MfaLockedOut />} />
 
-      <Route element={<ProtectedRoute />}>
-        <Route path="/set-new-password" element={<SetNewPassword />} />
-        <Route path="/mfa-challenge" element={<MfaChallenge />} />
-        <Route element={<RequireMfaVerified />}>
-          <Route element={<RequirePasswordSet />}>
-            <Route element={<AppLayout />}>
-              <Route path="/" element={<DefaultLanding />} />
-              <Route element={<RequireSuperAdmin />}>
-                <Route path="/organizations" element={<OrganizationsOverview />} />
-                <Route path="/signup-requests" element={<SignupRequestsPage />} />
-                <Route path="/password-reset-requests" element={<PasswordResetRequestsPage />} />
-                <Route path="/mfa-reset-requests" element={<MfaResetRequestsPage />} />
-                <Route path="/support-contacts" element={<SupportContactsPage />} />
-              </Route>
-              <Route
-                path="/dashboard"
-                element={
-                  <Suspense fallback={<PageFallback />}>
-                    <Dashboard />
-                  </Suspense>
-                }
-              />
-              <Route path="/leads" element={<LeadsList />} />
-              <Route path="/leads/new" element={<LeadForm />} />
-              <Route path="/leads/:id" element={<LeadDetail />} />
-              <Route path="/leads/:id/edit" element={<LeadForm />} />
-              <Route
-                path="/deals"
-                element={
-                  <Suspense fallback={<PageFallback />}>
-                    <DealsList />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="/reports"
-                element={
-                  <Suspense fallback={<PageFallback />}>
-                    <ReportsPage />
-                  </Suspense>
-                }
-              />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="/notifications" element={<NotificationsPage />} />
-              <Route element={<RequireAdmin />}>
-                <Route path="/team" element={<TeamList />} />
+        <Route element={<ProtectedRoute />}>
+          <Route path="/set-new-password" element={<SetNewPassword />} />
+          <Route path="/mfa-challenge" element={<MfaChallenge />} />
+          <Route element={<RequireMfaVerified />}>
+            <Route element={<RequirePasswordSet />}>
+              <Route element={<AppLayout />}>
+                <Route path="/" element={<DefaultLanding />} />
+                <Route element={<RequireSuperAdmin />}>
+                  <Route path="/organizations" element={<OrganizationsOverview />} />
+                  <Route path="/signup-requests" element={<SignupRequestsPage />} />
+                  <Route path="/password-reset-requests" element={<PasswordResetRequestsPage />} />
+                  <Route path="/mfa-reset-requests" element={<MfaResetRequestsPage />} />
+                  <Route path="/support-contacts" element={<SupportContactsPage />} />
+                </Route>
+                <Route
+                  path="/dashboard"
+                  element={
+                    <Suspense fallback={<PageFallback />}>
+                      <Dashboard />
+                    </Suspense>
+                  }
+                />
+                <Route path="/leads" element={<LeadsList />} />
+                <Route path="/leads/new" element={<LeadForm />} />
+                <Route path="/leads/:id" element={<LeadDetail />} />
+                <Route path="/leads/:id/edit" element={<LeadForm />} />
+                <Route
+                  path="/deals"
+                  element={
+                    <Suspense fallback={<PageFallback />}>
+                      <DealsList />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="/reports"
+                  element={
+                    <Suspense fallback={<PageFallback />}>
+                      <ReportsPage />
+                    </Suspense>
+                  }
+                />
+                <Route path="/settings" element={<Settings />} />
+                <Route path="/notifications" element={<NotificationsPage />} />
+                <Route element={<RequireAdmin />}>
+                  <Route path="/team" element={<TeamList />} />
+                </Route>
               </Route>
             </Route>
           </Route>
         </Route>
-      </Route>
 
-      <Route path="*" element={<Navigate to="/leads" replace />} />
-    </Routes>
+        <Route path="*" element={<Navigate to="/leads" replace />} />
+      </Routes>
+    </>
   )
 }
