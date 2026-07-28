@@ -3,6 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { LifeBuoy, X, Mail } from 'lucide-react'
 import { platformBrandingApi, supportContactsApi } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
+import { openMailto } from '@/lib/mailto'
 
 /** Floating Help button — Admin/User only (the Super Admin IS the support
  * contact, so it'd make no sense to show it to them). Hidden entirely if the
@@ -44,9 +45,7 @@ export function HelpWidget() {
 
   function handleSendEmail() {
     const base = message.trim() || 'I need help with Leads CRM.'
-    const subject = encodeURIComponent(`Support Request from ${orgLabel}`)
-    const body = encodeURIComponent(`${base}\n\n${contextLine}`)
-    window.location.href = `mailto:${data!.support_email}?subject=${subject}&body=${body}`
+    openMailto(data!.support_email!, `Support Request from ${orgLabel}`, `${base}\n\n${contextLine}`)
     logMutation.mutate({ message_preview: message.trim() || null })
     setOpen(false)
     setMessage('')

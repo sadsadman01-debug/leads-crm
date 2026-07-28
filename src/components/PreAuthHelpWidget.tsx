@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { LifeBuoy, X, Mail } from 'lucide-react'
 import { platformBrandingApi, supportContactsApi } from '@/lib/api'
+import { openMailto } from '@/lib/mailto'
 
 /** Same floating Help button as the authenticated `HelpWidget`, for the
  * pre-login screens (Login, Request Access, Forgot Password) — no session,
@@ -50,8 +51,7 @@ export function PreAuthHelpWidget({
       .join('\n')
     const body = extra ? `${base}\n\n${extra}` : base
 
-    const subject = encodeURIComponent('Support Request from Login Page')
-    window.location.href = `mailto:${data!.support_email}?subject=${subject}&body=${encodeURIComponent(body)}`
+    openMailto(data!.support_email!, 'Support Request from Login Page', body)
     logMutation.mutate({ message_preview: message.trim() || null })
     setOpen(false)
     setMessage('')
