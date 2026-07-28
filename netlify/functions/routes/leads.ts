@@ -18,6 +18,7 @@ import {
 } from '../lib/permissions.js'
 import { loadActiveDefinitions, requireRequiredFieldsFilled, mergeCustomFieldValues } from '../lib/customFieldValues.js'
 import { notifyAssignment } from '../lib/notifications.js'
+import { logAuditEvent } from '../lib/auditLog.js'
 
 export const LEAD_SELECT = `
   id, company_name, contact_name, address, phone, email, website, notes, lead_source, priority,
@@ -658,6 +659,10 @@ export async function bulkAction(event: HandlerEvent, user: AuthedUser) {
     const ids = await restrictIdsToPermitted(requireIds(body), user, orgId, { forDelete: true })
     const { error } = await supabase.from('leads').delete().in('id', ids)
     if (error) throw new HttpError(500, error.message)
+    await logAuditEvent('bulk_leads_deleted', user, event, {
+      organizationId: orgId,
+      metadata: { count: ids.length },
+    })
     return json(200, { success: true, deleted: ids.length })
   }
 

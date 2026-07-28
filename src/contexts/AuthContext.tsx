@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
-import { teamApi } from '@/lib/api'
+import { teamApi, auditEventsApi } from '@/lib/api'
 import { DEFAULT_USER_PERMISSIONS, type Role, type UserPermissions } from '@/types/team'
 
 export interface CurrentProfile {
@@ -78,10 +78,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signIn(email: string, password: string) {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
+    auditEventsApi.logAuthEvent(error ? 'login_failure' : 'login_success', email).catch(() => {})
     return { error: error?.message ?? null }
   }
 
   async function signOut() {
+    // Logged before signing out — once the session is gone there's no
+    // bearer token left to authenticate this call with.
+    await auditEventsApi.logSecurityEvent('logout').catch(() => {})
     await supabase.auth.signOut()
   }
 

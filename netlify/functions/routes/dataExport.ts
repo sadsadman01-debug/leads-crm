@@ -5,6 +5,7 @@ import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
 import { requireAdminOrAbove, resolveOrganizationId, scopeToOrg } from '../lib/permissions.js'
 import { loadActiveDefinitions } from '../lib/customFieldValues.js'
+import { logAuditEvent } from '../lib/auditLog.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const CHUNK_SIZE = 1000
@@ -292,6 +293,10 @@ export async function generateFullExport(event: HandlerEvent, user: AuthedUser) 
   const zipBuffer = await buildExportZip(orgId, organizationName)
 
   await supabase.from('export_log').insert({ organization_id: orgId, triggered_by: user.id })
+  await logAuditEvent('data_export_triggered', user, event, {
+    organizationId: orgId,
+    metadata: { organization_name: organizationName },
+  })
 
   const dateStr = new Date().toISOString().slice(0, 10)
   const filename = `${safeFilenamePart(organizationName)}_CRM_Export_${dateStr}.zip`

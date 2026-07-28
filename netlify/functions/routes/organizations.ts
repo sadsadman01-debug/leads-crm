@@ -2,6 +2,7 @@ import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
 import { requireSuperAdmin } from '../lib/permissions.js'
+import { logAuditEvent } from '../lib/auditLog.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const BAN_DURATION = '876000h'
@@ -118,6 +119,17 @@ export async function createOrganizationWithAdmin(event: HandlerEvent, user: Aut
     throw new HttpError(500, profileErr.message)
   }
 
+  await logAuditEvent('organization_created', user, event, {
+    organizationId: org.id,
+    targetProfileId: created.user.id,
+    metadata: { name: organizationName, admin_email: email, admin_nickname: nickname },
+  })
+  await logAuditEvent('admin_account_created', user, event, {
+    organizationId: org.id,
+    targetProfileId: created.user.id,
+    metadata: { email, nickname },
+  })
+
   return json(201, { organization: org, admin: { id: created.user.id, email, nickname } })
 }
 
@@ -157,6 +169,11 @@ export async function updateOrganizationStatus(id: string, event: HandlerEvent, 
     })
   )
 
+  await logAuditEvent(isActive ? 'organization_reactivated' : 'organization_suspended', user, event, {
+    organizationId: id,
+    metadata: { name: data.name },
+  })
+
   return json(200, data)
 }
 
@@ -179,6 +196,11 @@ export async function deleteOrganization(id: string, event: HandlerEvent, user: 
 
   const { data: members, error: membersErr } = await supabase.from('profiles').select('id').eq('organization_id', id)
   if (membersErr) throw new HttpError(500, membersErr.message)
+
+  await logAuditEvent('organization_deleted', user, event, {
+    organizationId: id,
+    metadata: { name: org.name },
+  })
 
   for (const m of members ?? []) {
     await supabase.auth.admin.deleteUser(m.id)

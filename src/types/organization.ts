@@ -31,5 +31,6 @@ export interface PlatformBranding {
   accent_color: string | null
   platform_name: string | null
   support_email: string | null
+  audit_log_retention_days: number | null
   palette: BrandPaletteColor[]
 }

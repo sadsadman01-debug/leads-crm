@@ -19,6 +19,7 @@ export function PlatformBrandingSettings() {
   const [platformName, setPlatformName] = useState('')
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
   const [pendingLogoPath, setPendingLogoPath] = useState<string | null | undefined>(undefined)
+  const [retentionDays, setRetentionDays] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -29,19 +30,22 @@ export function PlatformBrandingSettings() {
     setPlatformName(data.platform_name ?? '')
     setLogoUrl(data.logo_url)
     setPendingLogoPath(undefined)
+    setRetentionDays(data.audit_log_retention_days)
   }, [data])
 
   const dirty =
     Boolean(data) &&
     (accentColor !== data!.accent_color ||
       platformName.trim() !== (data!.platform_name ?? '') ||
-      pendingLogoPath !== undefined)
+      pendingLogoPath !== undefined ||
+      retentionDays !== data!.audit_log_retention_days)
 
   const saveMutation = useMutation({
     mutationFn: () =>
       platformBrandingApi.update({
         accent_color: accentColor,
         platform_name: platformName.trim() || null,
+        audit_log_retention_days: retentionDays,
         ...(pendingLogoPath !== undefined ? { logo_storage_path: pendingLogoPath } : {}),
       }),
     onSuccess: () => {
@@ -180,6 +184,23 @@ export function PlatformBrandingSettings() {
               placeholder="Optional — e.g. Navigant CRM (default: Leads CRM)"
               maxLength={80}
             />
+          </div>
+
+          <div className="border-t border-base-700/60 pt-4">
+            <label className="label">Audit Log Retention</label>
+            <select
+              className="input w-auto"
+              value={retentionDays === null ? 'forever' : String(retentionDays)}
+              onChange={(e) => setRetentionDays(e.target.value === 'forever' ? null : Number(e.target.value))}
+            >
+              <option value="forever">Forever (default)</option>
+              <option value="90">90 days</option>
+              <option value="365">1 year</option>
+            </select>
+            <p className="mt-1.5 text-xs text-base-500">
+              How long entries in the Audit Log are kept. There is no automatic cleanup yet — this setting is
+              recorded for future enforcement.
+            </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 border-t border-base-700/60 pt-4">

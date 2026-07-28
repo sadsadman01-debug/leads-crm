@@ -35,6 +35,7 @@ import type { OnboardingStatus } from '@/types/onboarding'
 import type { GlobalSearchResponse } from '@/types/search'
 import type { SupportContact } from '@/types/supportContact'
 import type { ExportLogEntry } from '@/types/dataExport'
+import type { AuditEventType, AuditLogFilters, AuditLogListResponse } from '@/types/auditLog'
 import { withOrgScope } from './orgScope'
 
 class ApiError extends Error {
@@ -403,6 +404,7 @@ export const platformBrandingApi = {
     accent_color?: string | null
     platform_name?: string | null
     support_email?: string | null
+    audit_log_retention_days?: number | null
   }) => request<PlatformBranding>('/platform-branding', { method: 'PATCH', body: JSON.stringify(payload) }),
 
   reset: () => request<PlatformBranding>('/platform-branding/reset', { method: 'POST' }),
@@ -450,6 +452,55 @@ export const dataExportApi = {
   },
 
   listLog: () => request<{ entries: ExportLogEntry[] }>('/data-export/log'),
+}
+
+function buildAuditLogQuery(filters: AuditLogFilters, extra: Record<string, string | number> = {}): URLSearchParams {
+  const qs = new URLSearchParams()
+  if (filters.eventTypes && filters.eventTypes.length > 0) qs.set('eventTypes', filters.eventTypes.join(','))
+  if (filters.organizationId) qs.set('organizationId', filters.organizationId)
+  if (filters.actorProfileId) qs.set('actorProfileId', filters.actorProfileId)
+  if (filters.dateFrom) qs.set('dateFrom', filters.dateFrom)
+  if (filters.dateTo) qs.set('dateTo', filters.dateTo)
+  if (filters.search) qs.set('search', filters.search)
+  for (const [key, value] of Object.entries(extra)) qs.set(key, String(value))
+  return qs
+}
+
+export const auditLogApi = {
+  list: (filters: AuditLogFilters, page: number, pageSize: number) =>
+    request<AuditLogListResponse>(`/audit-log?${buildAuditLogQuery(filters, { page, pageSize }).toString()}`),
+
+  async downloadCsv(filters: AuditLogFilters) {
+    const res = await fetch(`/api${withOrgScope(`/audit-log/export?${buildAuditLogQuery(filters).toString()}`)}`, {
+      headers: await authHeader(),
+    })
+    if (!res.ok) throw new ApiError(res.status, 'Failed to export audit log')
+
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `Audit_Log_${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  },
+}
+
+/** Covers events that happen entirely client-side via the Supabase Auth SDK
+ * (login, logout, MFA enroll/unenroll) and so never otherwise touch the
+ * backend — both calls are fire-and-forget from the caller's perspective:
+ * a logging failure must never block or surface an error for the real action. */
+export const auditEventsApi = {
+  logAuthEvent: (eventType: 'login_success' | 'login_failure', email: string) =>
+    requestPublic<{ success: true }>('/auth-events', {
+      method: 'POST',
+      body: JSON.stringify({ event_type: eventType, email }),
+    }),
+
+  logSecurityEvent: (eventType: Extract<AuditEventType, 'logout' | 'mfa_enabled' | 'mfa_disabled'>) =>
+    request<{ success: true }>('/security-events', { method: 'POST', body: JSON.stringify({ event_type: eventType }) }),
 }
 
 export const onboardingApi = {

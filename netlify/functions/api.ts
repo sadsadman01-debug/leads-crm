@@ -125,6 +125,8 @@ import {
   deleteAllSupportContacts,
 } from './routes/supportContacts.js'
 import { generateFullExport, listExportLog } from './routes/dataExport.js'
+import { logAuthEvent, logSecurityEvent } from './routes/auditEvents.js'
+import { listAuditLog, exportAuditLogCsv } from './routes/auditLog.js'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -489,6 +491,21 @@ export const handler: Handler = async (event) => {
       const user = await requireUser(event)
       if (!id && method === 'GET') response = await generateFullExport(event, user)
       else if (id === 'log' && method === 'GET') response = await listExportLog(event, user)
+      else throw new HttpError(404, 'Not found')
+    } else if (resource === 'auth-events') {
+      // Public — reached from the Login page right after
+      // supabase.auth.signInWithPassword() resolves, success or failure alike;
+      // a failed attempt never has a session to authenticate with.
+      if (!id && method === 'POST') response = await logAuthEvent(event)
+      else throw new HttpError(404, 'Not found')
+    } else if (resource === 'security-events') {
+      const user = await requireUser(event)
+      if (!id && method === 'POST') response = await logSecurityEvent(event, user)
+      else throw new HttpError(404, 'Not found')
+    } else if (resource === 'audit-log') {
+      const user = await requireUser(event)
+      if (!id && method === 'GET') response = await listAuditLog(event, user)
+      else if (id === 'export' && method === 'GET') response = await exportAuditLogCsv(event, user)
       else throw new HttpError(404, 'Not found')
     } else if (resource === 'attachments') {
       const user = await requireUser(event)

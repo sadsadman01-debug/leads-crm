@@ -18,6 +18,7 @@ import {
   KeyRound,
   ShieldAlert,
   LifeBuoy,
+  ScrollText,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react'
@@ -226,6 +227,11 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           {isSuperAdmin && (
             <NavItem to="/support-contacts" icon={LifeBuoy}>
               Support Contacts
+            </NavItem>
+          )}
+          {isSuperAdmin && (
+            <NavItem to="/audit-log" icon={ScrollText}>
+              Audit Log
             </NavItem>
           )}
           {navItems.map(({ to, label, icon: Icon }) => (

@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
 import { isAdminOrAbove, isSuperAdmin, requireSuperAdmin, requireAal2IfEnrolled } from '../lib/permissions.js'
 import { notifySuperAdmins, notifyOrgAdmins } from '../lib/notifications.js'
+import { insertAuditLog, getClientIp } from '../lib/auditLog.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const COLUMNS =
@@ -50,6 +51,15 @@ export async function createMfaResetRequest(event: HandlerEvent) {
       } else if (target.organization_id) {
         await notifyOrgAdmins(target.organization_id, notifyFields)
       }
+
+      await insertAuditLog({
+        eventType: 'mfa_reset_request_submitted',
+        targetProfileId: target.id,
+        actorRole: target.role,
+        organizationId: target.organization_id,
+        metadata: { email: target.email },
+        ipAddress: getClientIp(event),
+      })
     }
   }
 
@@ -138,6 +148,15 @@ export async function performMfaReset(targetProfileId: string, resolver: AuthedU
     .update({ status: 'resolved', resolved_at: new Date().toISOString(), resolved_by: resolver.id })
     .eq('target_profile_id', target.id)
     .eq('status', 'pending')
+
+  await insertAuditLog({
+    eventType: 'mfa_reset_request_resolved',
+    actorProfileId: resolver.id,
+    actorRole: resolver.role,
+    organizationId: target.organization_id,
+    targetProfileId: target.id,
+    metadata: { email: target.email },
+  })
 
   return { email: target.email, nickname: target.nickname || target.email }
 }

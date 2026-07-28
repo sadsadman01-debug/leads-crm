@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
 import { requireSuperAdmin, requireAal2IfEnrolled } from '../lib/permissions.js'
 import { CURATED_PALETTE, ALLOWED_HEX } from '../lib/brandPalette.js'
+import { logAuditEvent } from '../lib/auditLog.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const BUCKET = 'org-logos'
@@ -13,9 +14,12 @@ type PlatformSettingsRow = {
   platform_accent_color: string | null
   platform_name: string | null
   support_email: string | null
+  audit_log_retention_days: number | null
 }
 
-const SETTINGS_COLUMNS = 'id, platform_logo_storage_path, platform_accent_color, platform_name, support_email'
+const SETTINGS_COLUMNS =
+  'id, platform_logo_storage_path, platform_accent_color, platform_name, support_email, audit_log_retention_days'
+const ALLOWED_RETENTION_DAYS = new Set([90, 365])
 
 function publicLogoUrl(storagePath: string | null): string | null {
   if (!storagePath) return null
@@ -50,6 +54,7 @@ function brandingResponse(row: PlatformSettingsRow) {
     accent_color: row.platform_accent_color,
     platform_name: row.platform_name,
     support_email: row.support_email,
+    audit_log_retention_days: row.audit_log_retention_days,
     palette: CURATED_PALETTE,
   }
 }
@@ -112,6 +117,13 @@ export async function updatePlatformBranding(event: HandlerEvent, user: AuthedUs
     update.support_email = body.support_email === null ? null : body.support_email.trim() || null
   }
 
+  if ('audit_log_retention_days' in body) {
+    if (body.audit_log_retention_days !== null && !ALLOWED_RETENTION_DAYS.has(Number(body.audit_log_retention_days))) {
+      throw new HttpError(400, 'audit_log_retention_days must be 90, 365, or null (Forever)')
+    }
+    ;(update as Record<string, any>).audit_log_retention_days = body.audit_log_retention_days
+  }
+
   if (Object.keys(update).length === 0) throw new HttpError(400, 'Nothing to update')
 
   const row = await getOrCreatePlatformSettingsRow()
@@ -130,6 +142,11 @@ export async function updatePlatformBranding(event: HandlerEvent, user: AuthedUs
     .select(SETTINGS_COLUMNS)
     .single()
   if (error) throw new HttpError(500, error.message)
+
+  await logAuditEvent('platform_branding_changed', user, event, {
+    organizationId: null,
+    metadata: { fields: Object.keys(update) },
+  })
 
   return json(200, brandingResponse(data))
 }
@@ -153,6 +170,11 @@ export async function resetPlatformBranding(event: HandlerEvent, user: AuthedUse
     .update({ platform_logo_storage_path: null, platform_accent_color: null, platform_name: null })
     .eq('id', row.id)
   if (error) throw new HttpError(500, error.message)
+
+  await logAuditEvent('platform_branding_changed', user, event, {
+    organizationId: null,
+    metadata: { reset: true },
+  })
 
   // Support Contact fields are a separate concern — untouched by this reset.
   return json(

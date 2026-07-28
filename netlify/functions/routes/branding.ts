@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
 import { requireAdminOrAbove, resolveOrganizationId, requireAal2IfEnrolled } from '../lib/permissions.js'
 import { CURATED_PALETTE, ALLOWED_HEX } from '../lib/brandPalette.js'
+import { logAuditEvent } from '../lib/auditLog.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const BUCKET = 'org-logos'
@@ -114,6 +115,11 @@ export async function updateBranding(event: HandlerEvent, user: AuthedUser) {
     .single()
   if (error) throw new HttpError(500, error.message)
 
+  await logAuditEvent('organization_branding_changed', user, event, {
+    organizationId: orgId,
+    metadata: { fields: Object.keys(update) },
+  })
+
   return json(200, brandingResponse(data))
 }
 
@@ -134,6 +140,11 @@ export async function resetBranding(event: HandlerEvent, user: AuthedUser) {
     .update({ logo_storage_path: null, accent_color: null, display_name: null })
     .eq('id', orgId)
   if (error) throw new HttpError(500, error.message)
+
+  await logAuditEvent('organization_branding_changed', user, event, {
+    organizationId: orgId,
+    metadata: { reset: true },
+  })
 
   return json(200, brandingResponse({ logo_storage_path: null, accent_color: null, display_name: null }))
 }

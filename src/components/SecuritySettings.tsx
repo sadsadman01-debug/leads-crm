@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, Loader2, ShieldCheck, ShieldOff, Smartphone } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { auditEventsApi } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { Modal } from '@/components/ui/Modal'
 
@@ -76,6 +77,7 @@ export function SecuritySettings() {
     setEnroll(null)
     setJustEnabled(true)
     setTimeout(() => setJustEnabled(false), 5000)
+    auditEventsApi.logSecurityEvent('mfa_enabled').catch(() => {})
     await refreshMfaStatus()
     invalidateFactors()
   }
@@ -125,6 +127,7 @@ export function SecuritySettings() {
     },
     onSuccess: () => {
       setDisableOpen(false)
+      auditEventsApi.logSecurityEvent('mfa_disabled').catch(() => {})
       invalidateFactors()
       refreshMfaStatus()
     },

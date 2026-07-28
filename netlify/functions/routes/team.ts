@@ -4,6 +4,7 @@ import { HttpError, json } from '../lib/http.js'
 import { requireAdminOrAbove, requireSuperAdmin, isSuperAdmin, resolveOrganizationId, scopeToOrg, requireAal2IfEnrolled } from '../lib/permissions.js'
 import { DEFAULT_USER_PERMISSIONS, normalizePermissions } from '../lib/userPermissions.js'
 import { performPasswordReset } from './passwordResetRequests.js'
+import { logAuditEvent } from '../lib/auditLog.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const PROFILE_COLUMNS = 'id, email, nickname, role, is_active, created_at'
@@ -116,6 +117,13 @@ export async function createTeamMember(event: HandlerEvent, user: AuthedUser) {
     .single()
 
   if (profileErr) throw new HttpError(500, profileErr.message)
+
+  await logAuditEvent('user_account_created', user, event, {
+    organizationId: orgId,
+    targetProfileId: created.user.id,
+    metadata: { email, nickname },
+  })
+
   return json(201, profile)
 }
 
@@ -184,6 +192,13 @@ export async function updateTeamMemberPermissions(id: string, event: HandlerEven
     .single()
 
   if (error) throw new HttpError(500, error.message)
+
+  await logAuditEvent('permissions_changed', user, event, {
+    organizationId: orgId,
+    targetProfileId: id,
+    metadata: { reset, permissions: next },
+  })
+
   return json(200, { ...data, permissions: normalizePermissions(data.permissions) })
 }
 
@@ -247,6 +262,15 @@ export async function updateTeamMember(id: string, event: HandlerEvent, user: Au
     .single()
 
   if (error) throw new HttpError(500, error.message)
+
+  if ('is_active' in update) {
+    await logAuditEvent(update.is_active ? 'team_member_reactivated' : 'team_member_deactivated', user, event, {
+      organizationId: orgId,
+      targetProfileId: id,
+      metadata: { email: target.email, nickname: target.nickname },
+    })
+  }
+
   return json(200, data)
 }
 
@@ -270,6 +294,11 @@ export async function deleteTeamMember(id: string, event: HandlerEvent, user: Au
 
   const { error } = await supabase.auth.admin.deleteUser(id)
   if (error) throw new HttpError(500, error.message)
+
+  await logAuditEvent('team_member_deleted', user, event, {
+    organizationId: orgId,
+    metadata: { email: target.email, nickname: target.nickname },
+  })
 
   return json(200, { success: true })
 }

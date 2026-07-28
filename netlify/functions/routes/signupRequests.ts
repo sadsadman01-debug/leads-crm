@@ -4,6 +4,7 @@ import { HttpError, json } from '../lib/http.js'
 import { requireSuperAdmin, requireAal2IfEnrolled } from '../lib/permissions.js'
 import { generateTempPassword } from '../lib/passwordGen.js'
 import { notifySuperAdmins } from '../lib/notifications.js'
+import { insertAuditLog, logAuditEvent, getClientIp } from '../lib/auditLog.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const COLUMNS =
@@ -43,6 +44,12 @@ export async function createSignupRequest(event: HandlerEvent) {
     link_route: '/signup-requests',
     related_entity_id: data.id,
     related_entity_type: 'signup_request',
+  })
+
+  await insertAuditLog({
+    eventType: 'signup_request_submitted',
+    metadata: { organization_name, contact_name, email },
+    ipAddress: getClientIp(event),
   })
 
   return json(201, data)
@@ -119,6 +126,17 @@ export async function approveSignupRequest(id: string, event: HandlerEvent, user
     .single()
   if (reqErr) throw new HttpError(500, reqErr.message)
 
+  await logAuditEvent('signup_request_approved', user, event, {
+    organizationId: org.id,
+    targetProfileId: created.user.id,
+    metadata: { organization_name: request.organization_name, email: request.email },
+  })
+  await logAuditEvent('admin_account_created', user, event, {
+    organizationId: org.id,
+    targetProfileId: created.user.id,
+    metadata: { email: request.email, nickname: request.contact_name },
+  })
+
   return json(200, {
     request: updatedRequest,
     organization: org,
@@ -144,5 +162,10 @@ export async function rejectSignupRequest(id: string, event: HandlerEvent, user:
     .select(COLUMNS)
     .single()
   if (error) throw new HttpError(500, error.message)
+
+  await logAuditEvent('signup_request_rejected', user, event, {
+    metadata: { organization_name: request.organization_name, email: request.email, rejection_reason },
+  })
+
   return json(200, data)
 }
