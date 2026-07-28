@@ -119,3 +119,18 @@ export async function listSupportContacts(user: AuthedUser) {
     })),
   })
 }
+
+/** Super Admin only — permanently clears the entire log. This is purely a
+ * visibility log (not a ticketing system), so there's nothing else that
+ * references these rows and nothing to cascade. */
+export async function deleteAllSupportContacts(user: AuthedUser) {
+  requireSuperAdmin(user)
+  const supabase = getSupabaseAdmin()
+
+  // Supabase requires a filter on delete; this matches every row since id is
+  // always a valid uuid.
+  const { error } = await supabase.from('support_contacts').delete().not('id', 'is', null)
+  if (error) throw new HttpError(500, error.message)
+
+  return json(200, { success: true })
+}

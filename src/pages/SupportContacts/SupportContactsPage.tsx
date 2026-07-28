@@ -1,20 +1,40 @@
-import { useQuery } from '@tanstack/react-query'
-import { LifeBuoy } from 'lucide-react'
+import { useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { LifeBuoy, Trash2 } from 'lucide-react'
 import { supportContactsApi } from '@/lib/api'
 import { Badge } from '@/components/ui/Badge'
+import { Modal } from '@/components/ui/Modal'
 
 export function SupportContactsPage() {
+  const queryClient = useQueryClient()
   const { data, isLoading } = useQuery({ queryKey: ['support-contacts'], queryFn: supportContactsApi.list })
   const contacts = data?.contacts ?? []
+  const [confirmingDeleteAll, setConfirmingDeleteAll] = useState(false)
+
+  const deleteAllMutation = useMutation({
+    mutationFn: () => supportContactsApi.deleteAll(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['support-contacts'] })
+      setConfirmingDeleteAll(false)
+    },
+  })
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-base-100">Support Contacts</h1>
-        <p className="mt-1 text-sm text-base-400">
-          Every message submitted through the Help widget's in-app form, from Admins/Users and from visitors on the
-          pre-login screens.
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-base-100">Support Contacts</h1>
+          <p className="mt-1 text-sm text-base-400">
+            Every message submitted through the Help widget's in-app form, from Admins/Users and from visitors on
+            the pre-login screens.
+          </p>
+        </div>
+        {contacts.length > 0 && (
+          <button className="btn-secondary shrink-0 text-danger" onClick={() => setConfirmingDeleteAll(true)}>
+            <Trash2 size={15} />
+            Delete All Logs
+          </button>
+        )}
       </div>
 
       {isLoading ? (
@@ -56,6 +76,25 @@ export function SupportContactsPage() {
           </table>
         </div>
       )}
+
+      <Modal open={confirmingDeleteAll} onClose={() => setConfirmingDeleteAll(false)} title="Delete all support contact logs?">
+        <p className="mb-4 text-sm text-base-300">
+          This permanently deletes all {contacts.length} log entr{contacts.length === 1 ? 'y' : 'ies'} above. This is
+          only a visibility log — it doesn't affect anyone's ability to use the Help widget, and this cannot be
+          undone.
+        </p>
+        {deleteAllMutation.isError && (
+          <p className="mb-3 text-sm text-danger">{(deleteAllMutation.error as Error).message}</p>
+        )}
+        <div className="flex justify-end gap-3 border-t border-base-700/60 pt-4">
+          <button className="btn-secondary" onClick={() => setConfirmingDeleteAll(false)}>
+            Cancel
+          </button>
+          <button className="btn-danger" disabled={deleteAllMutation.isPending} onClick={() => deleteAllMutation.mutate()}>
+            {deleteAllMutation.isPending ? 'Deleting…' : 'Delete All'}
+          </button>
+        </div>
+      </Modal>
     </div>
   )
 }

@@ -416,6 +416,8 @@ export const supportContactsApi = {
     requestPublic<{ success: true }>('/support-contacts/public', { method: 'POST', body: JSON.stringify(payload) }),
 
   list: () => request<{ contacts: SupportContact[] }>('/support-contacts'),
+
+  deleteAll: () => request<{ success: true }>('/support-contacts', { method: 'DELETE' }),
 }
 
 export const onboardingApi = {
