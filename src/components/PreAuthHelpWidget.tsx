@@ -1,28 +1,44 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { LifeBuoy, X, Mail } from 'lucide-react'
+import { LifeBuoy, X, Send, CheckCircle2 } from 'lucide-react'
 import { platformBrandingApi, supportContactsApi } from '@/lib/api'
-import { openMailto } from '@/lib/mailto'
 
 /** Same floating Help button as the authenticated `HelpWidget`, for the
  * pre-login screens (Login, Request Access, Forgot Password) — no session,
- * so there's no organization/nickname/role to include in the email, and the
- * click is logged via the public, IP-throttled endpoint instead. */
+ * so there's no account email to prefill, and the submission goes through
+ * the public, IP-throttled endpoint instead. Submits directly in-app (no
+ * mailto:). */
 export function PreAuthHelpWidget({
-  contextLines = [],
+  defaultEmail = '',
+  organizationName = '',
 }: {
-  /** Optional extra "Label: value" lines for helpful context — e.g. Request
-   * Access's already-typed Organization Name/Email. Blank values are skipped. */
-  contextLines?: Array<{ label: string; value: string }>
+  /** Pre-fills the email field — e.g. Request Access's already-typed Email. */
+  defaultEmail?: string
+  /** Prepended to the message for context — e.g. Request Access's already-typed Organization Name. */
+  organizationName?: string
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
+  const [email, setEmail] = useState(defaultEmail)
   const [message, setMessage] = useState('')
+  const [justSent, setJustSent] = useState(false)
 
   const { data } = useQuery({ queryKey: ['platform-branding'], queryFn: platformBrandingApi.get })
 
-  const logMutation = useMutation({
-    mutationFn: (payload: { message_preview?: string | null }) => supportContactsApi.createPublic(payload),
+  useEffect(() => {
+    if (defaultEmail) setEmail(defaultEmail)
+  }, [defaultEmail])
+
+  const sendMutation = useMutation({
+    mutationFn: (payload: { email: string; message: string }) => supportContactsApi.createPublic(payload),
+    onSuccess: () => {
+      setJustSent(true)
+      setMessage('')
+      setTimeout(() => {
+        setJustSent(false)
+        setOpen(false)
+      }, 1800)
+    },
   })
 
   useEffect(() => {
@@ -43,18 +59,14 @@ export function PreAuthHelpWidget({
 
   if (!data || !data.support_email) return null
 
-  function handleSendEmail() {
-    const base = message.trim() || 'I need help logging in / accessing Leads CRM.'
-    const extra = contextLines
-      .filter((l) => l.value.trim())
-      .map((l) => `${l.label}: ${l.value.trim()}`)
-      .join('\n')
-    const body = extra ? `${base}\n\n${extra}` : base
+  const canSend = email.trim().length > 0 && message.trim().length > 0 && !sendMutation.isPending
 
-    openMailto(data!.support_email!, 'Support Request from Login Page', body)
-    logMutation.mutate({ message_preview: message.trim() || null })
-    setOpen(false)
-    setMessage('')
+  function handleSubmit() {
+    if (!canSend) return
+    const finalMessage = organizationName.trim()
+      ? `${message.trim()}\n\nOrganization: ${organizationName.trim()}`
+      : message.trim()
+    sendMutation.mutate({ email: email.trim(), message: finalMessage })
   }
 
   return (
@@ -68,18 +80,40 @@ export function PreAuthHelpWidget({
             </button>
           </div>
 
-          <textarea
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            placeholder="Briefly describe what you need help with (optional)…"
-            rows={3}
-            className="input mb-3 resize-none text-sm"
-          />
-
-          <button className="btn-secondary w-full justify-center" onClick={handleSendEmail}>
-            <Mail size={15} />
-            Send Email
-          </button>
+          {justSent ? (
+            <div className="flex flex-col items-center gap-2 py-4 text-center">
+              <CheckCircle2 size={28} className="text-success" />
+              <p className="text-sm text-base-200">Thanks! We've received your message.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div>
+                <label className="label">Your Email</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  className="input text-sm"
+                />
+              </div>
+              <div>
+                <label className="label">What do you need help with?</label>
+                <textarea
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  placeholder="Briefly describe your issue…"
+                  rows={3}
+                  className="input resize-none text-sm"
+                />
+              </div>
+              {sendMutation.isError && <p className="text-xs text-danger">{(sendMutation.error as Error).message}</p>}
+              <button className="btn-secondary w-full justify-center" disabled={!canSend} onClick={handleSubmit}>
+                <Send size={15} />
+                {sendMutation.isPending ? 'Sending…' : 'Send'}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

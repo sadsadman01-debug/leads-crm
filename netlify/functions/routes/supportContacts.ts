@@ -4,17 +4,24 @@ import { HttpError, json } from '../lib/http.js'
 import { requireSuperAdmin } from '../lib/permissions.js'
 import type { AuthedUser } from '../lib/auth.js'
 
-const MAX_PREVIEW_LENGTH = 500
-const COLUMNS = 'id, organization_id, profile_id, message_preview, created_at, source'
+const MAX_MESSAGE_LENGTH = 500
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const COLUMNS = 'id, organization_id, profile_id, contact_email, message_preview, created_at, source'
 
-// Unauthenticated endpoint throttle — at most this many pre-auth log rows
-// from the same IP within the window. The actual mailto: link still opens
-// client-side regardless; this only limits how much gets logged.
+// Unauthenticated endpoint throttle — at most this many pre-auth submissions
+// from the same IP within the window, since it's reachable with no session.
 const PRE_AUTH_RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000
 const PRE_AUTH_RATE_LIMIT_MAX = 5
 
-function clampPreview(value: unknown): string | null {
-  return typeof value === 'string' ? value.trim().slice(0, MAX_PREVIEW_LENGTH) || null : null
+function parseSubmission(event: HandlerEvent): { email: string; message: string } {
+  const body = JSON.parse(event.body || '{}')
+  const email = String(body.email ?? '').trim()
+  const message = String(body.message ?? '').trim().slice(0, MAX_MESSAGE_LENGTH)
+
+  if (!email || !EMAIL_RE.test(email)) throw new HttpError(400, 'Enter a valid email address')
+  if (!message) throw new HttpError(400, 'Describe what you need help with')
+
+  return { email, message }
 }
 
 function getClientIp(event: HandlerEvent): string | null {
@@ -23,19 +30,19 @@ function getClientIp(event: HandlerEvent): string | null {
   return event.headers['x-nf-client-connection-ip'] || event.headers['client-ip'] || null
 }
 
-/** Logs a Help-widget "Send Email" click — organization/profile are derived
+/** Submits the Help widget's in-app form — organization/profile are derived
  * from the caller's own session, never trusted from the request body. Any
- * authenticated Admin/User (or Super Admin, harmlessly) can log their own
- * click; only the Super Admin can ever read this table back (see RLS). */
+ * authenticated Admin/User (or Super Admin, harmlessly) can submit their own;
+ * only the Super Admin can ever read this table back (see RLS). */
 export async function createSupportContact(event: HandlerEvent, user: AuthedUser) {
-  const body = JSON.parse(event.body || '{}')
-  const messagePreview = clampPreview(body.message_preview)
+  const { email, message } = parseSubmission(event)
 
   const supabase = getSupabaseAdmin()
   const { error } = await supabase.from('support_contacts').insert({
     organization_id: user.organization_id,
     profile_id: user.id,
-    message_preview: messagePreview,
+    contact_email: email,
+    message_preview: message,
     source: 'in_app',
   })
   if (error) throw new HttpError(500, error.message)
@@ -46,11 +53,9 @@ export async function createSupportContact(event: HandlerEvent, user: AuthedUser
 /** Public — reachable from Login/Request Access/Forgot Password before any
  * session exists. No org/profile identity to attach, so both are null; a
  * lightweight per-IP throttle keeps this from being spammed since it's
- * unauthenticated. Always returns success even when throttled — the widget's
- * mailto: link opens client-side regardless of whether this log write lands. */
+ * unauthenticated. */
 export async function createPublicSupportContact(event: HandlerEvent) {
-  const body = JSON.parse(event.body || '{}')
-  const messagePreview = clampPreview(body.message_preview)
+  const { email, message } = parseSubmission(event)
   const ip = getClientIp(event)
   const supabase = getSupabaseAdmin()
 
@@ -63,14 +68,15 @@ export async function createPublicSupportContact(event: HandlerEvent) {
       .eq('request_ip', ip)
       .gte('created_at', since)
     if ((count ?? 0) >= PRE_AUTH_RATE_LIMIT_MAX) {
-      return json(200, { success: true })
+      throw new HttpError(429, 'Too many requests — please try again later.')
     }
   }
 
   const { error } = await supabase.from('support_contacts').insert({
     organization_id: null,
     profile_id: null,
-    message_preview: messagePreview,
+    contact_email: email,
+    message_preview: message,
     source: 'pre_auth',
     request_ip: ip,
   })

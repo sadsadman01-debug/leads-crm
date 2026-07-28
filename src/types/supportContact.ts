@@ -4,6 +4,7 @@ export interface SupportContact {
   id: string
   organization_id: string | null
   profile_id: string | null
+  contact_email: string | null
   message_preview: string | null
   created_at: string
   source: SupportContactSource

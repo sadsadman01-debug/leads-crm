@@ -443,7 +443,10 @@ create table if not exists public.support_contacts (
   -- 'pre_auth' rows (no session) have null organization_id/profile_id and
   -- carry request_ip solely for server-side rate-limiting of that public endpoint.
   source text not null default 'in_app' check (source in ('in_app', 'pre_auth')),
-  request_ip text
+  request_ip text,
+  -- The email address typed into the widget's own form (the widget submits
+  -- directly in-app now — it never opens the user's email client).
+  contact_email text
 );
 
 create index if not exists support_contacts_created_at_idx on public.support_contacts (created_at desc);

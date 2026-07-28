@@ -12,8 +12,8 @@ export function SupportContactsPage() {
       <div>
         <h1 className="text-2xl font-semibold text-base-100">Support Contacts</h1>
         <p className="mt-1 text-sm text-base-400">
-          A log of every time an Admin or User has clicked "Send Email" from the Help widget — the actual
-          conversation happens in their email client, outside the app.
+          Every message submitted through the Help widget's in-app form, from Admins/Users and from visitors on the
+          pre-login screens.
         </p>
       </div>
 
@@ -40,14 +40,11 @@ export function SupportContactsPage() {
                 <tr key={c.id} className="border-b border-base-800 align-top">
                   <td className="py-3 pr-3 text-base-300">{c.organization_name || '—'}</td>
                   <td className="px-3 py-3">
-                    {c.source === 'pre_auth' ? (
-                      <Badge tone="warn">Pre-login</Badge>
-                    ) : (
-                      <>
-                        <div className="font-medium text-base-100">{c.requester_nickname || c.requester_email || '—'}</div>
-                        {c.requester_email && <div className="text-xs text-base-400">{c.requester_email}</div>}
-                      </>
-                    )}
+                    <div className="flex items-center gap-1.5">
+                      {c.source === 'pre_auth' && <Badge tone="warn">Pre-login</Badge>}
+                      <span className="font-medium text-base-100">{c.requester_nickname || c.contact_email || '—'}</span>
+                    </div>
+                    {c.contact_email && <div className="text-xs text-base-400">{c.contact_email}</div>}
                   </td>
                   <td className="max-w-[360px] px-3 py-3 text-base-300">
                     <span className="line-clamp-2">{c.message_preview || <span className="text-base-500">—</span>}</span>

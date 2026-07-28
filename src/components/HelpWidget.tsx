@@ -1,23 +1,38 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { LifeBuoy, X, Mail } from 'lucide-react'
+import { LifeBuoy, X, Send, CheckCircle2 } from 'lucide-react'
 import { platformBrandingApi, supportContactsApi } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
-import { openMailto } from '@/lib/mailto'
 
 /** Floating Help button — Admin/User only (the Super Admin IS the support
  * contact, so it'd make no sense to show it to them). Hidden entirely if the
- * Super Admin has cleared their support email. */
+ * Super Admin has cleared their support email. Submits directly in-app (no
+ * mailto: — that turned out to be unreliable across browsers/OS mail-handler
+ * setups); the Super Admin reviews these in Support Contacts. */
 export function HelpWidget() {
   const { profile } = useAuth()
   const containerRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
+  const [email, setEmail] = useState('')
   const [message, setMessage] = useState('')
+  const [justSent, setJustSent] = useState(false)
 
   const { data } = useQuery({ queryKey: ['platform-branding'], queryFn: platformBrandingApi.get })
 
-  const logMutation = useMutation({
-    mutationFn: (payload: { message_preview?: string | null }) => supportContactsApi.create(payload),
+  useEffect(() => {
+    if (profile?.email) setEmail(profile.email)
+  }, [profile?.email])
+
+  const sendMutation = useMutation({
+    mutationFn: (payload: { email: string; message: string }) => supportContactsApi.create(payload),
+    onSuccess: () => {
+      setJustSent(true)
+      setMessage('')
+      setTimeout(() => {
+        setJustSent(false)
+        setOpen(false)
+      }, 1800)
+    },
   })
 
   useEffect(() => {
@@ -39,16 +54,11 @@ export function HelpWidget() {
   if (!profile || profile.role === 'super_admin') return null
   if (!data || !data.support_email) return null
 
-  const orgLabel = profile.organization_name || 'their organization'
-  const roleLabel = profile.role === 'admin' ? 'Admin' : 'User'
-  const contextLine = `${profile.nickname || 'A team member'} (${roleLabel}) — ${orgLabel}`
+  const canSend = email.trim().length > 0 && message.trim().length > 0 && !sendMutation.isPending
 
-  function handleSendEmail() {
-    const base = message.trim() || 'I need help with Leads CRM.'
-    openMailto(data!.support_email!, `Support Request from ${orgLabel}`, `${base}\n\n${contextLine}`)
-    logMutation.mutate({ message_preview: message.trim() || null })
-    setOpen(false)
-    setMessage('')
+  function handleSubmit() {
+    if (!canSend) return
+    sendMutation.mutate({ email: email.trim(), message: message.trim() })
   }
 
   return (
@@ -62,18 +72,40 @@ export function HelpWidget() {
             </button>
           </div>
 
-          <textarea
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            placeholder="Briefly describe what you need help with (optional)…"
-            rows={3}
-            className="input mb-3 resize-none text-sm"
-          />
-
-          <button className="btn-secondary w-full justify-center" onClick={handleSendEmail}>
-            <Mail size={15} />
-            Send Email
-          </button>
+          {justSent ? (
+            <div className="flex flex-col items-center gap-2 py-4 text-center">
+              <CheckCircle2 size={28} className="text-success" />
+              <p className="text-sm text-base-200">Thanks! We've received your message.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div>
+                <label className="label">Your Email</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  className="input text-sm"
+                />
+              </div>
+              <div>
+                <label className="label">What do you need help with?</label>
+                <textarea
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  placeholder="Briefly describe your issue…"
+                  rows={3}
+                  className="input resize-none text-sm"
+                />
+              </div>
+              {sendMutation.isError && <p className="text-xs text-danger">{(sendMutation.error as Error).message}</p>}
+              <button className="btn-secondary w-full justify-center" disabled={!canSend} onClick={handleSubmit}>
+                <Send size={15} />
+                {sendMutation.isPending ? 'Sending…' : 'Send'}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

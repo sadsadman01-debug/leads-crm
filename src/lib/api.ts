@@ -408,11 +408,11 @@ export const platformBrandingApi = {
 }
 
 export const supportContactsApi = {
-  create: (payload: { message_preview?: string | null }) =>
+  create: (payload: { email: string; message: string }) =>
     request<{ success: true }>('/support-contacts', { method: 'POST', body: JSON.stringify(payload) }),
 
   /** Public — reachable from Login/Request Access/Forgot Password before any session exists. */
-  createPublic: (payload: { message_preview?: string | null }) =>
+  createPublic: (payload: { email: string; message: string }) =>
     requestPublic<{ success: true }>('/support-contacts/public', { method: 'POST', body: JSON.stringify(payload) }),
 
   list: () => request<{ contacts: SupportContact[] }>('/support-contacts'),

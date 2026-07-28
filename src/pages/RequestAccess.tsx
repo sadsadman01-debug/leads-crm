@@ -162,12 +162,7 @@ export function RequestAccess() {
           </>
         )}
       </div>
-      <PreAuthHelpWidget
-        contextLines={[
-          { label: 'Organization', value: organizationName },
-          { label: 'Email', value: email },
-        ]}
-      />
+      <PreAuthHelpWidget defaultEmail={email} organizationName={organizationName} />
     </div>
   )
 }
