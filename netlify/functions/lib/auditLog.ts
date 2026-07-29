@@ -33,6 +33,7 @@ export type AuditEventType =
   | 'deals_merged'
   | 'payment_recorded'
   | 'payment_status_changed'
+  | 'subscription_expired'
 
 interface InsertAuditLogParams {
   eventType: AuditEventType

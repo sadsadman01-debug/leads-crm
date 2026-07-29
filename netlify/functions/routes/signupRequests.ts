@@ -5,11 +5,11 @@ import { requireSuperAdmin, requireAal2IfEnrolled } from '../lib/permissions.js'
 import { generateTempPassword } from '../lib/passwordGen.js'
 import { notifySuperAdmins } from '../lib/notifications.js'
 import { insertAuditLog, logAuditEvent, getClientIp } from '../lib/auditLog.js'
-import { getOrCreateBillingSettingsRow, computeCurrentPricingTier } from '../lib/billingSettings.js'
+import { getOrCreateBillingSettingsRow, computeCurrentPricingTier, computeAnnualTotal, addBillingPeriod } from '../lib/billingSettings.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const COLUMNS =
-  'id, organization_name, contact_name, email, phone, message, status, requested_at, reviewed_at, reviewed_by, rejection_reason, pricing_tier, monthly_price_usd, payment_status'
+  'id, organization_name, contact_name, email, phone, message, status, requested_at, reviewed_at, reviewed_by, rejection_reason, pricing_tier, monthly_price_usd, payment_status, billing_cycle, annual_total_usd'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -34,10 +34,23 @@ export async function createSignupRequest(event: HandlerEvent) {
   // price a requester was shown when they submitted.
   const billingSettings = await getOrCreateBillingSettingsRow()
   const { pricing_tier, monthly_price_usd } = await computeCurrentPricingTier(billingSettings)
+  const billing_cycle = body.billing_cycle === 'annual' ? 'annual' : 'monthly'
+  const annual_total_usd = billing_cycle === 'annual' ? computeAnnualTotal(monthly_price_usd) : null
 
   const { data, error } = await supabase
     .from('signup_requests')
-    .insert({ organization_name, contact_name, email, phone, message, status: 'pending', pricing_tier, monthly_price_usd })
+    .insert({
+      organization_name,
+      contact_name,
+      email,
+      phone,
+      message,
+      status: 'pending',
+      pricing_tier,
+      monthly_price_usd,
+      billing_cycle,
+      annual_total_usd,
+    })
     .select(COLUMNS)
     .single()
 
@@ -100,8 +113,7 @@ export async function approveSignupRequest(id: string, event: HandlerEvent, user
   const temporaryPassword = generateTempPassword()
   const now = new Date()
   const firstPaymentConfirmedAt = now.toISOString()
-  const nextPaymentDueDate = new Date(now)
-  nextPaymentDueDate.setMonth(nextPaymentDueDate.getMonth() + 1)
+  const subscriptionEndDate = addBillingPeriod(now.toISOString().slice(0, 10), request.billing_cycle)
 
   const { data: org, error: orgErr } = await supabase
     .from('organizations')
@@ -111,11 +123,13 @@ export async function approveSignupRequest(id: string, event: HandlerEvent, user
       status: 'active',
       pricing_tier: request.pricing_tier,
       monthly_price_usd: request.monthly_price_usd,
+      billing_cycle: request.billing_cycle,
+      annual_total_usd: request.annual_total_usd,
       payment_status: finalPaymentStatus,
       first_payment_confirmed_at: firstPaymentConfirmedAt,
-      next_payment_due_date: nextPaymentDueDate.toISOString().slice(0, 10),
+      subscription_end_date: subscriptionEndDate,
     })
-    .select('id, name, pricing_tier, monthly_price_usd, payment_status, next_payment_due_date')
+    .select('id, name, pricing_tier, monthly_price_usd, billing_cycle, annual_total_usd, payment_status, subscription_end_date')
     .single()
   if (orgErr) throw new HttpError(500, orgErr.message)
 

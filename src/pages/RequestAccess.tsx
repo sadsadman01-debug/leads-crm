@@ -1,11 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Building2, ArrowLeft, AlertCircle, Loader2, CheckCircle2, Sparkles } from 'lucide-react'
+import { Building2, ArrowLeft, AlertCircle, Loader2, CheckCircle2, Sparkles, PartyPopper, X } from 'lucide-react'
 import { signupRequestsApi, billingApi } from '@/lib/api'
 import { usePlatformBranding } from '@/hooks/usePlatformBranding'
 import { PreAuthHelpWidget } from '@/components/PreAuthHelpWidget'
-import { PRICING_TIER_LABELS } from '@/types/billing'
+import { PRICING_TIER_LABELS, type BillingCycle } from '@/types/billing'
 
 export function RequestAccess() {
   usePlatformBranding()
@@ -14,6 +14,8 @@ export function RequestAccess() {
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [message, setMessage] = useState('')
+  const [billingCycle, setBillingCycle] = useState<BillingCycle>('monthly')
+  const [bannerDismissed, setBannerDismissed] = useState(() => sessionStorage.getItem('early-bird-banner-dismissed') === '1')
 
   const { data: pricing } = useQuery({ queryKey: ['public-pricing'], queryFn: billingApi.getPublicPricing })
 
@@ -25,6 +27,7 @@ export function RequestAccess() {
         email: email.trim(),
         phone: phone.trim() || undefined,
         message: message.trim() || undefined,
+        billing_cycle: billingCycle,
       }),
   })
 
@@ -62,8 +65,13 @@ export function RequestAccess() {
             {pricing && (
               <div className="mt-4 w-full rounded-lg bg-base-850 p-3 text-left text-sm">
                 <p className="text-base-200">
-                  Your locked-in rate: <strong className="text-base-100">${pricing.monthly_price_usd}/month</strong>{' '}
-                  <span className="text-base-500">({PRICING_TIER_LABELS[pricing.pricing_tier]})</span>
+                  Your locked-in rate:{' '}
+                  <strong className="text-base-100">
+                    {billingCycle === 'annual' ? `$${pricing.annual_total_usd}/year` : `$${pricing.monthly_price_usd}/month`}
+                  </strong>{' '}
+                  <span className="text-base-500">
+                    ({PRICING_TIER_LABELS[pricing.pricing_tier]}, {billingCycle === 'annual' ? 'billed annually' : 'billed monthly'})
+                  </span>
                 </p>
                 {pricing.payment_instructions && (
                   <p className="mt-2 whitespace-pre-wrap text-xs text-base-400">{pricing.payment_instructions}</p>
@@ -88,17 +96,64 @@ export function RequestAccess() {
               </p>
             </div>
 
-            {pricing && (
-              <div className="mb-6 rounded-xl border border-accent-500/30 bg-accent-500/10 p-4 text-center">
-                <p className="flex items-center justify-center gap-1.5 text-sm font-semibold text-accent-400">
-                  <Sparkles size={15} />
-                  {pricing.pricing_tier === 'early_bird' ? '🎉 Early Bird pricing' : 'Pricing'}: ${pricing.monthly_price_usd}/month
+            {pricing?.pricing_tier === 'early_bird' && !bannerDismissed && (
+              <div className="relative mb-4 rounded-xl border border-accent-500/40 bg-gradient-to-br from-accent-500/15 to-accent-500/5 p-4">
+                <button
+                  type="button"
+                  aria-label="Dismiss"
+                  className="absolute right-2 top-2 text-base-400 hover:text-base-100"
+                  onClick={() => {
+                    sessionStorage.setItem('early-bird-banner-dismissed', '1')
+                    setBannerDismissed(true)
+                  }}
+                >
+                  <X size={15} />
+                </button>
+                <p className="flex items-center justify-center gap-1.5 text-center text-sm font-semibold text-accent-400">
+                  <PartyPopper size={15} />
+                  🎉 Early Bird pricing: ${pricing.monthly_price_usd}/month
                 </p>
-                {pricing.pricing_tier === 'early_bird' && (
-                  <p className="mt-1 text-xs text-base-400">Only {pricing.spots_remaining} Early Bird spots left!</p>
+                <p className="mt-1 text-center text-xs font-medium text-warn">Only {pricing.spots_remaining} Early Bird spots left!</p>
+                {pricing.promotional_benefits.length > 0 && (
+                  <ul className="mt-3 space-y-1.5 text-xs text-base-300">
+                    {pricing.promotional_benefits.map((benefit, i) => (
+                      <li key={i} className="flex items-start gap-1.5">
+                        <CheckCircle2 size={13} className="mt-0.5 shrink-0 text-accent-400" />
+                        {benefit}
+                      </li>
+                    ))}
+                  </ul>
                 )}
+              </div>
+            )}
+
+            {pricing && (
+              <div className="mb-6 rounded-xl border border-base-700/60 bg-base-850 p-4">
+                {pricing.pricing_tier === 'standard' && (
+                  <p className="mb-3 flex items-center justify-center gap-1.5 text-sm font-semibold text-base-200">
+                    <Sparkles size={15} className="text-accent-400" />
+                    Pricing: ${pricing.monthly_price_usd}/month
+                  </p>
+                )}
+                <div className="flex gap-2">
+                  {(['monthly', 'annual'] as BillingCycle[]).map((cycle) => (
+                    <button
+                      key={cycle}
+                      type="button"
+                      onClick={() => setBillingCycle(cycle)}
+                      className={`flex-1 rounded-lg border px-3 py-2.5 text-center text-sm transition-colors ${
+                        billingCycle === cycle
+                          ? 'border-accent-500 bg-accent-500/15 text-accent-400'
+                          : 'border-base-700/60 text-base-300 hover:bg-base-800'
+                      }`}
+                    >
+                      <span className="block font-semibold">{cycle === 'monthly' ? `$${pricing.monthly_price_usd}/mo` : `$${pricing.annual_total_usd}/yr`}</span>
+                      <span className="block text-xs text-base-400">{cycle === 'monthly' ? 'Monthly' : 'Annual (save 20%)'}</span>
+                    </button>
+                  ))}
+                </div>
                 {pricing.payment_instructions && (
-                  <p className="mt-2 whitespace-pre-wrap text-xs text-base-500">{pricing.payment_instructions}</p>
+                  <p className="mt-3 whitespace-pre-wrap text-xs text-base-500">{pricing.payment_instructions}</p>
                 )}
               </div>
             )}

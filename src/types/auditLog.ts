@@ -29,6 +29,7 @@ export type AuditEventType =
   | 'deals_merged'
   | 'payment_recorded'
   | 'payment_status_changed'
+  | 'subscription_expired'
 
 export interface AuditLogEntry {
   id: string
@@ -90,6 +91,7 @@ export const AUDIT_EVENT_LABELS: Record<AuditEventType, string> = {
   deals_merged: 'Deals merged',
   payment_recorded: 'Payment recorded',
   payment_status_changed: 'Payment status changed',
+  subscription_expired: 'Subscription expired (access blocked)',
 }
 
 /** Security-relevant events get one color family in the UI; every other

@@ -28,9 +28,11 @@ import { SupportContactsPage } from '@/pages/SupportContacts/SupportContactsPage
 import { AuditLogPage } from '@/pages/AuditLog/AuditLogPage'
 import { BillingPage } from '@/pages/Billing/BillingPage'
 import { NotificationsPage } from '@/pages/NotificationsPage'
+import { SubscriptionExpired } from '@/pages/SubscriptionExpired'
 import { OfflineBanner } from '@/components/OfflineBanner'
 import { PwaUpdatePrompt } from '@/components/PwaUpdatePrompt'
 import { InstallAppBanner } from '@/components/InstallAppBanner'
+import { SubscriptionGuard } from '@/components/SubscriptionGuard'
 
 // Charting (recharts) is only needed here — code-split so it doesn't bloat every route.
 const Dashboard = lazy(() => import('@/pages/Dashboard').then((m) => ({ default: m.Dashboard })))
@@ -47,6 +49,7 @@ export default function App() {
       <OfflineBanner />
       <PwaUpdatePrompt />
       <InstallAppBanner />
+      <SubscriptionGuard />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/request-access" element={<RequestAccess />} />
@@ -56,6 +59,7 @@ export default function App() {
         <Route element={<ProtectedRoute />}>
           <Route path="/set-new-password" element={<SetNewPassword />} />
           <Route path="/mfa-challenge" element={<MfaChallenge />} />
+          <Route path="/subscription-expired" element={<SubscriptionExpired />} />
           <Route element={<RequireMfaVerified />}>
             <Route element={<RequirePasswordSet />}>
               <Route element={<AppLayout />}>

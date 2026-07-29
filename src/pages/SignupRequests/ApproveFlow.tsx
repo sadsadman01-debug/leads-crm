@@ -4,7 +4,7 @@ import { AlertTriangle, CircleDollarSign } from 'lucide-react'
 import { signupRequestsApi } from '@/lib/api'
 import { Modal } from '@/components/ui/Modal'
 import { TempPasswordResult } from '@/components/TempPasswordResult'
-import { PRICING_TIER_LABELS } from '@/types/billing'
+import { PRICING_TIER_LABELS, amountForCycle } from '@/types/billing'
 import type { ApproveSignupRequestResult, SignupRequest } from '@/types/signupRequest'
 
 function draftWelcomeMessage(result: ApproveSignupRequestResult): string {
@@ -56,8 +56,9 @@ export function ApproveFlow({ request, onClose }: { request: SignupRequest | nul
       <Modal open onClose={handleClose} title="Account created" size="lg">
         {result.organization.pricing_tier && (
           <p className="mb-3 text-xs text-base-400">
-            Billing: ${result.organization.monthly_price_usd}/month ({PRICING_TIER_LABELS[result.organization.pricing_tier]}) — next
-            payment due {result.organization.next_payment_due_date ? new Date(result.organization.next_payment_due_date).toLocaleDateString() : '—'}.
+            Billing: {amountForCycle(result.organization.billing_cycle, result.organization.monthly_price_usd, result.organization.annual_total_usd)} (
+            {PRICING_TIER_LABELS[result.organization.pricing_tier]}) — subscription ends{' '}
+            {result.organization.subscription_end_date ? new Date(result.organization.subscription_end_date).toLocaleDateString() : '—'}.
           </p>
         )}
         <TempPasswordResult
@@ -96,7 +97,8 @@ export function ApproveFlow({ request, onClose }: { request: SignupRequest | nul
           >
             <CircleDollarSign size={16} className="shrink-0" />
             <p>
-              <strong>${request.monthly_price_usd}/month</strong> ({PRICING_TIER_LABELS[request.pricing_tier]}) — Payment status:{' '}
+              <strong>{amountForCycle(request.billing_cycle, request.monthly_price_usd, request.annual_total_usd)}</strong> (
+              {PRICING_TIER_LABELS[request.pricing_tier]}, {request.billing_cycle === 'annual' ? 'annual' : 'monthly'}) — Payment status:{' '}
               <strong className="capitalize">{request.payment_status}</strong>
               {request.payment_status === 'pending' && ' — approving now will not change this.'}
             </p>

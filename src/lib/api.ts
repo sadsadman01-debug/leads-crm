@@ -45,15 +45,27 @@ import type {
   MergedDealResult,
   MergeSnapshotSummary,
 } from '@/types/duplicateMerge'
-import type { PublicPricing, BillingSettings, OrganizationBillingRow, MyOrgBilling, PaymentStatus } from '@/types/billing'
+import type { PublicPricing, BillingSettings, OrganizationBillingRow, MyOrgBilling, PaymentStatus, BillingCycle } from '@/types/billing'
 import { withOrgScope } from './orgScope'
 
-class ApiError extends Error {
+export class ApiError extends Error {
   status: number
-  constructor(status: number, message: string) {
+  details: any
+  constructor(status: number, message: string, details?: any) {
     super(message)
     this.status = status
+    this.details = details
   }
+}
+
+/** Bridges the module-level fetch layer (outside React) to a router-aware
+ * redirect — set once by <SubscriptionGuard/> near the app root. Fires
+ * whenever ANY authenticated call comes back blocked because the caller's
+ * Organization's subscription has expired, so the block is enforced on
+ * every request, not just at login. */
+let subscriptionExpiredHandler: ((details: any) => void) | null = null
+export function setSubscriptionExpiredHandler(fn: ((details: any) => void) | null) {
+  subscriptionExpiredHandler = fn
 }
 
 async function authHeader(): Promise<Record<string, string>> {
@@ -73,7 +85,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`/api${withOrgScope(path)}`, { ...options, headers })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
-    throw new ApiError(res.status, body.error ?? `Request failed with status ${res.status}`)
+    if (res.status === 402 && body.error === 'subscription_expired') {
+      subscriptionExpiredHandler?.(body)
+    }
+    throw new ApiError(res.status, body.error ?? `Request failed with status ${res.status}`, body)
   }
   if (res.status === 204) return undefined as T
   return res.json() as Promise<T>
@@ -536,8 +551,14 @@ export const searchApi = {
 
 export const signupRequestsApi = {
   /** Public — reachable from the Login page before any session exists. */
-  create: (payload: { organization_name: string; contact_name: string; email: string; phone?: string; message?: string }) =>
-    requestPublic<SignupRequest>('/signup-requests', { method: 'POST', body: JSON.stringify(payload) }),
+  create: (payload: {
+    organization_name: string
+    contact_name: string
+    email: string
+    phone?: string
+    message?: string
+    billing_cycle?: BillingCycle
+  }) => requestPublic<SignupRequest>('/signup-requests', { method: 'POST', body: JSON.stringify(payload) }),
 
   list: () => request<{ requests: SignupRequest[] }>('/signup-requests'),
 
@@ -560,13 +581,21 @@ export const billingApi = {
 
   getSettings: () => request<BillingSettings>('/billing/settings'),
 
-  updateSettings: (payload: Partial<Pick<BillingSettings, 'payment_instructions' | 'early_bird_threshold' | 'early_bird_price_usd' | 'standard_price_usd'>>) =>
-    request<BillingSettings>('/billing/settings', { method: 'PATCH', body: JSON.stringify(payload) }),
+  updateSettings: (
+    payload: Partial<
+      Pick<
+        BillingSettings,
+        'payment_instructions' | 'early_bird_threshold' | 'early_bird_price_usd' | 'standard_price_usd' | 'promotional_banner_text' | 'grace_period_days'
+      >
+    >
+  ) => request<BillingSettings>('/billing/settings', { method: 'PATCH', body: JSON.stringify(payload) }),
 
   list: () => request<{ organizations: OrganizationBillingRow[] }>('/billing'),
 
-  recordPayment: (organizationId: string, payload: { amount_usd: number; paid_at: string; notes?: string }) =>
-    request<OrganizationBillingRow>(`/billing/${organizationId}/record-payment`, { method: 'POST', body: JSON.stringify(payload) }),
+  recordPayment: (
+    organizationId: string,
+    payload: { amount_usd: number; paid_at: string; notes?: string; extend_from: 'current_expiry' | 'payment_date' }
+  ) => request<OrganizationBillingRow>(`/billing/${organizationId}/record-payment`, { method: 'POST', body: JSON.stringify(payload) }),
 
   getMyOrganization: () => request<MyOrgBilling>('/billing/my-organization'),
 }
@@ -845,5 +874,3 @@ export const attachmentsApi = {
   remove: (attachmentId: string) =>
     request<{ success: true }>(`/attachments/${attachmentId}`, { method: 'DELETE' }),
 }
-
-export { ApiError }

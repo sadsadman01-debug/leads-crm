@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { CircleDollarSign } from 'lucide-react'
 import { billingApi } from '@/lib/api'
-import { PRICING_TIER_LABELS } from '@/types/billing'
+import { PRICING_TIER_LABELS, amountForCycle } from '@/types/billing'
 
 /** Informational only — Admins cannot self-serve pay or modify anything here.
  * All payment collection happens manually, outside the app, coordinated
@@ -16,12 +16,12 @@ export function OrgBillingNotice() {
       <div className="mt-3 flex items-center gap-2.5 rounded-lg bg-base-850 px-4 py-3 text-sm text-base-200">
         <CircleDollarSign size={16} className="shrink-0 text-base-400" />
         <p>
-          Your plan: <strong className="text-base-100">${data.monthly_price_usd}/month</strong>
+          Your plan: <strong className="text-base-100">{amountForCycle(data.billing_cycle, data.monthly_price_usd, data.annual_total_usd)}</strong>
           {data.pricing_tier && <span className="text-base-400"> ({PRICING_TIER_LABELS[data.pricing_tier]})</span>}
-          {data.next_payment_due_date && (
+          {data.subscription_end_date && (
             <>
               {' '}
-              — Next payment due: <strong className="text-base-100">{new Date(data.next_payment_due_date).toLocaleDateString()}</strong>
+              — Subscription active until: <strong className="text-base-100">{new Date(data.subscription_end_date).toLocaleDateString()}</strong>
             </>
           )}
           . Contact support to arrange payment.

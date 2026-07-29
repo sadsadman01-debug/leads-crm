@@ -1,6 +1,8 @@
 import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from './supabaseAdmin.js'
 import { normalizePermissions, type UserPermissions } from './userPermissions.js'
+import { getOrCreateBillingSettingsRow } from './billingSettings.js'
+import { insertAuditLog, getClientIp } from './auditLog.js'
 
 export type Role = 'super_admin' | 'admin' | 'user'
 
@@ -58,7 +60,9 @@ export async function requireUser(event: HandlerEvent): Promise<AuthedUser> {
 
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('role, nickname, is_active, organization_id, permissions, force_password_change')
+    .select(
+      'role, nickname, is_active, organization_id, permissions, force_password_change, organizations ( subscription_end_date, billing_cycle, monthly_price_usd, annual_total_usd, name )'
+    )
     .eq('id', data.user.id)
     .single()
 
@@ -67,6 +71,34 @@ export async function requireUser(event: HandlerEvent): Promise<AuthedUser> {
   }
   if (!profile.is_active) {
     throw new AuthError('This account has been deactivated')
+  }
+
+  // The Super Admin belongs to no Organization and is entirely exempt — they
+  // need full access to see and manually reactivate expired tenants.
+  const org = (profile as any).organizations as
+    | { subscription_end_date: string | null; billing_cycle: 'monthly' | 'annual'; monthly_price_usd: number | null; annual_total_usd: number | null; name: string }
+    | null
+  if (profile.role !== 'super_admin' && org?.subscription_end_date) {
+    const settings = await getOrCreateBillingSettingsRow()
+    const cutoff = new Date(org.subscription_end_date)
+    cutoff.setDate(cutoff.getDate() + settings.grace_period_days)
+    if (new Date() > cutoff) {
+      await insertAuditLog({
+        eventType: 'subscription_expired',
+        actorProfileId: data.user.id,
+        actorRole: profile.role,
+        organizationId: profile.organization_id,
+        metadata: { organizationName: org.name, subscriptionEndDate: org.subscription_end_date },
+        ipAddress: getClientIp(event),
+      })
+      throw new SubscriptionExpiredError({
+        subscription_end_date: org.subscription_end_date,
+        billing_cycle: org.billing_cycle,
+        monthly_price_usd: org.monthly_price_usd,
+        annual_total_usd: org.annual_total_usd,
+        payment_instructions: settings.payment_instructions,
+      })
+    }
   }
 
   return {
@@ -83,3 +115,24 @@ export async function requireUser(event: HandlerEvent): Promise<AuthedUser> {
 }
 
 export class AuthError extends Error {}
+
+export interface SubscriptionExpiredDetails {
+  subscription_end_date: string
+  billing_cycle: 'monthly' | 'annual'
+  monthly_price_usd: number | null
+  annual_total_usd: number | null
+  payment_instructions: string | null
+}
+
+/** Thrown by requireUser for any non-Super-Admin account whose Organization's
+ * subscription_end_date (plus any configured grace period) has passed —
+ * caught in api.ts and surfaced as a distinct 402 response so the frontend
+ * can redirect to the dedicated "Subscription Expired" screen instead of
+ * treating this like a generic auth failure. */
+export class SubscriptionExpiredError extends Error {
+  details: SubscriptionExpiredDetails
+  constructor(details: SubscriptionExpiredDetails) {
+    super('This organization\'s subscription has expired')
+    this.details = details
+  }
+}

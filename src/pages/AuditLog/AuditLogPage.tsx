@@ -27,6 +27,7 @@ import {
   Settings2,
   Combine,
   CircleDollarSign,
+  CalendarX,
   type LucideIcon,
 } from 'lucide-react'
 import { auditLogApi, organizationsApi } from '@/lib/api'
@@ -72,6 +73,7 @@ const EVENT_ICONS: Record<AuditEventType, LucideIcon> = {
   deals_merged: Combine,
   payment_recorded: CircleDollarSign,
   payment_status_changed: CircleDollarSign,
+  subscription_expired: CalendarX,
 }
 
 const ALL_EVENT_TYPES = Object.keys(AUDIT_EVENT_LABELS) as AuditEventType[]

@@ -1,4 +1,4 @@
-import type { PricingTier, PaymentStatus } from './billing'
+import type { PricingTier, PaymentStatus, BillingCycle } from './billing'
 
 export type SignupRequestStatus = 'pending' | 'approved' | 'rejected'
 
@@ -17,6 +17,8 @@ export interface SignupRequest {
   pricing_tier: PricingTier | null
   monthly_price_usd: number | null
   payment_status: PaymentStatus
+  billing_cycle: BillingCycle
+  annual_total_usd: number | null
 }
 
 export interface ApproveSignupRequestResult {
@@ -26,8 +28,10 @@ export interface ApproveSignupRequestResult {
     name: string
     pricing_tier: PricingTier | null
     monthly_price_usd: number | null
+    billing_cycle: BillingCycle | null
+    annual_total_usd: number | null
     payment_status: PaymentStatus | null
-    next_payment_due_date: string | null
+    subscription_end_date: string | null
   }
   admin: { email: string; nickname: string; temporary_password: string }
 }

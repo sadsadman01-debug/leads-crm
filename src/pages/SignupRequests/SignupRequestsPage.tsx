@@ -117,8 +117,12 @@ export function SignupRequestsPage() {
                   <td className="px-3 py-3 text-base-300">
                     {r.pricing_tier ? (
                       <div>
-                        <p className="font-medium text-base-100">${r.monthly_price_usd}/mo</p>
-                        <p className="text-xs text-base-500">{PRICING_TIER_LABELS[r.pricing_tier]}</p>
+                        <p className="font-medium text-base-100">
+                          {r.billing_cycle === 'annual' ? `$${r.annual_total_usd}/yr` : `$${r.monthly_price_usd}/mo`}
+                        </p>
+                        <p className="text-xs text-base-500">
+                          {PRICING_TIER_LABELS[r.pricing_tier]} · {r.billing_cycle === 'annual' ? 'Annual' : 'Monthly'}
+                        </p>
                       </div>
                     ) : (
                       '—'

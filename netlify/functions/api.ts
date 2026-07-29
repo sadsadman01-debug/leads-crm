@@ -1,5 +1,5 @@
 import type { Handler, HandlerEvent } from '@netlify/functions'
-import { requireUser, AuthError } from './lib/auth.js'
+import { requireUser, AuthError, SubscriptionExpiredError } from './lib/auth.js'
 import { HttpError, json } from './lib/http.js'
 import { resolveOrganizationId } from './lib/permissions.js'
 import {
@@ -574,6 +574,9 @@ export const handler: Handler = async (event) => {
 
     return { ...response, headers: { ...response.headers, ...CORS_HEADERS } }
   } catch (err) {
+    if (err instanceof SubscriptionExpiredError) {
+      return { ...json(402, { error: 'subscription_expired', ...err.details }), headers: CORS_HEADERS }
+    }
     if (err instanceof AuthError) {
       return { ...json(401, { error: err.message }), headers: CORS_HEADERS }
     }
