@@ -25,6 +25,8 @@ export type AuditEventType =
   | 'platform_branding_changed'
   | 'data_export_triggered'
   | 'bulk_leads_deleted'
+  | 'leads_merged'
+  | 'deals_merged'
 
 export interface AuditLogEntry {
   id: string
@@ -82,6 +84,8 @@ export const AUDIT_EVENT_LABELS: Record<AuditEventType, string> = {
   platform_branding_changed: 'Platform branding changed',
   data_export_triggered: 'Data export triggered',
   bulk_leads_deleted: 'Bulk leads deleted',
+  leads_merged: 'Leads merged',
+  deals_merged: 'Deals merged',
 }
 
 /** Security-relevant events get one color family in the UI; every other

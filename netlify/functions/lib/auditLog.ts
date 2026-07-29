@@ -29,6 +29,8 @@ export type AuditEventType =
   | 'platform_branding_changed'
   | 'data_export_triggered'
   | 'bulk_leads_deleted'
+  | 'leads_merged'
+  | 'deals_merged'
 
 interface InsertAuditLogParams {
   eventType: AuditEventType

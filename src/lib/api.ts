@@ -36,6 +36,15 @@ import type { GlobalSearchResponse } from '@/types/search'
 import type { SupportContact } from '@/types/supportContact'
 import type { ExportLogEntry } from '@/types/dataExport'
 import type { AuditEventType, AuditLogFilters, AuditLogListResponse } from '@/types/auditLog'
+import type {
+  LeadDuplicatesResponse,
+  DealDuplicatesResponse,
+  MergeLeadsPayload,
+  MergeDealsPayload,
+  MergedLeadResult,
+  MergedDealResult,
+  MergeSnapshotSummary,
+} from '@/types/duplicateMerge'
 import { withOrgScope } from './orgScope'
 
 class ApiError extends Error {
@@ -146,6 +155,14 @@ export const leadsApi = {
   },
 
   activities: (id: string) => request<{ activities: LeadActivity[] }>(`/leads/${id}/activities`),
+
+  findDuplicates: () => request<LeadDuplicatesResponse>('/leads/duplicates'),
+
+  dismissDuplicate: (leadIdA: string, leadIdB: string) =>
+    request<{ success: true }>('/leads/duplicates/dismiss', { method: 'POST', body: JSON.stringify({ leadIdA, leadIdB }) }),
+
+  merge: (payload: MergeLeadsPayload) =>
+    request<MergedLeadResult>('/leads/merge', { method: 'POST', body: JSON.stringify(payload) }),
 }
 
 export const bulkApi = {
@@ -751,6 +768,20 @@ export const dealsApi = {
     const suffix = qs.toString()
     return request<{ deals: KanbanDeal[]; truncated: boolean }>(`/deals/kanban${suffix ? `?${suffix}` : ''}`)
   },
+
+  findDuplicates: () => request<DealDuplicatesResponse>('/deals/duplicates'),
+
+  dismissDuplicate: (dealIdA: string, dealIdB: string) =>
+    request<{ success: true }>('/deals/duplicates/dismiss', { method: 'POST', body: JSON.stringify({ dealIdA, dealIdB }) }),
+
+  merge: (payload: MergeDealsPayload) =>
+    request<MergedDealResult>('/deals/merge', { method: 'POST', body: JSON.stringify(payload) }),
+}
+
+export const mergeSnapshotsApi = {
+  list: () => request<{ snapshots: MergeSnapshotSummary[] }>('/merge-snapshots'),
+
+  restore: (id: string) => request<{ success: true }>(`/merge-snapshots/${id}/restore`, { method: 'POST' }),
 }
 
 export const revenueApi = {

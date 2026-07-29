@@ -15,6 +15,7 @@ import {
   SlidersHorizontal,
   LayoutDashboard,
   X,
+  Copy,
 } from 'lucide-react'
 import { bulkApi, exportApi, industriesApi, leadsApi, pipelineStagesApi, teamApi, customFieldsApi } from '@/lib/api'
 import { PriorityBadge, ScoreBadge, TagPill, Badge } from '@/components/ui/Badge'
@@ -23,6 +24,7 @@ import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { FiltersBar } from '@/components/FiltersBar'
 import { BulkActionsBar } from '@/components/BulkActionsBar'
 import { ImportModal } from '@/components/ImportModal'
+import { FindLeadDuplicatesModal } from '@/components/leads/FindLeadDuplicatesModal'
 import { KanbanBoard } from '@/components/kanban/KanbanBoard'
 import { useAuth, hasPermission } from '@/contexts/AuthContext'
 import type { LeadFilters } from '@/types/lead'
@@ -104,6 +106,7 @@ export function LeadsList() {
   const [importOpen, setImportOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [view, setView] = useState<View>('table')
+  const [duplicatesOpen, setDuplicatesOpen] = useState(false)
   const debouncedSearch = useDebouncedValue(search, 300)
 
   const { data, isLoading, isError } = useQuery({
@@ -422,6 +425,10 @@ export function LeadsList() {
               )}
             </div>
           )}
+          <button className="btn-secondary" onClick={() => setDuplicatesOpen(true)}>
+            <Copy size={16} />
+            Find Duplicates
+          </button>
           {canImport && (
             <button className="btn-secondary" onClick={() => setImportOpen(true)}>
               <Upload size={16} />
@@ -684,6 +691,7 @@ export function LeadsList() {
       )}
 
       <ImportModal open={importOpen} onClose={() => setImportOpen(false)} onImported={invalidateLeads} />
+      {duplicatesOpen && <FindLeadDuplicatesModal onClose={() => setDuplicatesOpen(false)} />}
     </div>
   )
 }

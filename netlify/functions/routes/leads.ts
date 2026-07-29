@@ -15,10 +15,13 @@ import {
   resolveOrganizationId,
   scopeToOrg,
   applyLeadVisibility,
+  requireAdminOrAbove,
+  requireAal2IfEnrolled,
 } from '../lib/permissions.js'
 import { loadActiveDefinitions, requireRequiredFieldsFilled, mergeCustomFieldValues } from '../lib/customFieldValues.js'
 import { notifyAssignment } from '../lib/notifications.js'
 import { logAuditEvent } from '../lib/auditLog.js'
+import { findLeadDuplicatePairs, groupPairsIntoClusters, dismissalKey } from '../lib/duplicateMatch.js'
 
 export const LEAD_SELECT = `
   id, company_name, contact_name, address, phone, email, website, notes, lead_source, priority,
@@ -667,4 +670,259 @@ export async function bulkAction(event: HandlerEvent, user: AuthedUser) {
   }
 
   throw new HttpError(400, `Unknown bulk action type: ${type}`)
+}
+
+const MAX_DUPLICATE_SCAN_LEADS = 1500
+
+/** Any authenticated team member can VIEW suggestions (scoped to whatever
+ * leads their own visibility permissions already let them see) — but only
+ * Admin/Super Admin can dismiss a pair or actually execute a merge (see
+ * dismissLeadDuplicate/mergeLeads), regardless of any canEditAny grant. */
+export async function findLeadDuplicates(event: HandlerEvent, user: AuthedUser) {
+  const supabase = getSupabaseAdmin()
+  const orgId = resolveOrganizationId(user, event)
+
+  let query = supabase.from('leads').select(LEAD_SELECT)
+  query = scopeToOrg(query as any, orgId) as any
+  query = applyLeadVisibility(query as any, user) as any
+  const { data, error } = await query.order('created_at', { ascending: false }).limit(MAX_DUPLICATE_SCAN_LEADS)
+  if (error) throw new HttpError(500, error.message)
+  const leads = (data ?? []).map(normalizeLead)
+
+  let dismissalsQuery = supabase.from('duplicate_dismissals').select('record_id_a, record_id_b').eq('record_type', 'lead')
+  dismissalsQuery = scopeToOrg(dismissalsQuery as any, orgId) as any
+  const { data: dismissals, error: dismErr } = await dismissalsQuery
+  if (dismErr) throw new HttpError(500, dismErr.message)
+  const dismissedKeys = new Set((dismissals ?? []).map((d) => dismissalKey(d.record_id_a, d.record_id_b)))
+
+  const pairs = findLeadDuplicatePairs(leads).filter((p) => !dismissedKeys.has(dismissalKey(p.a, p.b)))
+  const clusters = groupPairsIntoClusters(leads, pairs)
+
+  const groups = clusters.map((leadsInGroup) => {
+    const ids = new Set(leadsInGroup.map((l) => l.id))
+    const reasons = [...new Set(pairs.filter((p) => ids.has(p.a) && ids.has(p.b)).map((p) => p.reason))]
+    return { leads: leadsInGroup, reasons }
+  })
+
+  return json(200, { groups, truncated: leads.length >= MAX_DUPLICATE_SCAN_LEADS })
+}
+
+/** Body: { leadIdA, leadIdB } — marks a suggested pair as "not a duplicate"
+ * so it stops appearing in future scans. Idempotent: dismissing an
+ * already-dismissed pair is a no-op success, not an error. */
+export async function dismissLeadDuplicate(event: HandlerEvent, user: AuthedUser) {
+  requireAdminOrAbove(user)
+  const supabase = getSupabaseAdmin()
+  const orgId = resolveOrganizationId(user, event)
+  const body = JSON.parse(event.body || '{}')
+  const { leadIdA, leadIdB } = body
+  if (!leadIdA || !leadIdB) throw new HttpError(400, 'leadIdA and leadIdB are required')
+
+  const { data: rows, error: fetchErr } = await supabase
+    .from('leads')
+    .select('id, organization_id')
+    .in('id', [leadIdA, leadIdB])
+  if (fetchErr) throw new HttpError(500, fetchErr.message)
+  if ((rows ?? []).length !== 2 || (rows ?? []).some((r) => (r.organization_id ?? null) !== orgId)) {
+    throw new HttpError(404, 'Lead not found')
+  }
+
+  const { error } = await supabase
+    .from('duplicate_dismissals')
+    .insert({ record_type: 'lead', organization_id: orgId, record_id_a: leadIdA, record_id_b: leadIdB, dismissed_by: user.id })
+  if (error && (error as any).code !== '23505') throw new HttpError(500, error.message)
+
+  return json(200, { success: true })
+}
+
+const MERGEABLE_LEAD_FIELDS = [
+  'company_name', 'contact_name', 'address', 'phone', 'email', 'website', 'notes',
+  'lead_source', 'priority', 'stage_id', 'industry_id', 'assigned_to',
+]
+
+async function fetchLeadForMerge(id: string, orgId: string | null) {
+  const supabase = getSupabaseAdmin()
+  const { data, error } = await supabase.from('leads').select(LEAD_SELECT).eq('id', id).maybeSingle()
+  if (error) throw new HttpError(500, error.message)
+  if (!data) throw new HttpError(404, 'Lead not found')
+  if ((data.organization_id ?? null) !== orgId) throw new HttpError(404, 'Lead not found')
+  return normalizeLead(data)
+}
+
+/** Merges `loserId` into `survivorId`: applies the admin's field-by-field
+ * decisions (already resolved to final values by the frontend, which had
+ * both full records to compare — this endpoint just validates and applies
+ * them), always UNIONs tags/social profiles/attachments (never a pick),
+ * OR-merges the 13 outreach-status toggles (unless explicitly overridden),
+ * reassigns the loser's Deals/Activity Timeline onto the survivor, records a
+ * pre-merge snapshot for undo, then hard-deletes the loser. The survivor
+ * keeps its own id, so any existing links to it remain valid. */
+export async function mergeLeads(event: HandlerEvent, user: AuthedUser) {
+  requireAdminOrAbove(user)
+  await requireAal2IfEnrolled(user)
+  const supabase = getSupabaseAdmin()
+  const orgId = resolveOrganizationId(user, event)
+  const body = JSON.parse(event.body || '{}')
+  const survivorId = body.survivorId
+  const loserId = body.loserId
+  if (!survivorId || !loserId) throw new HttpError(400, 'survivorId and loserId are required')
+  if (survivorId === loserId) throw new HttpError(400, 'Cannot merge a lead with itself')
+
+  const [survivor, loser] = await Promise.all([
+    fetchLeadForMerge(survivorId, orgId),
+    fetchLeadForMerge(loserId, orgId),
+  ])
+
+  // --- Standard fields: apply only what the admin actually changed ---
+  const requestedFields = body.fields ?? {}
+  const fieldUpdate: Record<string, any> = {}
+  const survivorFieldBackup: Record<string, any> = {}
+  for (const key of MERGEABLE_LEAD_FIELDS) {
+    if (!(key in requestedFields)) continue
+    const newValue = requestedFields[key]
+    if (JSON.stringify(newValue ?? null) === JSON.stringify((survivor as any)[key] ?? null)) continue
+    if (key === 'company_name' && !String(newValue ?? '').trim()) throw new HttpError(400, 'company_name cannot be empty')
+    fieldUpdate[key] = newValue
+    survivorFieldBackup[key] = (survivor as any)[key] ?? null
+  }
+
+  // --- Custom fields: field-by-field, same "final value wins" contract ---
+  const defs = await loadActiveDefinitions(orgId, 'leads')
+  const defIds = new Set(defs.map((d) => d.id))
+  const requestedCustomFields = body.customFields ?? {}
+  const nextCustomFields = { ...(survivor.custom_fields ?? {}) }
+  const customFieldsBackup: Record<string, any> = {}
+  for (const [fieldId, value] of Object.entries(requestedCustomFields)) {
+    if (!defIds.has(fieldId)) continue
+    if (JSON.stringify(nextCustomFields[fieldId] ?? null) === JSON.stringify(value ?? null)) continue
+    customFieldsBackup[fieldId] = nextCustomFields[fieldId] ?? null
+    nextCustomFields[fieldId] = value
+  }
+  if (Object.keys(customFieldsBackup).length > 0) fieldUpdate.custom_fields = nextCustomFields
+
+  // --- Outreach status toggles: true-if-either, unless explicitly overridden ---
+  const survivorStatus: Record<string, any> = survivor.status ?? {}
+  const loserStatus: Record<string, any> = loser.status ?? {}
+  const overrides = body.statusOverrides ?? {}
+  const statusUpdate: Record<string, any> = {}
+  const statusBackup: Record<string, any> = {}
+  for (const field of Object.keys(STATUS_FIELDS)) {
+    const orValue = Boolean(survivorStatus[field]) || Boolean(loserStatus[field])
+    const finalValue = field in overrides ? Boolean(overrides[field]) : orValue
+    if (finalValue === Boolean(survivorStatus[field])) continue
+    statusUpdate[field] = finalValue
+    statusBackup[field] = survivorStatus[field] ?? false
+    const tsField = STATUS_FIELDS[field].tsField
+    if (finalValue && !survivorStatus[tsField]) {
+      statusUpdate[tsField] = loserStatus[tsField] ?? new Date().toISOString()
+      statusBackup[tsField] = survivorStatus[tsField] ?? null
+    }
+  }
+
+  if (Object.keys(fieldUpdate).length > 0) {
+    const { error } = await supabase.from('leads').update(fieldUpdate).eq('id', survivorId)
+    if (error) throw new HttpError(500, error.message)
+  }
+  if (Object.keys(statusUpdate).length > 0) {
+    const { error } = await supabase.from('lead_status').update(statusUpdate).eq('lead_id', survivorId)
+    if (error) throw new HttpError(500, error.message)
+  }
+
+  // --- Reassign the loser's Activity Timeline, Deals, and Attachments onto the survivor ---
+  const { data: movedActivities, error: actErr } = await supabase
+    .from('lead_activities')
+    .select('id')
+    .eq('lead_id', loserId)
+  if (actErr) throw new HttpError(500, actErr.message)
+  await supabase.from('lead_activities').update({ lead_id: survivorId }).eq('lead_id', loserId)
+
+  const { data: movedDeals, error: dealErr } = await supabase.from('deals').select('id').eq('lead_id', loserId)
+  if (dealErr) throw new HttpError(500, dealErr.message)
+  await supabase.from('deals').update({ lead_id: survivorId }).eq('lead_id', loserId)
+
+  const { data: movedAttachments, error: attErr } = await supabase
+    .from('lead_attachments')
+    .select('id')
+    .eq('lead_id', loserId)
+  if (attErr) throw new HttpError(500, attErr.message)
+  await supabase.from('lead_attachments').update({ lead_id: survivorId }).eq('lead_id', loserId)
+
+  // --- Union Tags (never a pick — combine both leads') ---
+  const survivorTagIds = new Set(survivor.tags.map((t: any) => t.id))
+  const addedTagIds = loser.tags.map((t: any) => t.id).filter((id: string) => !survivorTagIds.has(id))
+  if (addedTagIds.length > 0) {
+    const { error } = await supabase
+      .from('lead_tags')
+      .upsert(addedTagIds.map((tagId: string) => ({ lead_id: survivorId, tag_id: tagId })), {
+        onConflict: 'lead_id,tag_id',
+        ignoreDuplicates: true,
+      })
+    if (error) throw new HttpError(500, error.message)
+  }
+
+  // --- Union Social Profiles (reassign non-duplicate rows; exact duplicates
+  //     are left on the loser and cascade-delete with it below) ---
+  const survivorSocialKeys = new Set(
+    survivor.social_profiles.map((s: any) => `${s.platform.toLowerCase()}|${s.url.toLowerCase()}`)
+  )
+  const socialToMove = loser.social_profiles.filter(
+    (s: any) => !survivorSocialKeys.has(`${s.platform.toLowerCase()}|${s.url.toLowerCase()}`)
+  )
+  const movedSocialProfileIds = socialToMove.map((s: any) => s.id).filter(Boolean)
+  if (movedSocialProfileIds.length > 0) {
+    await supabase.from('lead_social_profiles').update({ lead_id: survivorId }).in('id', movedSocialProfileIds)
+  }
+
+  // --- Merge note on the survivor's timeline ---
+  const actorLabel = user.nickname || user.email
+  const { data: mergeNote, error: noteErr } = await supabase
+    .from('lead_activities')
+    .insert({
+      lead_id: survivorId,
+      type: 'merge',
+      message: `Merged duplicate lead "${loser.company_name}" into this record — by ${actorLabel}`,
+      created_by: user.id,
+    })
+    .select('id')
+    .single()
+  if (noteErr) throw new HttpError(500, noteErr.message)
+
+  // --- Snapshot for undo, THEN delete the loser (cascades its remaining child rows) ---
+  const { data: snapshot, error: snapErr } = await supabase
+    .from('merge_snapshots')
+    .insert({
+      record_type: 'lead',
+      organization_id: orgId,
+      survivor_id: survivorId,
+      loser_id: loserId,
+      loser_snapshot: loser,
+      survivor_backup: { fields: survivorFieldBackup, customFields: customFieldsBackup, status: statusBackup },
+      moved_activity_ids: (movedActivities ?? []).map((a) => a.id),
+      moved_deal_ids: (movedDeals ?? []).map((d) => d.id),
+      moved_attachment_ids: (movedAttachments ?? []).map((a) => a.id),
+      moved_social_profile_ids: movedSocialProfileIds,
+      added_tag_ids: addedTagIds,
+      merge_note_activity_id: mergeNote.id,
+      merged_by: user.id,
+    })
+    .select('id')
+    .single()
+  if (snapErr) throw new HttpError(500, snapErr.message)
+
+  const { error: delErr } = await supabase.from('leads').delete().eq('id', loserId)
+  if (delErr) throw new HttpError(500, delErr.message)
+
+  await logAuditEvent('leads_merged', user, event, {
+    organizationId: orgId,
+    metadata: {
+      survivorId,
+      loserId,
+      survivorCompanyName: survivor.company_name,
+      loserCompanyName: loser.company_name,
+      snapshotId: snapshot.id,
+    },
+  })
+
+  const result = await getLead(survivorId, orgId, user)
+  return json(result.statusCode, { ...JSON.parse(result.body), mergeSnapshotId: snapshot.id })
 }

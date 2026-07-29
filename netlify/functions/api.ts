@@ -14,6 +14,9 @@ import {
   getKanbanLeads,
   getLeadActivities,
   bulkAction,
+  findLeadDuplicates,
+  dismissLeadDuplicate,
+  mergeLeads,
 } from './routes/leads.js'
 import { listTags } from './routes/tags.js'
 import {
@@ -49,6 +52,9 @@ import {
   updateDealStage,
   deleteDeal,
   getDealsKanban,
+  findDealDuplicates,
+  dismissDealDuplicate,
+  mergeDeals,
 } from './routes/deals.js'
 import { getRevenueSummary } from './routes/revenue.js'
 import {
@@ -127,6 +133,7 @@ import {
 import { generateFullExport, listExportLog } from './routes/dataExport.js'
 import { logAuthEvent, logSecurityEvent } from './routes/auditEvents.js'
 import { listAuditLog, exportAuditLogCsv } from './routes/auditLog.js'
+import { listMergeSnapshots, restoreMergeSnapshot } from './routes/mergeSnapshots.js'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -246,6 +253,15 @@ export const handler: Handler = async (event) => {
         else throw new HttpError(405, 'Method not allowed')
       } else if (id === 'kanban') {
         if (method === 'GET') response = await getKanbanLeads(event, user)
+        else throw new HttpError(405, 'Method not allowed')
+      } else if (id === 'duplicates' && sub === 'dismiss') {
+        if (method === 'POST') response = await dismissLeadDuplicate(event, user)
+        else throw new HttpError(405, 'Method not allowed')
+      } else if (id === 'duplicates') {
+        if (method === 'GET') response = await findLeadDuplicates(event, user)
+        else throw new HttpError(405, 'Method not allowed')
+      } else if (id === 'merge') {
+        if (method === 'POST') response = await mergeLeads(event, user)
         else throw new HttpError(405, 'Method not allowed')
       } else if (sub === 'status') {
         if (method === 'PATCH') response = await updateLeadStatus(id, event, user)
@@ -401,6 +417,15 @@ export const handler: Handler = async (event) => {
       } else if (id === 'kanban') {
         if (method === 'GET') response = await getDealsKanban(event, user)
         else throw new HttpError(405, 'Method not allowed')
+      } else if (id === 'duplicates' && sub === 'dismiss') {
+        if (method === 'POST') response = await dismissDealDuplicate(event, user)
+        else throw new HttpError(405, 'Method not allowed')
+      } else if (id === 'duplicates') {
+        if (method === 'GET') response = await findDealDuplicates(event, user)
+        else throw new HttpError(405, 'Method not allowed')
+      } else if (id === 'merge') {
+        if (method === 'POST') response = await mergeDeals(event, user)
+        else throw new HttpError(405, 'Method not allowed')
       } else if (sub === 'stage') {
         if (method === 'PATCH') response = await updateDealStage(id, event, user)
         else throw new HttpError(405, 'Method not allowed')
@@ -491,6 +516,11 @@ export const handler: Handler = async (event) => {
       const user = await requireUser(event)
       if (!id && method === 'GET') response = await generateFullExport(event, user)
       else if (id === 'log' && method === 'GET') response = await listExportLog(event, user)
+      else throw new HttpError(404, 'Not found')
+    } else if (resource === 'merge-snapshots') {
+      const user = await requireUser(event)
+      if (!id && method === 'GET') response = await listMergeSnapshots(event, user)
+      else if (id && sub === 'restore' && method === 'POST') response = await restoreMergeSnapshot(id, event, user)
       else throw new HttpError(404, 'Not found')
     } else if (resource === 'auth-events') {
       // Public — reached from the Login page right after

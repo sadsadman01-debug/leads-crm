@@ -13,8 +13,12 @@ import {
   resolveOrganizationId,
   scopeToOrg,
   applyDealVisibility,
+  requireAdminOrAbove,
+  requireAal2IfEnrolled,
 } from '../lib/permissions.js'
 import { loadActiveDefinitions, requireRequiredFieldsFilled, mergeCustomFieldValues } from '../lib/customFieldValues.js'
+import { logAuditEvent } from '../lib/auditLog.js'
+import { findDealDuplicatePairs, groupPairsIntoClusters, dismissalKey } from '../lib/duplicateMatch.js'
 
 export const DEAL_SELECT = `
   id, lead_id, name, value, currency, stage_id, probability,
@@ -406,4 +410,163 @@ export async function getDealsKanban(event: HandlerEvent, user: AuthedUser) {
   }))
 
   return json(200, { deals, truncated: deals.length >= KANBAN_MAX_DEALS })
+}
+
+const MAX_DUPLICATE_SCAN_DEALS = 1500
+
+/** Any authenticated team member can VIEW suggestions, scoped to whatever
+ * deals their own visibility permissions already let them see — only
+ * Admin/Super Admin can dismiss a pair or execute a merge. */
+export async function findDealDuplicates(event: HandlerEvent, user: AuthedUser) {
+  const supabase = getSupabaseAdmin()
+  const orgId = resolveOrganizationId(user, event)
+
+  let query = supabase.from('deals').select(DEAL_SELECT)
+  query = scopeToOrg(query as any, orgId) as any
+  query = applyDealVisibility(query as any, user) as any
+  const { data, error } = await query.order('created_at', { ascending: false }).limit(MAX_DUPLICATE_SCAN_DEALS)
+  if (error) throw new HttpError(500, error.message)
+  const deals = (data ?? []).map(normalizeDeal)
+
+  let dismissalsQuery = supabase.from('duplicate_dismissals').select('record_id_a, record_id_b').eq('record_type', 'deal')
+  dismissalsQuery = scopeToOrg(dismissalsQuery as any, orgId) as any
+  const { data: dismissals, error: dismErr } = await dismissalsQuery
+  if (dismErr) throw new HttpError(500, dismErr.message)
+  const dismissedKeys = new Set((dismissals ?? []).map((d) => dismissalKey(d.record_id_a, d.record_id_b)))
+
+  const pairs = findDealDuplicatePairs(deals).filter((p) => !dismissedKeys.has(dismissalKey(p.a, p.b)))
+  const clusters = groupPairsIntoClusters(deals, pairs)
+  const groups = clusters.map((dealsInGroup) => ({ deals: dealsInGroup }))
+
+  return json(200, { groups, truncated: deals.length >= MAX_DUPLICATE_SCAN_DEALS })
+}
+
+export async function dismissDealDuplicate(event: HandlerEvent, user: AuthedUser) {
+  requireAdminOrAbove(user)
+  const supabase = getSupabaseAdmin()
+  const orgId = resolveOrganizationId(user, event)
+  const body = JSON.parse(event.body || '{}')
+  const { dealIdA, dealIdB } = body
+  if (!dealIdA || !dealIdB) throw new HttpError(400, 'dealIdA and dealIdB are required')
+
+  const { data: rows, error: fetchErr } = await supabase
+    .from('deals')
+    .select('id, organization_id')
+    .in('id', [dealIdA, dealIdB])
+  if (fetchErr) throw new HttpError(500, fetchErr.message)
+  if ((rows ?? []).length !== 2 || (rows ?? []).some((r) => (r.organization_id ?? null) !== orgId)) {
+    throw new HttpError(404, 'Deal not found')
+  }
+
+  const { error } = await supabase
+    .from('duplicate_dismissals')
+    .insert({ record_type: 'deal', organization_id: orgId, record_id_a: dealIdA, record_id_b: dealIdB, dismissed_by: user.id })
+  if (error && (error as any).code !== '23505') throw new HttpError(500, error.message)
+
+  return json(200, { success: true })
+}
+
+const MERGEABLE_DEAL_FIELDS = [
+  'name', 'value', 'currency', 'stage_id', 'probability',
+  'expected_close_date', 'actual_close_date', 'outcome_reason', 'owner_id', 'notes',
+]
+
+async function fetchDealForMerge(id: string, orgId: string | null) {
+  const supabase = getSupabaseAdmin()
+  const { data, error } = await supabase.from('deals').select(DEAL_SELECT).eq('id', id).maybeSingle()
+  if (error) throw new HttpError(500, error.message)
+  if (!data) throw new HttpError(404, 'Deal not found')
+  if ((data.organization_id ?? null) !== orgId) throw new HttpError(404, 'Deal not found')
+  return normalizeDeal(data)
+}
+
+/** Deals have no dedicated Activity Timeline table of their own — deal
+ * lifecycle events already log onto their linked Lead's timeline elsewhere
+ * in this file (create/close/delete), so the merge note follows the same
+ * convention rather than introducing a new table. */
+export async function mergeDeals(event: HandlerEvent, user: AuthedUser) {
+  requireAdminOrAbove(user)
+  await requireAal2IfEnrolled(user)
+  const supabase = getSupabaseAdmin()
+  const orgId = resolveOrganizationId(user, event)
+  const body = JSON.parse(event.body || '{}')
+  const survivorId = body.survivorId
+  const loserId = body.loserId
+  if (!survivorId || !loserId) throw new HttpError(400, 'survivorId and loserId are required')
+  if (survivorId === loserId) throw new HttpError(400, 'Cannot merge a deal with itself')
+
+  const [survivor, loser] = await Promise.all([
+    fetchDealForMerge(survivorId, orgId),
+    fetchDealForMerge(loserId, orgId),
+  ])
+
+  const requestedFields = body.fields ?? {}
+  const fieldUpdate: Record<string, any> = {}
+  const survivorFieldBackup: Record<string, any> = {}
+  for (const key of MERGEABLE_DEAL_FIELDS) {
+    if (!(key in requestedFields)) continue
+    const newValue = requestedFields[key]
+    if (JSON.stringify(newValue ?? null) === JSON.stringify((survivor as any)[key] ?? null)) continue
+    if (key === 'name' && !String(newValue ?? '').trim()) throw new HttpError(400, 'name cannot be empty')
+    fieldUpdate[key] = newValue
+    survivorFieldBackup[key] = (survivor as any)[key] ?? null
+  }
+
+  const defs = await loadActiveDefinitions(orgId, 'deals')
+  const defIds = new Set(defs.map((d) => d.id))
+  const requestedCustomFields = body.customFields ?? {}
+  const nextCustomFields = { ...(survivor.custom_fields ?? {}) }
+  const customFieldsBackup: Record<string, any> = {}
+  for (const [fieldId, value] of Object.entries(requestedCustomFields)) {
+    if (!defIds.has(fieldId)) continue
+    if (JSON.stringify(nextCustomFields[fieldId] ?? null) === JSON.stringify(value ?? null)) continue
+    customFieldsBackup[fieldId] = nextCustomFields[fieldId] ?? null
+    nextCustomFields[fieldId] = value
+  }
+  if (Object.keys(customFieldsBackup).length > 0) fieldUpdate.custom_fields = nextCustomFields
+
+  if (Object.keys(fieldUpdate).length > 0) {
+    const { error } = await supabase.from('deals').update(fieldUpdate).eq('id', survivorId)
+    if (error) throw new HttpError(500, error.message)
+  }
+
+  const actorLabel = user.nickname || user.email
+  const { data: mergeNote, error: noteErr } = await supabase
+    .from('lead_activities')
+    .insert({
+      lead_id: survivor.lead_id,
+      type: 'deal',
+      message: `Deal "${loser.name}" merged into "${survivor.name}" — by ${actorLabel}`,
+      created_by: user.id,
+    })
+    .select('id')
+    .single()
+  if (noteErr) throw new HttpError(500, noteErr.message)
+
+  const { data: snapshot, error: snapErr } = await supabase
+    .from('merge_snapshots')
+    .insert({
+      record_type: 'deal',
+      organization_id: orgId,
+      survivor_id: survivorId,
+      loser_id: loserId,
+      loser_snapshot: loser,
+      survivor_backup: { fields: survivorFieldBackup, customFields: customFieldsBackup, status: {} },
+      merge_note_activity_id: mergeNote.id,
+      merged_by: user.id,
+    })
+    .select('id')
+    .single()
+  if (snapErr) throw new HttpError(500, snapErr.message)
+
+  const { error: delErr } = await supabase.from('deals').delete().eq('id', loserId)
+  if (delErr) throw new HttpError(500, delErr.message)
+
+  await logAuditEvent('deals_merged', user, event, {
+    organizationId: orgId,
+    metadata: { survivorId, loserId, survivorName: survivor.name, loserName: loser.name, snapshotId: snapshot.id },
+  })
+
+  const result = await getDeal(survivorId, orgId, user)
+  return json(result.statusCode, { ...JSON.parse(result.body), mergeSnapshotId: snapshot.id })
 }

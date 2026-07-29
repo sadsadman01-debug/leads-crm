@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Plus, Rows3, Columns3, ChevronLeft, ChevronRight, Handshake } from 'lucide-react'
+import { Plus, Rows3, Columns3, ChevronLeft, ChevronRight, Handshake, Copy } from 'lucide-react'
 import { dealsApi, industriesApi, dealStagesApi, teamApi } from '@/lib/api'
 import { formatMaskedCurrency } from '@/lib/currency'
 import { Badge } from '@/components/ui/Badge'
 import { Avatar } from '@/components/ui/RoleBadge'
 import { DealForm } from '@/components/DealForm'
 import { DealKanbanBoard } from '@/components/kanban/DealKanbanBoard'
+import { FindDealDuplicatesModal } from '@/components/deals/FindDealDuplicatesModal'
 import { useAuth } from '@/contexts/AuthContext'
 import type { Deal, DealFilters } from '@/types/deal'
 
@@ -23,6 +24,7 @@ export function DealsList() {
   const [filters, setFilters] = useState<DealFilters>({})
   const [formOpen, setFormOpen] = useState(false)
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null)
+  const [duplicatesOpen, setDuplicatesOpen] = useState(false)
 
   // Opened via Global Search — jump straight to that deal's edit modal, then
   // clear the state so a later back/forward doesn't reopen it.
@@ -91,6 +93,10 @@ export function DealsList() {
               Kanban
             </button>
           </div>
+          <button className="btn-secondary" onClick={() => setDuplicatesOpen(true)}>
+            <Copy size={16} />
+            Find Duplicates
+          </button>
           <button
             className="btn-primary"
             onClick={() => {
@@ -103,6 +109,8 @@ export function DealsList() {
           </button>
         </div>
       </div>
+
+      {duplicatesOpen && <FindDealDuplicatesModal onClose={() => setDuplicatesOpen(false)} />}
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {profile && (
