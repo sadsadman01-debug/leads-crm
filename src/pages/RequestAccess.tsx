@@ -113,6 +113,10 @@ export function RequestAccess() {
                   <PartyPopper size={15} />
                   🎉 Early Bird pricing: ${pricing.monthly_price_usd}/month
                 </p>
+                <p className="mt-1 text-center text-xs text-base-400">
+                  <span className="line-through">${pricing.standard_price_usd}/month</span>{' '}
+                  <span className="font-medium text-success">save ${pricing.standard_price_usd - pricing.monthly_price_usd}/month</span>
+                </p>
                 <p className="mt-1 text-center text-xs font-medium text-warn">Only {pricing.spots_remaining} Early Bird spots left!</p>
                 {pricing.promotional_benefits.length > 0 && (
                   <ul className="mt-3 space-y-1.5 text-xs text-base-300">
@@ -136,21 +140,30 @@ export function RequestAccess() {
                   </p>
                 )}
                 <div className="flex gap-2">
-                  {(['monthly', 'annual'] as BillingCycle[]).map((cycle) => (
-                    <button
-                      key={cycle}
-                      type="button"
-                      onClick={() => setBillingCycle(cycle)}
-                      className={`flex-1 rounded-lg border px-3 py-2.5 text-center text-sm transition-colors ${
-                        billingCycle === cycle
-                          ? 'border-accent-500 bg-accent-500/15 text-accent-400'
-                          : 'border-base-700/60 text-base-300 hover:bg-base-800'
-                      }`}
-                    >
-                      <span className="block font-semibold">{cycle === 'monthly' ? `$${pricing.monthly_price_usd}/mo` : `$${pricing.annual_total_usd}/yr`}</span>
-                      <span className="block text-xs text-base-400">{cycle === 'monthly' ? 'Monthly' : 'Annual (save 20%)'}</span>
-                    </button>
-                  ))}
+                  {(['monthly', 'annual'] as BillingCycle[]).map((cycle) => {
+                    const price = cycle === 'monthly' ? pricing.monthly_price_usd : pricing.annual_total_usd
+                    const standardPrice = cycle === 'monthly' ? pricing.standard_price_usd : pricing.standard_annual_total_usd
+                    const showStandard = pricing.pricing_tier === 'early_bird' && standardPrice > price
+                    return (
+                      <button
+                        key={cycle}
+                        type="button"
+                        onClick={() => setBillingCycle(cycle)}
+                        className={`flex-1 rounded-lg border px-3 py-2.5 text-center text-sm transition-colors ${
+                          billingCycle === cycle
+                            ? 'border-accent-500 bg-accent-500/15 text-accent-400'
+                            : 'border-base-700/60 text-base-300 hover:bg-base-800'
+                        }`}
+                      >
+                        <span className="block font-semibold">
+                          {showStandard && <span className="mr-1.5 font-normal text-base-500 line-through">${standardPrice}</span>}
+                          ${price}
+                          {cycle === 'monthly' ? '/mo' : '/yr'}
+                        </span>
+                        <span className="block text-xs text-base-400">{cycle === 'monthly' ? 'Monthly' : 'Annual (save 20%)'}</span>
+                      </button>
+                    )
+                  })}
                 </div>
                 {pricing.payment_instructions && (
                   <p className="mt-3 whitespace-pre-wrap text-xs text-base-500">{pricing.payment_instructions}</p>

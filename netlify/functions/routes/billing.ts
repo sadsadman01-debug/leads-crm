@@ -20,8 +20,14 @@ const DUE_SOON_DAYS = 5
 export async function getPublicPricing() {
   const settings = await getOrCreateBillingSettingsRow()
   const tier = await computeCurrentPricingTier(settings)
+  const standardPrice = Number(settings.standard_price_usd)
   return json(200, {
     ...tier,
+    // Always the current Standard rate, regardless of which tier applies —
+    // lets the Request Access form show "was $X, now $Y" savings while
+    // Early Bird is active.
+    standard_price_usd: standardPrice,
+    standard_annual_total_usd: computeAnnualTotal(standardPrice),
     payment_instructions: settings.payment_instructions,
     // Only meaningful while Early Bird spots remain — the frontend hides the
     // promotional banner entirely once spots_remaining is 0.

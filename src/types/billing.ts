@@ -7,6 +7,11 @@ export interface PublicPricing {
   pricing_tier: PricingTier
   monthly_price_usd: number
   annual_total_usd: number
+  /** The current Standard rate, regardless of which tier actually applies —
+   * lets the Request Access form show "was $X, now $Y" savings while Early
+   * Bird is active. */
+  standard_price_usd: number
+  standard_annual_total_usd: number
   spots_remaining: number
   payment_instructions: string | null
   promotional_benefits: string[]
