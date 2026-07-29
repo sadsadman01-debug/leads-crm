@@ -74,6 +74,7 @@ import {
   listSignupRequests,
   approveSignupRequest,
   rejectSignupRequest,
+  updateSignupRequestPaymentStatus,
 } from './routes/signupRequests.js'
 import {
   createPasswordResetRequest,
@@ -134,6 +135,14 @@ import { generateFullExport, listExportLog } from './routes/dataExport.js'
 import { logAuthEvent, logSecurityEvent } from './routes/auditEvents.js'
 import { listAuditLog, exportAuditLogCsv } from './routes/auditLog.js'
 import { listMergeSnapshots, restoreMergeSnapshot } from './routes/mergeSnapshots.js'
+import {
+  getPublicPricing,
+  getBillingSettings,
+  updateBillingSettings,
+  listBilling,
+  recordPayment,
+  getMyOrgBilling,
+} from './routes/billing.js'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -175,6 +184,7 @@ export const handler: Handler = async (event) => {
         if (!id && method === 'GET') response = await listSignupRequests(user)
         else if (id && sub === 'approve' && method === 'POST') response = await approveSignupRequest(id, event, user)
         else if (id && sub === 'reject' && method === 'POST') response = await rejectSignupRequest(id, event, user)
+        else if (id && sub === 'payment-status' && method === 'PATCH') response = await updateSignupRequestPaymentStatus(id, event, user)
         else throw new HttpError(404, 'Not found')
       }
     } else if (resource === 'password-reset-requests') {
@@ -522,6 +532,20 @@ export const handler: Handler = async (event) => {
       if (!id && method === 'GET') response = await listMergeSnapshots(event, user)
       else if (id && sub === 'restore' && method === 'POST') response = await restoreMergeSnapshot(id, event, user)
       else throw new HttpError(404, 'Not found')
+    } else if (resource === 'billing') {
+      // GET pricing is the only unauthenticated read here — the Request
+      // Access page needs the current price before any session exists.
+      if (id === 'pricing' && method === 'GET') {
+        response = await getPublicPricing()
+      } else {
+        const user = await requireUser(event)
+        if (id === 'settings' && method === 'GET') response = await getBillingSettings(event, user)
+        else if (id === 'settings' && method === 'PATCH') response = await updateBillingSettings(event, user)
+        else if (id === 'my-organization' && method === 'GET') response = await getMyOrgBilling(event, user)
+        else if (!id && method === 'GET') response = await listBilling(event, user)
+        else if (id && sub === 'record-payment' && method === 'POST') response = await recordPayment(id, event, user)
+        else throw new HttpError(404, 'Not found')
+      }
     } else if (resource === 'auth-events') {
       // Public — reached from the Login page right after
       // supabase.auth.signInWithPassword() resolves, success or failure alike;

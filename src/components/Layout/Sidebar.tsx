@@ -19,6 +19,7 @@ import {
   ShieldAlert,
   LifeBuoy,
   ScrollText,
+  CircleDollarSign,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react'
@@ -26,7 +27,7 @@ import clsx from 'clsx'
 import { useAuth } from '@/contexts/AuthContext'
 import { useOrg } from '@/contexts/OrgContext'
 import { RoleBadge, Avatar } from '@/components/ui/RoleBadge'
-import { signupRequestsApi, passwordResetRequestsApi, mfaResetRequestsApi, brandingApi, platformBrandingApi } from '@/lib/api'
+import { signupRequestsApi, passwordResetRequestsApi, mfaResetRequestsApi, brandingApi, platformBrandingApi, billingApi } from '@/lib/api'
 
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -73,6 +74,14 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
     refetchInterval: 60_000,
   })
   const pendingMfaResetCount = (mfaResetData?.requests ?? []).filter((r) => r.status === 'pending').length
+
+  const { data: billingData } = useQuery({
+    queryKey: ['billing'],
+    queryFn: billingApi.list,
+    enabled: isSuperAdmin,
+    refetchInterval: 60_000,
+  })
+  const overdueBillingCount = (billingData?.organizations ?? []).filter((o) => o.billing_status === 'overdue').length
 
   const { data: branding } = useQuery({ queryKey: ['org-branding'], queryFn: brandingApi.get })
   const { data: platformBranding } = useQuery({ queryKey: ['platform-branding'], queryFn: platformBrandingApi.get })
@@ -232,6 +241,11 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           {isSuperAdmin && (
             <NavItem to="/audit-log" icon={ScrollText}>
               Audit Log
+            </NavItem>
+          )}
+          {isSuperAdmin && (
+            <NavItem to="/billing" icon={CircleDollarSign} badge={overdueBillingCount}>
+              Billing
             </NavItem>
           )}
           {navItems.map(({ to, label, icon: Icon }) => (

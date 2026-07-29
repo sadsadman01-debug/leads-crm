@@ -14,7 +14,7 @@ export async function listOrganizations(user: AuthedUser) {
 
   const { data: orgs, error } = await supabase
     .from('organizations')
-    .select('id, name, status, created_at')
+    .select('id, name, status, created_at, pricing_tier, monthly_price_usd, payment_status, next_payment_due_date')
     .order('created_at', { ascending: true })
   if (error) throw new HttpError(500, error.message)
 
@@ -55,6 +55,10 @@ export async function listOrganizations(user: AuthedUser) {
       name: org.name,
       status: org.status,
       created_at: org.created_at,
+      pricing_tier: org.pricing_tier,
+      monthly_price_usd: org.monthly_price_usd,
+      payment_status: org.payment_status,
+      next_payment_due_date: org.next_payment_due_date,
       admin: adminByOrg.get(org.id) ?? null,
       userCount: userCountByOrg.get(org.id) ?? 0,
       leadCount: leadCountByOrg.get(org.id) ?? 0,
@@ -67,7 +71,11 @@ export async function listOrganizations(user: AuthedUser) {
 export async function getOrganization(id: string, user: AuthedUser) {
   requireSuperAdmin(user)
   const supabase = getSupabaseAdmin()
-  const { data, error } = await supabase.from('organizations').select('id, name, status, created_at').eq('id', id).maybeSingle()
+  const { data, error } = await supabase
+    .from('organizations')
+    .select('id, name, status, created_at, pricing_tier, monthly_price_usd, payment_status, next_payment_due_date')
+    .eq('id', id)
+    .maybeSingle()
   if (error) throw new HttpError(500, error.message)
   if (!data) throw new HttpError(404, 'Organization not found')
   return json(200, data)

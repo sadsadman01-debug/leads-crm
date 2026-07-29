@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { useMutation } from '@tanstack/react-query'
-import { Building2, ArrowLeft, AlertCircle, Loader2, CheckCircle2 } from 'lucide-react'
-import { signupRequestsApi } from '@/lib/api'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { Building2, ArrowLeft, AlertCircle, Loader2, CheckCircle2, Sparkles } from 'lucide-react'
+import { signupRequestsApi, billingApi } from '@/lib/api'
 import { usePlatformBranding } from '@/hooks/usePlatformBranding'
 import { PreAuthHelpWidget } from '@/components/PreAuthHelpWidget'
+import { PRICING_TIER_LABELS } from '@/types/billing'
 
 export function RequestAccess() {
   usePlatformBranding()
@@ -13,6 +14,8 @@ export function RequestAccess() {
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [message, setMessage] = useState('')
+
+  const { data: pricing } = useQuery({ queryKey: ['public-pricing'], queryFn: billingApi.getPublicPricing })
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -56,6 +59,18 @@ export function RequestAccess() {
             <p className="mt-2 text-sm text-base-400">
               Thanks! Your request has been submitted. Our team will review it and reach out to you by email soon.
             </p>
+            {pricing && (
+              <div className="mt-4 w-full rounded-lg bg-base-850 p-3 text-left text-sm">
+                <p className="text-base-200">
+                  Your locked-in rate: <strong className="text-base-100">${pricing.monthly_price_usd}/month</strong>{' '}
+                  <span className="text-base-500">({PRICING_TIER_LABELS[pricing.pricing_tier]})</span>
+                </p>
+                {pricing.payment_instructions && (
+                  <p className="mt-2 whitespace-pre-wrap text-xs text-base-400">{pricing.payment_instructions}</p>
+                )}
+                <p className="mt-2 text-xs text-base-500">Our team will review your request and confirm payment details with you.</p>
+              </div>
+            )}
             <Link to="/login" className="btn-secondary mt-6">
               <ArrowLeft size={16} />
               Back to Sign In
@@ -72,6 +87,21 @@ export function RequestAccess() {
                 Tell us a bit about your business and we'll set up your account.
               </p>
             </div>
+
+            {pricing && (
+              <div className="mb-6 rounded-xl border border-accent-500/30 bg-accent-500/10 p-4 text-center">
+                <p className="flex items-center justify-center gap-1.5 text-sm font-semibold text-accent-400">
+                  <Sparkles size={15} />
+                  {pricing.pricing_tier === 'early_bird' ? '🎉 Early Bird pricing' : 'Pricing'}: ${pricing.monthly_price_usd}/month
+                </p>
+                {pricing.pricing_tier === 'early_bird' && (
+                  <p className="mt-1 text-xs text-base-400">Only {pricing.spots_remaining} Early Bird spots left!</p>
+                )}
+                {pricing.payment_instructions && (
+                  <p className="mt-2 whitespace-pre-wrap text-xs text-base-500">{pricing.payment_instructions}</p>
+                )}
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>

@@ -11,6 +11,10 @@ export interface OrganizationSummary extends Organization {
   leadCount: number
   dealCount: number
   openPipelineValue: number
+  pricing_tier: 'early_bird' | 'standard' | null
+  monthly_price_usd: number | null
+  payment_status: 'pending' | 'received' | 'waived' | null
+  next_payment_due_date: string | null
 }
 
 export interface BrandPaletteColor {

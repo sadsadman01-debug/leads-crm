@@ -14,6 +14,8 @@ import { CustomFieldsSettings } from '@/components/CustomFieldsSettings'
 import { QuotaSettings } from '@/components/QuotaSettings'
 import { BrandingSettings } from '@/components/BrandingSettings'
 import { PlatformBrandingSettings } from '@/components/PlatformBrandingSettings'
+import { BillingSettings } from '@/components/BillingSettings'
+import { OrgBillingNotice } from '@/components/OrgBillingNotice'
 import { SupportContactSettings } from '@/components/SupportContactSettings'
 import { SecuritySettings } from '@/components/SecuritySettings'
 import { DataExportSettings } from '@/components/DataExportSettings'
@@ -70,6 +72,12 @@ export function Settings() {
             <PlatformBrandingSettings />
           </Section>
         )}
+        {isSuperAdmin && (
+          <Section canWrite>
+            <BillingSettings />
+          </Section>
+        )}
+        {!isSuperAdmin && !isUser && <OrgBillingNotice />}
         {isSuperAdmin && (
           <Section canWrite>
             <SupportContactSettings />

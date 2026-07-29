@@ -5,10 +5,11 @@ import { requireSuperAdmin, requireAal2IfEnrolled } from '../lib/permissions.js'
 import { generateTempPassword } from '../lib/passwordGen.js'
 import { notifySuperAdmins } from '../lib/notifications.js'
 import { insertAuditLog, logAuditEvent, getClientIp } from '../lib/auditLog.js'
+import { getOrCreateBillingSettingsRow, computeCurrentPricingTier } from '../lib/billingSettings.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const COLUMNS =
-  'id, organization_name, contact_name, email, phone, message, status, requested_at, reviewed_at, reviewed_by, rejection_reason'
+  'id, organization_name, contact_name, email, phone, message, status, requested_at, reviewed_at, reviewed_by, rejection_reason, pricing_tier, monthly_price_usd, payment_status'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -29,9 +30,14 @@ export async function createSignupRequest(event: HandlerEvent) {
   if (!email) throw new HttpError(400, 'Email is required')
   if (!EMAIL_RE.test(email)) throw new HttpError(400, 'Enter a valid email address')
 
+  // Locked in NOW, not at approval time, so a review delay never changes the
+  // price a requester was shown when they submitted.
+  const billingSettings = await getOrCreateBillingSettingsRow()
+  const { pricing_tier, monthly_price_usd } = await computeCurrentPricingTier(billingSettings)
+
   const { data, error } = await supabase
     .from('signup_requests')
-    .insert({ organization_name, contact_name, email, phone, message, status: 'pending' })
+    .insert({ organization_name, contact_name, email, phone, message, status: 'pending', pricing_tier, monthly_price_usd })
     .select(COLUMNS)
     .single()
 
@@ -83,12 +89,33 @@ export async function approveSignupRequest(id: string, event: HandlerEvent, user
   const request = await getRequestOrThrow(id)
   if (request.status !== 'pending') throw new HttpError(400, 'This request has already been reviewed')
 
+  const body = JSON.parse(event.body || '{}')
+  // The Payment Status shown in the approval confirmation modal is whatever
+  // is already set on the request — this lets the Super Admin finalize a
+  // last-second change (e.g. Pending -> Received) in the same action.
+  const finalPaymentStatus = ['pending', 'received', 'waived'].includes(body.payment_status)
+    ? body.payment_status
+    : request.payment_status
+
   const temporaryPassword = generateTempPassword()
+  const now = new Date()
+  const firstPaymentConfirmedAt = now.toISOString()
+  const nextPaymentDueDate = new Date(now)
+  nextPaymentDueDate.setMonth(nextPaymentDueDate.getMonth() + 1)
 
   const { data: org, error: orgErr } = await supabase
     .from('organizations')
-    .insert({ name: request.organization_name, created_by: user.id, status: 'active' })
-    .select('id, name')
+    .insert({
+      name: request.organization_name,
+      created_by: user.id,
+      status: 'active',
+      pricing_tier: request.pricing_tier,
+      monthly_price_usd: request.monthly_price_usd,
+      payment_status: finalPaymentStatus,
+      first_payment_confirmed_at: firstPaymentConfirmedAt,
+      next_payment_due_date: nextPaymentDueDate.toISOString().slice(0, 10),
+    })
+    .select('id, name, pricing_tier, monthly_price_usd, payment_status, next_payment_due_date')
     .single()
   if (orgErr) throw new HttpError(500, orgErr.message)
 
@@ -120,7 +147,7 @@ export async function approveSignupRequest(id: string, event: HandlerEvent, user
 
   const { data: updatedRequest, error: reqErr } = await supabase
     .from('signup_requests')
-    .update({ status: 'approved', reviewed_at: new Date().toISOString(), reviewed_by: user.id })
+    .update({ status: 'approved', reviewed_at: new Date().toISOString(), reviewed_by: user.id, payment_status: finalPaymentStatus })
     .eq('id', id)
     .select(COLUMNS)
     .single()
@@ -165,6 +192,34 @@ export async function rejectSignupRequest(id: string, event: HandlerEvent, user:
 
   await logAuditEvent('signup_request_rejected', user, event, {
     metadata: { organization_name: request.organization_name, email: request.email, rejection_reason },
+  })
+
+  return json(200, data)
+}
+
+/** Body: { payment_status: 'pending' | 'received' | 'waived' } — settable any
+ * time before (or as part of) approval, so the Super Admin can mark payment
+ * confirmed once it actually arrives, without having to approve immediately. */
+export async function updateSignupRequestPaymentStatus(id: string, event: HandlerEvent, user: AuthedUser) {
+  requireSuperAdmin(user)
+  const supabase = getSupabaseAdmin()
+  const request = await getRequestOrThrow(id)
+  const body = JSON.parse(event.body || '{}')
+
+  if (!['pending', 'received', 'waived'].includes(body.payment_status)) {
+    throw new HttpError(400, "payment_status must be 'pending', 'received', or 'waived'")
+  }
+
+  const { data, error } = await supabase
+    .from('signup_requests')
+    .update({ payment_status: body.payment_status })
+    .eq('id', id)
+    .select(COLUMNS)
+    .single()
+  if (error) throw new HttpError(500, error.message)
+
+  await logAuditEvent('payment_status_changed', user, event, {
+    metadata: { organization_name: request.organization_name, from: request.payment_status, to: body.payment_status },
   })
 
   return json(200, data)

@@ -31,6 +31,8 @@ export type AuditEventType =
   | 'bulk_leads_deleted'
   | 'leads_merged'
   | 'deals_merged'
+  | 'payment_recorded'
+  | 'payment_status_changed'
 
 interface InsertAuditLogParams {
   eventType: AuditEventType

@@ -26,6 +26,7 @@ import {
   FileDown,
   Settings2,
   Combine,
+  CircleDollarSign,
   type LucideIcon,
 } from 'lucide-react'
 import { auditLogApi, organizationsApi } from '@/lib/api'
@@ -69,6 +70,8 @@ const EVENT_ICONS: Record<AuditEventType, LucideIcon> = {
   bulk_leads_deleted: Trash2,
   leads_merged: Combine,
   deals_merged: Combine,
+  payment_recorded: CircleDollarSign,
+  payment_status_changed: CircleDollarSign,
 }
 
 const ALL_EVENT_TYPES = Object.keys(AUDIT_EVENT_LABELS) as AuditEventType[]

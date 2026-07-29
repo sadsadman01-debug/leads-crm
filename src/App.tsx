@@ -26,6 +26,7 @@ import { PasswordResetRequestsPage } from '@/pages/PasswordResetRequests/Passwor
 import { MfaResetRequestsPage } from '@/pages/MfaResetRequests/MfaResetRequestsPage'
 import { SupportContactsPage } from '@/pages/SupportContacts/SupportContactsPage'
 import { AuditLogPage } from '@/pages/AuditLog/AuditLogPage'
+import { BillingPage } from '@/pages/Billing/BillingPage'
 import { NotificationsPage } from '@/pages/NotificationsPage'
 import { OfflineBanner } from '@/components/OfflineBanner'
 import { PwaUpdatePrompt } from '@/components/PwaUpdatePrompt'
@@ -66,6 +67,7 @@ export default function App() {
                   <Route path="/mfa-reset-requests" element={<MfaResetRequestsPage />} />
                   <Route path="/support-contacts" element={<SupportContactsPage />} />
                   <Route path="/audit-log" element={<AuditLogPage />} />
+                  <Route path="/billing" element={<BillingPage />} />
                 </Route>
                 <Route
                   path="/dashboard"

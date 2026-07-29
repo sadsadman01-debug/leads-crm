@@ -45,6 +45,7 @@ import type {
   MergedDealResult,
   MergeSnapshotSummary,
 } from '@/types/duplicateMerge'
+import type { PublicPricing, BillingSettings, OrganizationBillingRow, MyOrgBilling, PaymentStatus } from '@/types/billing'
 import { withOrgScope } from './orgScope'
 
 class ApiError extends Error {
@@ -540,10 +541,34 @@ export const signupRequestsApi = {
 
   list: () => request<{ requests: SignupRequest[] }>('/signup-requests'),
 
-  approve: (id: string) => request<ApproveSignupRequestResult>(`/signup-requests/${id}/approve`, { method: 'POST' }),
+  approve: (id: string, payment_status?: PaymentStatus) =>
+    request<ApproveSignupRequestResult>(`/signup-requests/${id}/approve`, {
+      method: 'POST',
+      body: JSON.stringify(payment_status ? { payment_status } : {}),
+    }),
 
   reject: (id: string, rejection_reason?: string) =>
     request<SignupRequest>(`/signup-requests/${id}/reject`, { method: 'POST', body: JSON.stringify({ rejection_reason }) }),
+
+  updatePaymentStatus: (id: string, payment_status: PaymentStatus) =>
+    request<SignupRequest>(`/signup-requests/${id}/payment-status`, { method: 'PATCH', body: JSON.stringify({ payment_status }) }),
+}
+
+export const billingApi = {
+  /** Public — reachable from the Login/Request Access pages before any session exists. */
+  getPublicPricing: () => requestPublic<PublicPricing>('/billing/pricing'),
+
+  getSettings: () => request<BillingSettings>('/billing/settings'),
+
+  updateSettings: (payload: Partial<Pick<BillingSettings, 'payment_instructions' | 'early_bird_threshold' | 'early_bird_price_usd' | 'standard_price_usd'>>) =>
+    request<BillingSettings>('/billing/settings', { method: 'PATCH', body: JSON.stringify(payload) }),
+
+  list: () => request<{ organizations: OrganizationBillingRow[] }>('/billing'),
+
+  recordPayment: (organizationId: string, payload: { amount_usd: number; paid_at: string; notes?: string }) =>
+    request<OrganizationBillingRow>(`/billing/${organizationId}/record-payment`, { method: 'POST', body: JSON.stringify(payload) }),
+
+  getMyOrganization: () => request<MyOrgBilling>('/billing/my-organization'),
 }
 
 export const passwordResetRequestsApi = {

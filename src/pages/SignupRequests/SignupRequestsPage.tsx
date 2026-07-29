@@ -1,11 +1,18 @@
 import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { UserPlus2, Mail, Phone } from 'lucide-react'
 import { signupRequestsApi } from '@/lib/api'
 import { Badge } from '@/components/ui/Badge'
+import { PRICING_TIER_LABELS, type PaymentStatus } from '@/types/billing'
 import type { SignupRequest, SignupRequestStatus } from '@/types/signupRequest'
 import { ApproveFlow } from './ApproveFlow'
 import { RejectModal } from './RejectModal'
+
+const PAYMENT_STATUS_TONE: Record<PaymentStatus, 'warn' | 'success' | 'neutral'> = {
+  pending: 'warn',
+  received: 'success',
+  waived: 'neutral',
+}
 
 type Tab = 'pending' | 'approved' | 'rejected' | 'all'
 
@@ -16,12 +23,19 @@ const STATUS_TONE: Record<SignupRequestStatus, 'warn' | 'success' | 'danger'> = 
 }
 
 export function SignupRequestsPage() {
+  const queryClient = useQueryClient()
   const [tab, setTab] = useState<Tab>('pending')
   const [approving, setApproving] = useState<SignupRequest | null>(null)
   const [rejecting, setRejecting] = useState<SignupRequest | null>(null)
 
   const { data, isLoading } = useQuery({ queryKey: ['signup-requests'], queryFn: signupRequestsApi.list })
   const requests = data?.requests ?? []
+
+  const paymentStatusMutation = useMutation({
+    mutationFn: ({ id, payment_status }: { id: string; payment_status: PaymentStatus }) =>
+      signupRequestsApi.updatePaymentStatus(id, payment_status),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['signup-requests'] }),
+  })
 
   const pendingCount = useMemo(() => requests.filter((r) => r.status === 'pending').length, [requests])
 
@@ -73,6 +87,8 @@ export function SignupRequestsPage() {
                 <th className="py-2 pr-3 font-medium">Organization</th>
                 <th className="px-3 py-2 font-medium">Contact</th>
                 <th className="px-3 py-2 font-medium">Message</th>
+                <th className="px-3 py-2 font-medium">Pricing</th>
+                <th className="px-3 py-2 font-medium">Payment</th>
                 <th className="px-3 py-2 font-medium">Requested</th>
                 <th className="px-3 py-2 font-medium">Status</th>
                 <th className="px-3 py-2 font-medium">Actions</th>
@@ -97,6 +113,32 @@ export function SignupRequestsPage() {
                   </td>
                   <td className="max-w-[260px] px-3 py-3 text-xs text-base-400">
                     {r.message || <span className="text-base-500">—</span>}
+                  </td>
+                  <td className="px-3 py-3 text-base-300">
+                    {r.pricing_tier ? (
+                      <div>
+                        <p className="font-medium text-base-100">${r.monthly_price_usd}/mo</p>
+                        <p className="text-xs text-base-500">{PRICING_TIER_LABELS[r.pricing_tier]}</p>
+                      </div>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
+                  <td className="px-3 py-3">
+                    {r.status === 'pending' ? (
+                      <select
+                        className="input w-auto py-1 text-xs"
+                        value={r.payment_status}
+                        disabled={paymentStatusMutation.isPending}
+                        onChange={(e) => paymentStatusMutation.mutate({ id: r.id, payment_status: e.target.value as PaymentStatus })}
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="received">Received</option>
+                        <option value="waived">Waived</option>
+                      </select>
+                    ) : (
+                      <Badge tone={PAYMENT_STATUS_TONE[r.payment_status]}>{r.payment_status}</Badge>
+                    )}
                   </td>
                   <td className="px-3 py-3 text-base-400">{new Date(r.requested_at).toLocaleDateString()}</td>
                   <td className="px-3 py-3">
