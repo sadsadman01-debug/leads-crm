@@ -19,6 +19,8 @@ export interface SignupRequest {
   payment_status: PaymentStatus
   billing_cycle: BillingCycle
   annual_total_usd: number | null
+  referred_by_affiliate_id: string | null
+  referred_by_affiliate_name?: string | null
 }
 
 export interface ApproveSignupRequestResult {

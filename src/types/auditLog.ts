@@ -30,12 +30,18 @@ export type AuditEventType =
   | 'payment_recorded'
   | 'payment_status_changed'
   | 'subscription_expired'
+  | 'affiliate_application_submitted'
+  | 'affiliate_approved'
+  | 'affiliate_rejected'
+  | 'affiliate_commission_generated'
+  | 'withdrawal_requested'
+  | 'withdrawal_status_changed'
 
 export interface AuditLogEntry {
   id: string
   event_type: AuditEventType
   actor_profile_id: string | null
-  actor_role: 'super_admin' | 'admin' | 'user' | null
+  actor_role: 'super_admin' | 'admin' | 'user' | 'affiliate' | null
   actor_nickname: string | null
   organization_id: string | null
   organization_name: string | null
@@ -92,6 +98,12 @@ export const AUDIT_EVENT_LABELS: Record<AuditEventType, string> = {
   payment_recorded: 'Payment recorded',
   payment_status_changed: 'Payment status changed',
   subscription_expired: 'Subscription expired (access blocked)',
+  affiliate_application_submitted: 'Affiliate application submitted',
+  affiliate_approved: 'Affiliate approved',
+  affiliate_rejected: 'Affiliate application rejected',
+  affiliate_commission_generated: 'Affiliate commission generated',
+  withdrawal_requested: 'Withdrawal requested',
+  withdrawal_status_changed: 'Withdrawal status changed',
 }
 
 /** Security-relevant events get one color family in the UI; every other

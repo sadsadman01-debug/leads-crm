@@ -127,7 +127,12 @@ export function OrganizationsOverview() {
             <tbody>
               {orgs.map((org) => (
                 <tr key={org.id} className="border-b border-base-800">
-                  <td className="py-3 pr-3 font-medium text-base-100">{org.name}</td>
+                  <td className="py-3 pr-3">
+                    <p className="font-medium text-base-100">{org.name}</p>
+                    {org.referred_by_affiliate_name && (
+                      <p className="mt-0.5 text-xs text-accent-400">Referred by: {org.referred_by_affiliate_name}</p>
+                    )}
+                  </td>
                   <td className="px-3 py-3 text-base-300">
                     {org.admin ? org.admin.nickname || org.admin.email : <span className="text-base-500">—</span>}
                   </td>

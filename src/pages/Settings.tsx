@@ -20,6 +20,7 @@ import { SupportContactSettings } from '@/components/SupportContactSettings'
 import { SecuritySettings } from '@/components/SecuritySettings'
 import { DataExportSettings } from '@/components/DataExportSettings'
 import { RecentlyMergedSettings } from '@/components/RecentlyMergedSettings'
+import { AffiliateProgramSettings } from '@/components/AffiliateProgramSettings'
 
 /** Wraps a settings section in a disabled fieldset unless the caller passes
  * (or is granted) write access — same "view only, greyed out" convention
@@ -75,6 +76,11 @@ export function Settings() {
         {isSuperAdmin && (
           <Section canWrite>
             <BillingSettings />
+          </Section>
+        )}
+        {isSuperAdmin && (
+          <Section canWrite>
+            <AffiliateProgramSettings />
           </Section>
         )}
         {!isSuperAdmin && !isUser && <OrgBillingNotice />}

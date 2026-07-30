@@ -9,7 +9,7 @@ import { getOrCreateBillingSettingsRow, computeCurrentPricingTier, computeAnnual
 import type { AuthedUser } from '../lib/auth.js'
 
 const COLUMNS =
-  'id, organization_name, contact_name, email, phone, message, status, requested_at, reviewed_at, reviewed_by, rejection_reason, pricing_tier, monthly_price_usd, payment_status, billing_cycle, annual_total_usd'
+  'id, organization_name, contact_name, email, phone, message, status, requested_at, reviewed_at, reviewed_by, rejection_reason, pricing_tier, monthly_price_usd, payment_status, billing_cycle, annual_total_usd, referred_by_affiliate_id'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -37,6 +37,15 @@ export async function createSignupRequest(event: HandlerEvent) {
   const billing_cycle = body.billing_cycle === 'annual' ? 'annual' : 'monthly'
   const annual_total_usd = billing_cycle === 'annual' ? computeAnnualTotal(monthly_price_usd) : null
 
+  // Silent referral capture — a stale/invalid code just leaves this null,
+  // never surfaced as an error to the requester.
+  let referred_by_affiliate_id: string | null = null
+  const refCode = (body.ref ?? '').trim()
+  if (refCode) {
+    const { data: affiliate } = await supabase.from('affiliates').select('id').eq('referral_code', refCode).eq('status', 'active').maybeSingle()
+    referred_by_affiliate_id = affiliate?.id ?? null
+  }
+
   const { data, error } = await supabase
     .from('signup_requests')
     .insert({
@@ -50,6 +59,7 @@ export async function createSignupRequest(event: HandlerEvent) {
       monthly_price_usd,
       billing_cycle,
       annual_total_usd,
+      referred_by_affiliate_id,
     })
     .select(COLUMNS)
     .single()
@@ -79,7 +89,18 @@ export async function listSignupRequests(user: AuthedUser) {
   const supabase = getSupabaseAdmin()
   const { data, error } = await supabase.from('signup_requests').select(COLUMNS).order('requested_at', { ascending: false })
   if (error) throw new HttpError(500, error.message)
-  return json(200, { requests: data ?? [] })
+
+  const affiliateIds = [...new Set((data ?? []).map((r) => r.referred_by_affiliate_id).filter(Boolean))] as string[]
+  const { data: affiliates } =
+    affiliateIds.length > 0 ? await supabase.from('affiliates').select('id, full_name').in('id', affiliateIds) : { data: [] as any[] }
+  const affiliateNameById = new Map((affiliates ?? []).map((a: any) => [a.id, a.full_name]))
+
+  return json(200, {
+    requests: (data ?? []).map((r) => ({
+      ...r,
+      referred_by_affiliate_name: r.referred_by_affiliate_id ? affiliateNameById.get(r.referred_by_affiliate_id) ?? null : null,
+    })),
+  })
 }
 
 async function getRequestOrThrow(id: string) {
@@ -128,8 +149,9 @@ export async function approveSignupRequest(id: string, event: HandlerEvent, user
       payment_status: finalPaymentStatus,
       first_payment_confirmed_at: firstPaymentConfirmedAt,
       subscription_end_date: subscriptionEndDate,
+      referred_by_affiliate_id: request.referred_by_affiliate_id,
     })
-    .select('id, name, pricing_tier, monthly_price_usd, billing_cycle, annual_total_usd, payment_status, subscription_end_date')
+    .select('id, name, pricing_tier, monthly_price_usd, billing_cycle, annual_total_usd, payment_status, subscription_end_date, referred_by_affiliate_id')
     .single()
   if (orgErr) throw new HttpError(500, orgErr.message)
 

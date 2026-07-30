@@ -140,6 +140,12 @@ export function Login() {
             Request Access
           </Link>
         </p>
+        <p className="mt-2 text-center text-xs text-base-500">
+          Want to earn commission?{' '}
+          <Link to="/become-affiliate" className="font-medium text-accent-400 hover:underline">
+            Become an Affiliate
+          </Link>
+        </p>
       </div>
       <PreAuthHelpWidget />
     </div>

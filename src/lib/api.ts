@@ -46,6 +46,24 @@ import type {
   MergeSnapshotSummary,
 } from '@/types/duplicateMerge'
 import type { PublicPricing, BillingSettings, OrganizationBillingRow, MyOrgBilling, PaymentStatus, BillingCycle } from '@/types/billing'
+import type {
+  AffiliateApplication,
+  ApproveAffiliateApplicationResult,
+  Affiliate,
+  AffiliateWithSummary,
+  AffiliateDetail,
+  AffiliateDashboardSummary,
+  Referral,
+  PayoutMethod,
+  PayoutMethodType,
+  WithdrawalRequest,
+  WithdrawalDetail,
+  WithdrawalStatus,
+  AffiliateSettings,
+  PublicAffiliateProgramInfo,
+  MarketingMaterials,
+  AffiliateStatus,
+} from '@/types/affiliate'
 import { withOrgScope } from './orgScope'
 
 export class ApiError extends Error {
@@ -558,6 +576,7 @@ export const signupRequestsApi = {
     phone?: string
     message?: string
     billing_cycle?: BillingCycle
+    ref?: string
   }) => requestPublic<SignupRequest>('/signup-requests', { method: 'POST', body: JSON.stringify(payload) }),
 
   list: () => request<{ requests: SignupRequest[] }>('/signup-requests'),
@@ -873,4 +892,94 @@ export const attachmentsApi = {
 
   remove: (attachmentId: string) =>
     request<{ success: true }>(`/attachments/${attachmentId}`, { method: 'DELETE' }),
+}
+
+export const affiliateApplicationsApi = {
+  /** Public — reachable from the "Become an Affiliate" page before any session exists. */
+  create: (payload: { full_name: string; email: string; how_they_plan_to_promote?: string }) =>
+    requestPublic<AffiliateApplication>('/affiliate-applications', { method: 'POST', body: JSON.stringify(payload) }),
+
+  list: () => request<{ applications: AffiliateApplication[] }>('/affiliate-applications'),
+
+  approve: (id: string) => request<ApproveAffiliateApplicationResult>(`/affiliate-applications/${id}/approve`, { method: 'POST' }),
+
+  reject: (id: string, rejection_reason?: string) =>
+    request<AffiliateApplication>(`/affiliate-applications/${id}/reject`, { method: 'POST', body: JSON.stringify({ rejection_reason }) }),
+}
+
+export const affiliatesApi = {
+  getMe: () => request<Affiliate>('/affiliates/me'),
+
+  getMyDashboard: (dateFrom?: string, dateTo?: string) => {
+    const qs = new URLSearchParams()
+    if (dateFrom) qs.set('dateFrom', dateFrom)
+    if (dateTo) qs.set('dateTo', dateTo)
+    const suffix = qs.toString()
+    return request<AffiliateDashboardSummary>(`/affiliates/me/dashboard${suffix ? `?${suffix}` : ''}`)
+  },
+
+  getMyReferrals: () => request<{ referrals: Referral[] }>('/affiliates/me/referrals'),
+
+  list: () => request<{ affiliates: AffiliateWithSummary[] }>('/affiliates'),
+
+  getDetail: (id: string, dateFrom?: string, dateTo?: string) => {
+    const qs = new URLSearchParams()
+    if (dateFrom) qs.set('dateFrom', dateFrom)
+    if (dateTo) qs.set('dateTo', dateTo)
+    const suffix = qs.toString()
+    return request<AffiliateDetail>(`/affiliates/${id}${suffix ? `?${suffix}` : ''}`)
+  },
+
+  updateStatus: (id: string, status: AffiliateStatus) =>
+    request<Affiliate>(`/affiliates/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+}
+
+export const payoutMethodsApi = {
+  list: () => request<{ methods: PayoutMethod[] }>('/payout-methods'),
+
+  create: (payload: { method_type: PayoutMethodType; label: string; details: Record<string, any>; is_default?: boolean }) =>
+    request<PayoutMethod>('/payout-methods', { method: 'POST', body: JSON.stringify(payload) }),
+
+  update: (id: string, payload: Partial<{ label: string; details: Record<string, any>; is_default: boolean }>) =>
+    request<PayoutMethod>(`/payout-methods/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+
+  remove: (id: string) => request<{ success: true }>(`/payout-methods/${id}`, { method: 'DELETE' }),
+}
+
+export const withdrawalsApi = {
+  create: (payload: { amount_usd: number; payout_method_id: string }) =>
+    request<WithdrawalRequest>('/withdrawals', { method: 'POST', body: JSON.stringify(payload) }),
+
+  listMine: () => request<{ withdrawals: WithdrawalRequest[] }>('/withdrawals/mine'),
+
+  list: (status?: WithdrawalStatus | 'all') => {
+    const qs = status ? `?status=${status}` : ''
+    return request<{ withdrawals: WithdrawalRequest[] }>(`/withdrawals${qs}`)
+  },
+
+  getDetail: (id: string) => request<WithdrawalDetail>(`/withdrawals/${id}`),
+
+  updateStatus: (
+    id: string,
+    payload: { status: WithdrawalStatus; actual_amount_sent_usd?: number; notes?: string; rejection_reason?: string }
+  ) => request<WithdrawalRequest>(`/withdrawals/${id}/status`, { method: 'PATCH', body: JSON.stringify(payload) }),
+}
+
+export const referralClicksApi = {
+  /** Public, fire-and-forget from the Request Access page — never awaited by the caller. */
+  log: (referral_code: string) => requestPublic<{ success: true }>('/referral-clicks', { method: 'POST', body: JSON.stringify({ referral_code }) }),
+}
+
+export const affiliateMarketingApi = {
+  get: (referralLink: string) => request<MarketingMaterials>(`/affiliate-marketing?referral_link=${encodeURIComponent(referralLink)}`),
+}
+
+export const affiliateSettingsApi = {
+  /** Public — reachable from the "Become an Affiliate" page before any session exists. */
+  getPublic: () => requestPublic<PublicAffiliateProgramInfo>('/affiliate-settings/public'),
+
+  get: () => request<AffiliateSettings>('/affiliate-settings'),
+
+  update: (payload: Partial<Omit<AffiliateSettings, 'id'>>) =>
+    request<AffiliateSettings>('/affiliate-settings', { method: 'PATCH', body: JSON.stringify(payload) }),
 }

@@ -143,6 +143,40 @@ import {
   recordPayment,
   getMyOrgBilling,
 } from './routes/billing.js'
+import {
+  createAffiliateApplication,
+  listAffiliateApplications,
+  approveAffiliateApplication,
+  rejectAffiliateApplication,
+} from './routes/affiliateApplications.js'
+import {
+  getMyAffiliateProfile,
+  getMyDashboardSummary,
+  listMyReferrals,
+  listAffiliates,
+  getAffiliateDetail,
+  updateAffiliateStatus,
+} from './routes/affiliates.js'
+import {
+  listMyPayoutMethods,
+  createPayoutMethod,
+  updatePayoutMethod,
+  deletePayoutMethod,
+} from './routes/payoutMethods.js'
+import {
+  createWithdrawal,
+  listMyWithdrawals,
+  listWithdrawalRequests,
+  getWithdrawalDetail,
+  updateWithdrawalStatus,
+} from './routes/withdrawals.js'
+import { logReferralClick } from './routes/referralClicks.js'
+import {
+  getMyMarketingMaterials,
+  getAffiliateSettings,
+  updateAffiliateSettings,
+  getPublicAffiliateProgramInfo,
+} from './routes/affiliateMarketing.js'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -561,6 +595,59 @@ export const handler: Handler = async (event) => {
       if (!id && method === 'GET') response = await listAuditLog(event, user)
       else if (id === 'export' && method === 'GET') response = await exportAuditLogCsv(event, user)
       else throw new HttpError(404, 'Not found')
+    } else if (resource === 'affiliate-applications') {
+      // Public — the "Become an Affiliate" form never creates an account
+      // itself; everything else here is Super-Admin-only.
+      if (!id && method === 'POST') {
+        response = await createAffiliateApplication(event)
+      } else {
+        const user = await requireUser(event)
+        if (!id && method === 'GET') response = await listAffiliateApplications(user)
+        else if (id && sub === 'approve' && method === 'POST') response = await approveAffiliateApplication(id, event, user)
+        else if (id && sub === 'reject' && method === 'POST') response = await rejectAffiliateApplication(id, event, user)
+        else throw new HttpError(404, 'Not found')
+      }
+    } else if (resource === 'affiliates') {
+      const user = await requireUser(event)
+      if (id === 'me' && sub === 'dashboard' && method === 'GET') response = await getMyDashboardSummary(event, user)
+      else if (id === 'me' && sub === 'referrals' && method === 'GET') response = await listMyReferrals(user)
+      else if (id === 'me' && method === 'GET') response = await getMyAffiliateProfile(user)
+      else if (!id && method === 'GET') response = await listAffiliates(user)
+      else if (id && sub === 'status' && method === 'PATCH') response = await updateAffiliateStatus(id, event, user)
+      else if (id && method === 'GET') response = await getAffiliateDetail(id, event, user)
+      else throw new HttpError(404, 'Not found')
+    } else if (resource === 'payout-methods') {
+      const user = await requireUser(event)
+      if (!id && method === 'GET') response = await listMyPayoutMethods(user)
+      else if (!id && method === 'POST') response = await createPayoutMethod(event, user)
+      else if (id && method === 'PUT') response = await updatePayoutMethod(id, event, user)
+      else if (id && method === 'DELETE') response = await deletePayoutMethod(id, user)
+      else throw new HttpError(404, 'Not found')
+    } else if (resource === 'withdrawals') {
+      const user = await requireUser(event)
+      if (!id && method === 'POST') response = await createWithdrawal(event, user)
+      else if (id === 'mine' && method === 'GET') response = await listMyWithdrawals(user)
+      else if (!id && method === 'GET') response = await listWithdrawalRequests(event, user)
+      else if (id && sub === 'status' && method === 'PATCH') response = await updateWithdrawalStatus(id, event, user)
+      else if (id && method === 'GET') response = await getWithdrawalDetail(id, user)
+      else throw new HttpError(404, 'Not found')
+    } else if (resource === 'referral-clicks') {
+      // Public — logged on every Request Access page load with a valid ?ref=.
+      if (!id && method === 'POST') response = await logReferralClick(event)
+      else throw new HttpError(404, 'Not found')
+    } else if (resource === 'affiliate-marketing') {
+      const user = await requireUser(event)
+      if (!id && method === 'GET') response = await getMyMarketingMaterials(event, user)
+      else throw new HttpError(404, 'Not found')
+    } else if (resource === 'affiliate-settings') {
+      if (id === 'public' && method === 'GET') {
+        response = await getPublicAffiliateProgramInfo()
+      } else {
+        const user = await requireUser(event)
+        if (!id && method === 'GET') response = await getAffiliateSettings(event, user)
+        else if (!id && method === 'PATCH') response = await updateAffiliateSettings(event, user)
+        else throw new HttpError(404, 'Not found')
+      }
     } else if (resource === 'attachments') {
       const user = await requireUser(event)
       if (!id && method === 'POST') response = await saveAttachmentMetadata(event, user)

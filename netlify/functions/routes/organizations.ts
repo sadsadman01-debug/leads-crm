@@ -14,18 +14,24 @@ export async function listOrganizations(user: AuthedUser) {
 
   const { data: orgs, error } = await supabase
     .from('organizations')
-    .select('id, name, status, created_at, pricing_tier, monthly_price_usd, payment_status, next_payment_due_date')
+    .select('id, name, status, created_at, pricing_tier, monthly_price_usd, payment_status, subscription_end_date, referred_by_affiliate_id')
     .order('created_at', { ascending: true })
   if (error) throw new HttpError(500, error.message)
 
-  const [{ data: admins }, { data: leadCounts }, { data: dealRows }, { data: userCounts }] = await Promise.all([
+  const affiliateIds = [...new Set((orgs ?? []).map((o) => o.referred_by_affiliate_id).filter(Boolean))] as string[]
+
+  const [{ data: admins }, { data: leadCounts }, { data: dealRows }, { data: userCounts }, { data: affiliates }] = await Promise.all([
     supabase.from('profiles').select('id, email, nickname, organization_id').eq('role', 'admin'),
     supabase.from('leads').select('organization_id'),
     supabase.from('deals').select('organization_id, value, stage_id, deal_stages(is_closed)'),
     supabase.from('profiles').select('organization_id').eq('role', 'user'),
+    affiliateIds.length > 0
+      ? supabase.from('affiliates').select('id, full_name').in('id', affiliateIds)
+      : Promise.resolve({ data: [] as any[] }),
   ])
 
   const adminByOrg = new Map((admins ?? []).map((a) => [a.organization_id, a]))
+  const affiliateNameById = new Map((affiliates ?? []).map((a: any) => [a.id, a.full_name]))
 
   const leadCountByOrg = new Map<string, number>()
   for (const l of leadCounts ?? []) {
@@ -58,7 +64,9 @@ export async function listOrganizations(user: AuthedUser) {
       pricing_tier: org.pricing_tier,
       monthly_price_usd: org.monthly_price_usd,
       payment_status: org.payment_status,
-      next_payment_due_date: org.next_payment_due_date,
+      subscription_end_date: org.subscription_end_date,
+      referred_by_affiliate_id: org.referred_by_affiliate_id,
+      referred_by_affiliate_name: org.referred_by_affiliate_id ? affiliateNameById.get(org.referred_by_affiliate_id) ?? null : null,
       admin: adminByOrg.get(org.id) ?? null,
       userCount: userCountByOrg.get(org.id) ?? 0,
       leadCount: leadCountByOrg.get(org.id) ?? 0,
@@ -73,7 +81,7 @@ export async function getOrganization(id: string, user: AuthedUser) {
   const supabase = getSupabaseAdmin()
   const { data, error } = await supabase
     .from('organizations')
-    .select('id, name, status, created_at, pricing_tier, monthly_price_usd, payment_status, next_payment_due_date')
+    .select('id, name, status, created_at, pricing_tier, monthly_price_usd, payment_status, subscription_end_date, referred_by_affiliate_id')
     .eq('id', id)
     .maybeSingle()
   if (error) throw new HttpError(500, error.message)

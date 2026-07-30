@@ -4,7 +4,7 @@ import { normalizePermissions, type UserPermissions } from './userPermissions.js
 import { getOrCreateBillingSettingsRow } from './billingSettings.js'
 import { insertAuditLog, getClientIp } from './auditLog.js'
 
-export type Role = 'super_admin' | 'admin' | 'user'
+export type Role = 'super_admin' | 'admin' | 'user' | 'affiliate'
 
 export interface AuthedUser {
   id: string

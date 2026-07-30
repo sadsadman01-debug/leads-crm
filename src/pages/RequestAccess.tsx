@@ -1,14 +1,16 @@
-import { useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Building2, ArrowLeft, AlertCircle, Loader2, CheckCircle2, Sparkles, PartyPopper, X } from 'lucide-react'
-import { signupRequestsApi, billingApi } from '@/lib/api'
+import { signupRequestsApi, billingApi, referralClicksApi } from '@/lib/api'
 import { usePlatformBranding } from '@/hooks/usePlatformBranding'
 import { PreAuthHelpWidget } from '@/components/PreAuthHelpWidget'
 import { PRICING_TIER_LABELS, type BillingCycle } from '@/types/billing'
 
 export function RequestAccess() {
   usePlatformBranding()
+  const [searchParams] = useSearchParams()
+  const referralCode = searchParams.get('ref')?.trim() || null
   const [organizationName, setOrganizationName] = useState('')
   const [contactName, setContactName] = useState('')
   const [email, setEmail] = useState('')
@@ -16,6 +18,18 @@ export function RequestAccess() {
   const [message, setMessage] = useState('')
   const [billingCycle, setBillingCycle] = useState<BillingCycle>('monthly')
   const [bannerDismissed, setBannerDismissed] = useState(() => sessionStorage.getItem('early-bird-banner-dismissed') === '1')
+
+  // Logged once per page load, before the visitor necessarily submits
+  // anything — this is what makes the affiliate conversion funnel's "Link
+  // Clicks" stage accurate rather than just inferred from eventual signups.
+  // Fire-and-forget: never awaited, never blocks rendering.
+  const loggedClickRef = useRef(false)
+  useEffect(() => {
+    if (referralCode && !loggedClickRef.current) {
+      loggedClickRef.current = true
+      referralClicksApi.log(referralCode).catch(() => {})
+    }
+  }, [referralCode])
 
   const { data: pricing } = useQuery({ queryKey: ['public-pricing'], queryFn: billingApi.getPublicPricing })
 
@@ -28,6 +42,7 @@ export function RequestAccess() {
         phone: phone.trim() || undefined,
         message: message.trim() || undefined,
         billing_cycle: billingCycle,
+        ...(referralCode ? { ref: referralCode } : {}),
       }),
   })
 

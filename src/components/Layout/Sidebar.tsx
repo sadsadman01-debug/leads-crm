@@ -20,6 +20,7 @@ import {
   LifeBuoy,
   ScrollText,
   CircleDollarSign,
+  Wallet,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react'
@@ -27,7 +28,16 @@ import clsx from 'clsx'
 import { useAuth } from '@/contexts/AuthContext'
 import { useOrg } from '@/contexts/OrgContext'
 import { RoleBadge, Avatar } from '@/components/ui/RoleBadge'
-import { signupRequestsApi, passwordResetRequestsApi, mfaResetRequestsApi, brandingApi, platformBrandingApi, billingApi } from '@/lib/api'
+import {
+  signupRequestsApi,
+  passwordResetRequestsApi,
+  mfaResetRequestsApi,
+  brandingApi,
+  platformBrandingApi,
+  billingApi,
+  affiliateApplicationsApi,
+  withdrawalsApi,
+} from '@/lib/api'
 
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -82,6 +92,22 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
     refetchInterval: 60_000,
   })
   const overdueBillingCount = (billingData?.organizations ?? []).filter((o) => o.billing_status === 'overdue').length
+
+  const { data: affiliateApplicationsData } = useQuery({
+    queryKey: ['affiliate-applications'],
+    queryFn: affiliateApplicationsApi.list,
+    enabled: isSuperAdmin,
+    refetchInterval: 60_000,
+  })
+  const pendingAffiliateApplicationCount = (affiliateApplicationsData?.applications ?? []).filter((a) => a.status === 'pending').length
+
+  const { data: withdrawalRequestsData } = useQuery({
+    queryKey: ['withdrawal-requests', 'all'],
+    queryFn: () => withdrawalsApi.list('all'),
+    enabled: isSuperAdmin,
+    refetchInterval: 60_000,
+  })
+  const pendingWithdrawalCount = (withdrawalRequestsData?.withdrawals ?? []).filter((w) => w.status === 'pending').length
 
   const { data: branding } = useQuery({ queryKey: ['org-branding'], queryFn: brandingApi.get })
   const { data: platformBranding } = useQuery({ queryKey: ['platform-branding'], queryFn: platformBrandingApi.get })
@@ -246,6 +272,21 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           {isSuperAdmin && (
             <NavItem to="/billing" icon={CircleDollarSign} badge={overdueBillingCount}>
               Billing
+            </NavItem>
+          )}
+          {isSuperAdmin && (
+            <NavItem to="/affiliate-applications" icon={Handshake} badge={pendingAffiliateApplicationCount}>
+              Affiliate Applications
+            </NavItem>
+          )}
+          {isSuperAdmin && (
+            <NavItem to="/affiliates" icon={UsersRound}>
+              Affiliates
+            </NavItem>
+          )}
+          {isSuperAdmin && (
+            <NavItem to="/withdrawal-requests" icon={Wallet} badge={pendingWithdrawalCount}>
+              Withdrawal Requests
             </NavItem>
           )}
           {navItems.map(({ to, label, icon: Icon }) => (

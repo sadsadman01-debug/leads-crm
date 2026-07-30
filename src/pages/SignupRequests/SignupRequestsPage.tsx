@@ -97,7 +97,12 @@ export function SignupRequestsPage() {
             <tbody>
               {filtered.map((r) => (
                 <tr key={r.id} className="border-b border-base-800 align-top">
-                  <td className="py-3 pr-3 font-medium text-base-100">{r.organization_name}</td>
+                  <td className="py-3 pr-3">
+                    <p className="font-medium text-base-100">{r.organization_name}</p>
+                    {r.referred_by_affiliate_name && (
+                      <p className="mt-0.5 text-xs text-accent-400">Referred by: {r.referred_by_affiliate_name}</p>
+                    )}
+                  </td>
                   <td className="px-3 py-3 text-base-300">
                     <div>{r.contact_name}</div>
                     <div className="mt-0.5 flex items-center gap-1.5 text-xs text-base-400">

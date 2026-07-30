@@ -11,6 +11,7 @@ import {
   type BillingCycle,
 } from '../lib/billingSettings.js'
 import { logAuditEvent } from '../lib/auditLog.js'
+import { getOrCreateAffiliateSettingsRow } from '../lib/affiliateSettings.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const DUE_SOON_DAYS = 5
@@ -136,6 +137,70 @@ export async function listBilling(event: HandlerEvent, user: AuthedUser) {
   return json(200, { organizations: rows })
 }
 
+/** Called from recordPayment whenever the paying Organization has a
+ * referred_by_affiliate_id — generates a first_payment or recurring
+ * commission per the Affiliate Program Settings' rates/duration cap. A
+ * commission-generation failure never blocks the payment itself from being
+ * recorded (best-effort side effect, same convention as notifications). */
+async function maybeGenerateAffiliateCommission(
+  org: { id: string; name: string; referred_by_affiliate_id: string; affiliate_recurring_commissions_paid: number },
+  paymentAmount: number,
+  isFirstPayment: boolean,
+  user: AuthedUser,
+  event: HandlerEvent
+) {
+  try {
+    const supabase = getSupabaseAdmin()
+    const settings = await getOrCreateAffiliateSettingsRow()
+    if (!settings.affiliate_program_enabled) return
+
+    if (isFirstPayment) {
+      const pct = Number(settings.affiliate_first_payment_commission_pct)
+      const commissionAmount = Math.round(paymentAmount * (pct / 100) * 100) / 100
+      await supabase.from('affiliate_commissions').insert({
+        affiliate_id: org.referred_by_affiliate_id,
+        organization_id: org.id,
+        commission_type: 'first_payment',
+        commission_amount_usd: commissionAmount,
+        source_payment_amount_usd: paymentAmount,
+      })
+      await logAuditEvent('affiliate_commission_generated', user, event, {
+        organizationId: org.id,
+        metadata: { affiliateId: org.referred_by_affiliate_id, commissionType: 'first_payment', commissionAmount, paymentAmount },
+      })
+      return
+    }
+
+    if (
+      settings.affiliate_recurring_duration_type === 'capped' &&
+      settings.affiliate_recurring_duration_count != null &&
+      org.affiliate_recurring_commissions_paid >= settings.affiliate_recurring_duration_count
+    ) {
+      return // Recurring commission window has already been exhausted for this Organization.
+    }
+
+    const pct = Number(settings.affiliate_recurring_commission_pct)
+    const commissionAmount = Math.round(paymentAmount * (pct / 100) * 100) / 100
+    await supabase.from('affiliate_commissions').insert({
+      affiliate_id: org.referred_by_affiliate_id,
+      organization_id: org.id,
+      commission_type: 'recurring',
+      commission_amount_usd: commissionAmount,
+      source_payment_amount_usd: paymentAmount,
+    })
+    await supabase
+      .from('organizations')
+      .update({ affiliate_recurring_commissions_paid: org.affiliate_recurring_commissions_paid + 1 })
+      .eq('id', org.id)
+    await logAuditEvent('affiliate_commission_generated', user, event, {
+      organizationId: org.id,
+      metadata: { affiliateId: org.referred_by_affiliate_id, commissionType: 'recurring', commissionAmount, paymentAmount },
+    })
+  } catch (err) {
+    console.error('Failed to generate affiliate commission', err)
+  }
+}
+
 /** Body: { amount_usd, paid_at, notes?, extend_from: 'current_expiry' | 'payment_date' }
  * — inserts a billing_history row and advances subscription_end_date by
  * exactly one billing period (1 month or 1 year, per that Organization's
@@ -154,16 +219,27 @@ export async function recordPayment(organizationId: string, event: HandlerEvent,
 
   const { data: org, error: orgErr } = await supabase
     .from('organizations')
-    .select('id, name, payment_status, billing_cycle, subscription_end_date')
+    .select('id, name, payment_status, billing_cycle, subscription_end_date, referred_by_affiliate_id, affiliate_recurring_commissions_paid')
     .eq('id', organizationId)
     .maybeSingle()
   if (orgErr) throw new HttpError(500, orgErr.message)
   if (!org) throw new HttpError(404, 'Organization not found')
 
+  const { count: priorPaymentsCount, error: countErr } = await supabase
+    .from('billing_history')
+    .select('id', { count: 'exact', head: true })
+    .eq('organization_id', organizationId)
+  if (countErr) throw new HttpError(500, countErr.message)
+  const isFirstPayment = (priorPaymentsCount ?? 0) === 0
+
   const { error: insErr } = await supabase
     .from('billing_history')
     .insert({ organization_id: organizationId, amount_usd: amount, paid_at: paidAt, recorded_by: user.id, notes })
   if (insErr) throw new HttpError(500, insErr.message)
+
+  if (org.referred_by_affiliate_id) {
+    await maybeGenerateAffiliateCommission(org as any, amount, isFirstPayment, user, event)
+  }
 
   const baseDate = extendFrom === 'current_expiry' && org.subscription_end_date ? org.subscription_end_date : paidAt
   const newSubscriptionEndDate = addBillingPeriod(baseDate, org.billing_cycle as BillingCycle)

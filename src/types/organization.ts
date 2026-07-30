@@ -14,7 +14,9 @@ export interface OrganizationSummary extends Organization {
   pricing_tier: 'early_bird' | 'standard' | null
   monthly_price_usd: number | null
   payment_status: 'pending' | 'received' | 'waived' | null
-  next_payment_due_date: string | null
+  subscription_end_date: string | null
+  referred_by_affiliate_id: string | null
+  referred_by_affiliate_name: string | null
 }
 
 export interface BrandPaletteColor {

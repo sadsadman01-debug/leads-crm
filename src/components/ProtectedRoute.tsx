@@ -101,8 +101,50 @@ export function RequirePasswordSet() {
   return <Outlet />
 }
 
-/** Sends the Super Admin to the Organizations Overview by default; everyone else to Leads. */
+/** Gates a route to Affiliate accounts only. */
+export function RequireAffiliate() {
+  const { profile, loading } = useAuth()
+
+  if (loading || !profile) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-base-950">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent-500 border-t-transparent" />
+      </div>
+    )
+  }
+
+  if (profile.role !== 'affiliate') {
+    return <Navigate to="/leads" replace />
+  }
+
+  return <Outlet />
+}
+
+/** The inverse of RequireAffiliate — keeps Affiliate accounts (who belong to
+ * no Organization and have zero CRM visibility) out of the entire CRM route
+ * tree, bouncing them to their own dashboard instead. */
+export function RequireNotAffiliate() {
+  const { profile, loading } = useAuth()
+
+  if (loading || !profile) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-base-950">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent-500 border-t-transparent" />
+      </div>
+    )
+  }
+
+  if (profile.role === 'affiliate') {
+    return <Navigate to="/affiliate" replace />
+  }
+
+  return <Outlet />
+}
+
+/** Sends the Super Admin to the Organizations Overview, Affiliates to their
+ * own Dashboard, and everyone else to Leads. */
 export function DefaultLanding() {
   const { profile } = useAuth()
-  return <Navigate to={profile?.role === 'super_admin' ? '/organizations' : '/leads'} replace />
+  const to = profile?.role === 'super_admin' ? '/organizations' : profile?.role === 'affiliate' ? '/affiliate' : '/leads'
+  return <Navigate to={to} replace />
 }

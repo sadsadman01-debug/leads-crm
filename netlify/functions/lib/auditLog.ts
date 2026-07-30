@@ -34,6 +34,12 @@ export type AuditEventType =
   | 'payment_recorded'
   | 'payment_status_changed'
   | 'subscription_expired'
+  | 'affiliate_application_submitted'
+  | 'affiliate_approved'
+  | 'affiliate_rejected'
+  | 'affiliate_commission_generated'
+  | 'withdrawal_requested'
+  | 'withdrawal_status_changed'
 
 interface InsertAuditLogParams {
   eventType: AuditEventType
