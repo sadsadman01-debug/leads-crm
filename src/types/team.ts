@@ -16,6 +16,7 @@ export interface UserPermissions {
   canManageIndustries: boolean
   canViewTeamPerformance: boolean
   canAccessReportBuilder: boolean
+  canGenerateLeads: boolean
 }
 
 /** Matches the original, fixed Part 7 User behavior exactly. */
@@ -33,6 +34,7 @@ export const DEFAULT_USER_PERMISSIONS: UserPermissions = {
   canManageIndustries: false,
   canViewTeamPerformance: false,
   canAccessReportBuilder: false,
+  canGenerateLeads: false,
 }
 
 export const PERMISSION_PRESETS: Array<{ key: string; label: string; description: string; values: UserPermissions }> = [
@@ -60,6 +62,7 @@ export const PERMISSION_PRESETS: Array<{ key: string; label: string; description
       canManageIndustries: false,
       canViewTeamPerformance: false,
       canAccessReportBuilder: false,
+      canGenerateLeads: false,
     },
   },
   {
@@ -80,6 +83,7 @@ export const PERMISSION_PRESETS: Array<{ key: string; label: string; description
       canManageIndustries: false,
       canViewTeamPerformance: false,
       canAccessReportBuilder: false,
+      canGenerateLeads: false,
     },
   },
 ]

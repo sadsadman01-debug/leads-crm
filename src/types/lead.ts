@@ -1,9 +1,9 @@
-export type LeadSource = 'Google Maps' | 'Referral' | 'Manual Entry' | 'Website' | 'Other'
+export type LeadSource = 'Google Maps' | 'Referral' | 'Manual Entry' | 'Website' | 'Other' | 'Lead Generation'
 export type Priority = 'High' | 'Medium' | 'Low'
 export type ReplySentiment = 'Positive' | 'Neutral' | 'Negative' | 'Not Interested'
 export type ColdCallOutcome = 'No Answer' | 'Interested' | 'Not Interested' | 'Call Back Later'
 
-export const LEAD_SOURCES: LeadSource[] = ['Google Maps', 'Referral', 'Manual Entry', 'Website', 'Other']
+export const LEAD_SOURCES: LeadSource[] = ['Google Maps', 'Referral', 'Manual Entry', 'Website', 'Other', 'Lead Generation']
 export const PRIORITIES: Priority[] = ['High', 'Medium', 'Low']
 export const REPLY_SENTIMENTS: ReplySentiment[] = ['Positive', 'Neutral', 'Negative', 'Not Interested']
 export const COLD_CALL_OUTCOMES: ColdCallOutcome[] = ['No Answer', 'Interested', 'Not Interested', 'Call Back Later']

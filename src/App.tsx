@@ -50,6 +50,9 @@ const AffiliatesPage = lazy(() => import('@/pages/Affiliates/AffiliatesPage').th
 const WithdrawalRequestsPage = lazy(() =>
   import('@/pages/WithdrawalRequests/WithdrawalRequestsPage').then((m) => ({ default: m.WithdrawalRequestsPage }))
 )
+const LeadGenerationPage = lazy(() =>
+  import('@/pages/LeadGeneration/LeadGenerationPage').then((m) => ({ default: m.LeadGenerationPage }))
+)
 
 function PageFallback() {
   return <div className="p-12 text-center text-base-400">Loading…</div>
@@ -139,6 +142,14 @@ export default function App() {
                     element={
                       <Suspense fallback={<PageFallback />}>
                         <ReportsPage />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="/lead-generation"
+                    element={
+                      <Suspense fallback={<PageFallback />}>
+                        <LeadGenerationPage />
                       </Suspense>
                     }
                   />

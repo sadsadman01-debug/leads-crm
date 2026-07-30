@@ -14,6 +14,7 @@ export interface UserPermissions {
   canManageIndustries: boolean
   canViewTeamPerformance: boolean
   canAccessReportBuilder: boolean
+  canGenerateLeads: boolean
 }
 
 /** Matches the original, fixed Part 7 User behavior exactly — every existing
@@ -32,6 +33,7 @@ export const DEFAULT_USER_PERMISSIONS: UserPermissions = {
   canManageIndustries: false,
   canViewTeamPerformance: false,
   canAccessReportBuilder: false,
+  canGenerateLeads: false,
 }
 
 export const PERMISSION_PRESETS: Record<string, UserPermissions> = {
@@ -50,6 +52,7 @@ export const PERMISSION_PRESETS: Record<string, UserPermissions> = {
     canManageIndustries: false,
     canViewTeamPerformance: false,
     canAccessReportBuilder: false,
+    canGenerateLeads: false,
   },
   seniorRep: {
     leadVisibility: 'all',
@@ -65,6 +68,7 @@ export const PERMISSION_PRESETS: Record<string, UserPermissions> = {
     canManageIndustries: false,
     canViewTeamPerformance: false,
     canAccessReportBuilder: false,
+    canGenerateLeads: false,
   },
 }
 

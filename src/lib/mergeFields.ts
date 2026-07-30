@@ -84,7 +84,14 @@ export function fillTemplate(text: string, lead: Lead, context: MergeContext = {
 
     const value = resolveStandardField(key, lead, context)
     if (value === undefined) return match
-    if (!value) emptyFields.add(FRIENDLY_LABELS[key] ?? key)
+    if (!value) {
+      emptyFields.add(FRIENDLY_LABELS[key] ?? key)
+      // {{contact_name}} is the one field with a natural-language fallback —
+      // "Hey there," reads fine where "Hey ," doesn't. Every other field
+      // keeps substituting to '' since there's no equivalent fallback for
+      // an address, phone number, etc. that wouldn't just look like a bug.
+      if (key === 'contact_name') return 'there'
+    }
     return value
   })
 

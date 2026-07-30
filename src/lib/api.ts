@@ -13,7 +13,9 @@ import type {
   Tag,
   Template,
   TemplateType,
+  SocialProfile,
 } from '@/types/lead'
+import type { LeadGenSearchResult } from '@/types/leadGeneration'
 import type {
   Deal,
   DealFilters,
@@ -197,6 +199,27 @@ export const leadsApi = {
 
   merge: (payload: MergeLeadsPayload) =>
     request<MergedLeadResult>('/leads/merge', { method: 'POST', body: JSON.stringify(payload) }),
+}
+
+export interface LeadGenImportCandidate {
+  id: string
+  company_name: string
+  address: string | null
+  phone: string
+  website: string
+  email: string
+  contact_name: string
+  social_profiles: SocialProfile[]
+}
+
+export const leadGenerationApi = {
+  search: (payload: { location: string; category: string }) =>
+    request<LeadGenSearchResult>('/lead-generation/search', { method: 'POST', body: JSON.stringify(payload) }),
+
+  import: (payload: {
+    candidates: LeadGenImportCandidate[]
+    bulk: { tags: string[]; priority: string; assigned_to: string }
+  }) => request<{ imported: number }>('/lead-generation/import', { method: 'POST', body: JSON.stringify(payload) }),
 }
 
 export const bulkApi = {

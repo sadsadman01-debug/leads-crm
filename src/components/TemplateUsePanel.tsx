@@ -106,6 +106,7 @@ export function TemplateUsePanel({ lead }: { lead: Lead }) {
           {filled.emptyFields.length > 0 && (
             <p className="rounded-lg bg-warn-bg px-3 py-2 text-xs text-warn">
               ⚠ {filled.emptyFields.join(', ')} {filled.emptyFields.length === 1 ? 'is' : 'are'} empty for this lead.
+              {filled.emptyFields.includes('Contact Person Name') && " Using \"there\" as a greeting fallback."}
             </p>
           )}
           {filled.subject && (
