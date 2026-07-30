@@ -5,7 +5,7 @@ import { insertAuditLog, logAuditEvent, getClientIp, type AuditEventType } from 
 import type { AuthedUser } from '../lib/auth.js'
 
 const AUTH_EVENT_TYPES = new Set<AuditEventType>(['login_success', 'login_failure'])
-const SECURITY_EVENT_TYPES = new Set<AuditEventType>(['logout', 'mfa_enabled', 'mfa_disabled'])
+const SECURITY_EVENT_TYPES = new Set<AuditEventType>(['logout', 'mfa_enabled', 'mfa_disabled', 'password_changed'])
 
 /** POST /auth-events — public, unauthenticated. Reached from the Login page
  * immediately after `supabase.auth.signInWithPassword()` resolves, whether it

@@ -21,6 +21,7 @@ export type AuditEventType =
   | 'mfa_reset_request_resolved'
   | 'mfa_enabled'
   | 'mfa_disabled'
+  | 'password_changed'
   | 'organization_created'
   | 'organization_suspended'
   | 'organization_reactivated'

@@ -550,7 +550,7 @@ export const auditEventsApi = {
       body: JSON.stringify({ event_type: eventType, email }),
     }),
 
-  logSecurityEvent: (eventType: Extract<AuditEventType, 'logout' | 'mfa_enabled' | 'mfa_disabled'>) =>
+  logSecurityEvent: (eventType: Extract<AuditEventType, 'logout' | 'mfa_enabled' | 'mfa_disabled' | 'password_changed'>) =>
     request<{ success: true }>('/security-events', { method: 'POST', body: JSON.stringify({ event_type: eventType }) }),
 }
 

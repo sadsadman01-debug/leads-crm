@@ -17,6 +17,7 @@ export type AuditEventType =
   | 'mfa_reset_request_resolved'
   | 'mfa_enabled'
   | 'mfa_disabled'
+  | 'password_changed'
   | 'organization_created'
   | 'organization_suspended'
   | 'organization_reactivated'
@@ -85,6 +86,7 @@ export const AUDIT_EVENT_LABELS: Record<AuditEventType, string> = {
   mfa_reset_request_resolved: 'MFA reset resolved',
   mfa_enabled: 'Two-factor authentication enabled',
   mfa_disabled: 'Two-factor authentication disabled',
+  password_changed: 'Password changed',
   organization_created: 'Organization created',
   organization_suspended: 'Organization suspended',
   organization_reactivated: 'Organization reactivated',
@@ -118,6 +120,7 @@ export const SECURITY_EVENT_TYPES: AuditEventType[] = [
   'mfa_reset_request_resolved',
   'mfa_enabled',
   'mfa_disabled',
+  'password_changed',
 ]
 
 export function isSecurityEvent(eventType: AuditEventType): boolean {

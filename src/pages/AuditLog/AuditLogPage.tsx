@@ -63,6 +63,7 @@ const EVENT_ICONS: Record<AuditEventType, LucideIcon> = {
   mfa_reset_request_resolved: ShieldQuestion,
   mfa_enabled: ShieldCheck,
   mfa_disabled: ShieldOff,
+  password_changed: KeyRound,
   organization_created: Building2,
   organization_suspended: Building,
   organization_reactivated: Building2,

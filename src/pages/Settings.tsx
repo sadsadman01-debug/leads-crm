@@ -18,6 +18,7 @@ import { BillingSettings } from '@/components/BillingSettings'
 import { OrgBillingNotice } from '@/components/OrgBillingNotice'
 import { SupportContactSettings } from '@/components/SupportContactSettings'
 import { SecuritySettings } from '@/components/SecuritySettings'
+import { ChangePasswordCard } from '@/components/ChangePasswordCard'
 import { DataExportSettings } from '@/components/DataExportSettings'
 import { RecentlyMergedSettings } from '@/components/RecentlyMergedSettings'
 import { AffiliateProgramSettings } from '@/components/AffiliateProgramSettings'
@@ -65,6 +66,7 @@ export function Settings() {
         </div>
       )}
 
+      <ChangePasswordCard />
       <SecuritySettings />
 
       <div className="space-y-6">
