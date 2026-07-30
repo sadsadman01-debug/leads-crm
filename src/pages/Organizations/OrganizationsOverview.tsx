@@ -114,7 +114,7 @@ export function OrganizationsOverview() {
             <thead>
               <tr className="border-b border-base-700/60 text-xs uppercase tracking-wide text-base-400">
                 <th className="py-2 pr-3 font-medium">Organization</th>
-                <th className="px-3 py-2 font-medium">Admin</th>
+                <th className="px-3 py-2 font-medium">Email</th>
                 <th className="px-3 py-2 font-medium">Users</th>
                 <th className="px-3 py-2 font-medium">Leads</th>
                 <th className="px-3 py-2 font-medium">Deals</th>
@@ -133,8 +133,14 @@ export function OrganizationsOverview() {
                       <p className="mt-0.5 text-xs text-accent-400">Referred by: {org.referred_by_affiliate_name}</p>
                     )}
                   </td>
-                  <td className="px-3 py-3 text-base-300">
-                    {org.admin ? org.admin.nickname || org.admin.email : <span className="text-base-500">—</span>}
+                  <td className="max-w-[180px] px-3 py-3 text-base-300">
+                    {org.admin ? (
+                      <span className="block truncate" title={org.admin.email}>
+                        {org.admin.email}
+                      </span>
+                    ) : (
+                      <span className="text-base-500">—</span>
+                    )}
                   </td>
                   <td className="px-3 py-3 tabular-nums text-base-300">{org.userCount}</td>
                   <td className="px-3 py-3 tabular-nums text-base-300">{org.leadCount}</td>
