@@ -48,5 +48,14 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    proxy: {
+      // Local dev only runs the Vite frontend — no Netlify/Vercel functions
+      // server. Proxy /api/* to the live deployment so login and data calls
+      // work against the real backend instead of hitting nothing.
+      '/api': {
+        target: 'https://leadify-six.vercel.app',
+        changeOrigin: true,
+      },
+    },
   },
 })

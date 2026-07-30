@@ -61,7 +61,10 @@ export async function requireUser(event: HandlerEvent): Promise<AuthedUser> {
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select(
-      'role, nickname, is_active, organization_id, permissions, force_password_change, organizations ( subscription_end_date, billing_cycle, monthly_price_usd, annual_total_usd, name )'
+      // organizations!profiles_organization_id_fkey disambiguates the embed —
+      // organizations also has a created_by FK back to profiles, so PostgREST
+      // can't infer which relationship to embed without this being explicit.
+      'role, nickname, is_active, organization_id, permissions, force_password_change, organizations!profiles_organization_id_fkey ( subscription_end_date, billing_cycle, monthly_price_usd, annual_total_usd, name )'
     )
     .eq('id', data.user.id)
     .single()
