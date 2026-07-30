@@ -1,4 +1,4 @@
-export type SupportContactSource = 'in_app' | 'pre_auth'
+export type SupportContactSource = 'in_app' | 'pre_auth' | 'affiliate'
 
 export interface SupportContact {
   id: string
@@ -11,4 +11,5 @@ export interface SupportContact {
   organization_name: string | null
   requester_nickname: string | null
   requester_email: string | null
+  requester_affiliate_name: string | null
 }

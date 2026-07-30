@@ -25,8 +25,8 @@ export function SupportContactsPage() {
         <div>
           <h1 className="text-2xl font-semibold text-base-100">Support Contacts</h1>
           <p className="mt-1 text-sm text-base-400">
-            Every message submitted through the Help widget's in-app form, from Admins/Users and from visitors on
-            the pre-login screens.
+            Every message submitted through the Help widget's in-app form, from Admins/Users, Affiliates, and from
+            visitors on the pre-login screens.
           </p>
         </div>
         {contacts.length > 0 && (
@@ -62,7 +62,10 @@ export function SupportContactsPage() {
                   <td className="px-3 py-3">
                     <div className="flex items-center gap-1.5">
                       {c.source === 'pre_auth' && <Badge tone="warn">Pre-login</Badge>}
-                      <span className="font-medium text-base-100">{c.requester_nickname || c.contact_email || '—'}</span>
+                      {c.source === 'affiliate' && <Badge tone="accent">Affiliate</Badge>}
+                      <span className="font-medium text-base-100">
+                        {c.requester_affiliate_name || c.requester_nickname || c.contact_email || '—'}
+                      </span>
                     </div>
                     {c.contact_email && <div className="text-xs text-base-400">{c.contact_email}</div>}
                   </td>

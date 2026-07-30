@@ -4,12 +4,23 @@ import { LifeBuoy, X, Send, CheckCircle2 } from 'lucide-react'
 import { platformBrandingApi, supportContactsApi } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 
-/** Floating Help button — Admin/User only (the Super Admin IS the support
- * contact, so it'd make no sense to show it to them). Hidden entirely if the
- * Super Admin has cleared their support email. Submits directly in-app (no
- * mailto: — that turned out to be unreliable across browsers/OS mail-handler
- * setups); the Super Admin reviews these in Support Contacts. */
-export function HelpWidget() {
+export interface AffiliateHelpContext {
+  fullName: string
+  email: string
+  referralCode: string
+}
+
+/** Floating Help button — Admin/User/Affiliate (the Super Admin IS the
+ * support contact, so it'd make no sense to show it to them). Hidden
+ * entirely if the Super Admin has cleared their support email. Submits
+ * directly in-app (no mailto: — that turned out to be unreliable across
+ * browsers/OS mail-handler setups); the Super Admin reviews these in Support
+ * Contacts. When rendered on the Affiliate Dashboard, the caller passes
+ * `affiliateContext` — the message field becomes optional (defaults to a
+ * generic line) and the affiliate's identifying info is folded into what
+ * gets submitted, so the Super Admin can tell who's asking without the
+ * affiliate having to type it themselves. */
+export function HelpWidget({ affiliateContext }: { affiliateContext?: AffiliateHelpContext } = {}) {
   const { profile } = useAuth()
   const containerRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
@@ -54,11 +65,16 @@ export function HelpWidget() {
   if (!profile || profile.role === 'super_admin') return null
   if (!data || !data.support_email) return null
 
-  const canSend = email.trim().length > 0 && message.trim().length > 0 && !sendMutation.isPending
+  const canSend = email.trim().length > 0 && (Boolean(affiliateContext) || message.trim().length > 0) && !sendMutation.isPending
 
   function handleSubmit() {
     if (!canSend) return
-    sendMutation.mutate({ email: email.trim(), message: message.trim() })
+    let finalMessage = message.trim()
+    if (affiliateContext) {
+      const body = finalMessage || 'I need help with my Affiliate account.'
+      finalMessage = `Support Request from Affiliate: ${affiliateContext.fullName}\n\n${body}\n\nReferral Code: ${affiliateContext.referralCode}`
+    }
+    sendMutation.mutate({ email: email.trim(), message: finalMessage })
   }
 
   return (
@@ -94,7 +110,7 @@ export function HelpWidget() {
                 <textarea
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
-                  placeholder="Briefly describe your issue…"
+                  placeholder={affiliateContext ? 'Briefly describe your issue… (optional)' : 'Briefly describe your issue…'}
                   rows={3}
                   className="input resize-none text-sm"
                 />

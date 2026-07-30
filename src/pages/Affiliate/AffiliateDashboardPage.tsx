@@ -1,8 +1,11 @@
 import { useState, type ReactNode } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { LayoutDashboard, Users, Wallet, CreditCard, Megaphone, Settings as SettingsIcon, LogOut, Target, Menu, X } from 'lucide-react'
 import clsx from 'clsx'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePlatformBranding } from '@/hooks/usePlatformBranding'
+import { affiliatesApi } from '@/lib/api'
+import { HelpWidget } from '@/components/HelpWidget'
 import { OverviewTab } from './OverviewTab'
 import { ReferralsTab } from './ReferralsTab'
 import { WithdrawalsTab } from './WithdrawalsTab'
@@ -29,6 +32,7 @@ const TABS: Array<{ id: Tab; label: string; icon: typeof LayoutDashboard }> = [
 export function AffiliateDashboardPage() {
   const { profile, signOut } = useAuth()
   const platformBranding = usePlatformBranding()
+  const { data: affiliate } = useQuery({ queryKey: ['affiliate-me'], queryFn: affiliatesApi.getMe })
   const [tab, setTab] = useState<Tab>('overview')
   const [mobileOpen, setMobileOpen] = useState(false)
 
@@ -133,6 +137,12 @@ export function AffiliateDashboardPage() {
           {tab === 'settings' && <AffiliateSettingsTab />}
         </div>
       </div>
+
+      <HelpWidget
+        affiliateContext={
+          affiliate ? { fullName: affiliate.full_name, email: affiliate.email, referralCode: affiliate.referral_code } : undefined
+        }
+      />
     </div>
   )
 }

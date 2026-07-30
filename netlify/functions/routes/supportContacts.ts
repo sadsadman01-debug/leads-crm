@@ -43,7 +43,9 @@ export async function createSupportContact(event: HandlerEvent, user: AuthedUser
     profile_id: user.id,
     contact_email: email,
     message_preview: message,
-    source: 'in_app',
+    // Affiliates belong to no Organization — flagging their source distinctly
+    // lets the Super Admin tell these apart from Admin/User submissions.
+    source: user.role === 'affiliate' ? 'affiliate' : 'in_app',
   })
   if (error) throw new HttpError(500, error.message)
 
@@ -97,18 +99,23 @@ export async function listSupportContacts(user: AuthedUser) {
 
   const orgIds = [...new Set(rows.map((r) => r.organization_id).filter(Boolean))] as string[]
   const profileIds = [...new Set(rows.map((r) => r.profile_id).filter(Boolean))] as string[]
+  const affiliateProfileIds = [...new Set(rows.filter((r) => r.source === 'affiliate').map((r) => r.profile_id).filter(Boolean))] as string[]
 
-  const [{ data: orgs }, { data: profiles }] = await Promise.all([
+  const [{ data: orgs }, { data: profiles }, { data: affiliates }] = await Promise.all([
     orgIds.length > 0
       ? supabase.from('organizations').select('id, name').in('id', orgIds)
       : Promise.resolve({ data: [] as any[] }),
     profileIds.length > 0
       ? supabase.from('profiles').select('id, nickname, email').in('id', profileIds)
       : Promise.resolve({ data: [] as any[] }),
+    affiliateProfileIds.length > 0
+      ? supabase.from('affiliates').select('profile_id, full_name').in('profile_id', affiliateProfileIds)
+      : Promise.resolve({ data: [] as any[] }),
   ])
 
   const orgNameById = new Map((orgs ?? []).map((o: any) => [o.id, o.name]))
   const profileById = new Map((profiles ?? []).map((p: any) => [p.id, p]))
+  const affiliateNameByProfileId = new Map((affiliates ?? []).map((a: any) => [a.profile_id, a.full_name]))
 
   return json(200, {
     contacts: rows.map((r) => ({
@@ -116,6 +123,7 @@ export async function listSupportContacts(user: AuthedUser) {
       organization_name: r.organization_id ? orgNameById.get(r.organization_id) ?? null : null,
       requester_nickname: r.profile_id ? profileById.get(r.profile_id)?.nickname ?? null : null,
       requester_email: r.profile_id ? profileById.get(r.profile_id)?.email ?? null : null,
+      requester_affiliate_name: r.profile_id ? affiliateNameByProfileId.get(r.profile_id) ?? null : null,
     })),
   })
 }
