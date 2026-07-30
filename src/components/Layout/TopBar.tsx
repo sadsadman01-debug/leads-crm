@@ -25,7 +25,7 @@ export function TopBar({ onOpenMenu }: { onOpenMenu: () => void }) {
           <div className="flex h-6 w-6 items-center justify-center rounded-md bg-accent-500">
             <Target size={13} className="text-white" />
           </div>
-          <span className="text-sm font-semibold tracking-tight text-base-100">Leads CRM</span>
+          <span className="text-sm font-semibold tracking-tight text-base-100">Leadify</span>
         </div>
       </div>
       <GlobalSearch />

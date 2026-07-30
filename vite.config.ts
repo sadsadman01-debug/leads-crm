@@ -15,8 +15,8 @@ export default defineConfig({
       manifestFilename: 'manifest.json',
       includeAssets: ['icons/*.png'],
       manifest: {
-        name: 'Leads CRM',
-        short_name: 'Leads CRM',
+        name: 'Leadify',
+        short_name: 'Leadify',
         description: 'Multi-tenant Lead Management CRM',
         start_url: '/',
         display: 'standalone',

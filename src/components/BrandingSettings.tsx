@@ -218,7 +218,7 @@ export function BrandingSettings() {
                     <Target size={18} className="text-white" />
                   </div>
                 )}
-                <span className="text-base font-semibold tracking-tight text-base-100">Leads CRM</span>
+                <span className="text-base font-semibold tracking-tight text-base-100">Leadify</span>
               </div>
               {displayName.trim() && (
                 <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-base-800/60 px-2.5 py-1.5 text-xs text-base-300">

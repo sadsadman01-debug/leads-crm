@@ -112,7 +112,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   const { data: branding } = useQuery({ queryKey: ['org-branding'], queryFn: brandingApi.get })
   const { data: platformBranding } = useQuery({ queryKey: ['platform-branding'], queryFn: platformBrandingApi.get })
   const resolvedLogoUrl = branding?.logo_url ?? platformBranding?.logo_url ?? null
-  const appName = platformBranding?.platform_name || 'Leads CRM'
+  const appName = platformBranding?.platform_name || 'Leadify'
 
   const navItems =
     profile && (profile.role === 'admin' || profile.role === 'super_admin')

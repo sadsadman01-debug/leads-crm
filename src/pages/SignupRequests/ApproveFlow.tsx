@@ -11,7 +11,7 @@ function draftWelcomeMessage(result: ApproveSignupRequestResult): string {
   const loginUrl = `${window.location.origin}/login`
   return `Hi ${result.admin.nickname},
 
-Welcome to Leads CRM! Your organization "${result.organization.name}" is now set up.
+Welcome to Leadify! Your organization "${result.organization.name}" is now set up.
 
 Here are your login details:
 Login URL: ${loginUrl}

@@ -66,7 +66,7 @@ export function AffiliateDashboardPage() {
               </div>
             )}
             <div>
-              <p className="text-sm font-semibold text-base-100">{platformBranding?.platform_name || 'Leads CRM'}</p>
+              <p className="text-sm font-semibold text-base-100">{platformBranding?.platform_name || 'Leadify'}</p>
               <p className="text-xs text-base-400">Affiliate Dashboard</p>
             </div>
           </div>
@@ -121,7 +121,7 @@ export function AffiliateDashboardPage() {
           <button onClick={() => setMobileOpen(true)} className="btn-ghost -ml-2 h-10 w-10 px-0" aria-label="Open menu">
             <Menu size={20} />
           </button>
-          <p className="text-sm font-semibold text-base-100">{platformBranding?.platform_name || 'Leads CRM'}</p>
+          <p className="text-sm font-semibold text-base-100">{platformBranding?.platform_name || 'Leadify'}</p>
         </div>
 
         <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 md:py-8">

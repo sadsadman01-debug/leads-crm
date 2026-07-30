@@ -208,7 +208,7 @@ async function buildExportZip(organizationId: string | null, organizationName: s
   const dealCsvRows = dealRows.map(({ custom_fields, ...rest }) => ({ ...rest, ...custom_fields }))
 
   const generatedAt = new Date().toISOString()
-  const readme = `Leads CRM — Full Data Export
+  const readme = `Leadify — Full Data Export
 Organization: ${organizationName}
 Generated: ${generatedAt}
 

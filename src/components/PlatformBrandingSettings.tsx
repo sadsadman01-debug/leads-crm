@@ -104,7 +104,7 @@ export function PlatformBrandingSettings() {
   }
 
   const previewShades = findBrandColor(accentColor)
-  const previewName = platformName.trim() || 'Leads CRM'
+  const previewName = platformName.trim() || 'Leadify'
   const previewVars = {
     '--accent-400': hexToRgbTriplet(previewShades[400]),
     '--accent-500': hexToRgbTriplet(previewShades[500]),
@@ -181,7 +181,7 @@ export function PlatformBrandingSettings() {
               className="input"
               value={platformName}
               onChange={(e) => setPlatformName(e.target.value)}
-              placeholder="Optional — e.g. Navigant CRM (default: Leads CRM)"
+              placeholder="Optional — e.g. Navigant CRM (default: Leadify)"
               maxLength={80}
             />
           </div>

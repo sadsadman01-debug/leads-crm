@@ -21,7 +21,7 @@ export async function getMyMarketingMaterials(event: HandlerEvent, user: AuthedU
     supabase.from('platform_settings').select('platform_name').limit(1).maybeSingle(),
   ])
   const pricing = await computeCurrentPricingTier(billingSettings)
-  const platformName = platformRow?.platform_name || 'Leads CRM'
+  const platformName = platformRow?.platform_name || 'Leadify'
 
   const fields = {
     affiliate_name: affiliate.full_name,

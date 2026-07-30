@@ -51,7 +51,7 @@ export function Login() {
           {platformBranding?.logo_url ? (
             <img
               src={platformBranding.logo_url}
-              alt={platformBranding?.platform_name || 'Leads CRM'}
+              alt={platformBranding?.platform_name || 'Leadify'}
               className="mb-4 h-12 w-12 rounded-xl object-cover"
             />
           ) : (
@@ -59,7 +59,7 @@ export function Login() {
               <Target size={24} className="text-white" />
             </div>
           )}
-          <h1 className="text-xl font-semibold text-base-100">{platformBranding?.platform_name || 'Leads CRM'}</h1>
+          <h1 className="text-xl font-semibold text-base-100">{platformBranding?.platform_name || 'Leadify'}</h1>
           <p className="mt-1 text-sm text-base-400">Sign in to manage your sales pipeline</p>
         </div>
 

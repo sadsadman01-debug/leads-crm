@@ -35,7 +35,7 @@ export function InstallAppBanner() {
         {canInstall ? (
           <>
             <Download size={18} className="shrink-0 text-accent-400" />
-            <p className="flex-1 text-sm text-base-200">Install Leads CRM for quicker, full-screen access.</p>
+            <p className="flex-1 text-sm text-base-200">Install Leadify for quicker, full-screen access.</p>
             <button className="btn-primary shrink-0 px-3 py-1.5 text-xs" onClick={() => promptInstall()}>
               Install
             </button>
