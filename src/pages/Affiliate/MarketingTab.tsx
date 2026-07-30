@@ -1,6 +1,5 @@
-import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Facebook, Mail, ImageIcon, Download } from 'lucide-react'
+import { Facebook, Mail, Sparkles } from 'lucide-react'
 import { affiliatesApi, affiliateMarketingApi } from '@/lib/api'
 import { CopyButton } from '@/components/TempPasswordResult'
 
@@ -13,9 +12,6 @@ export function MarketingTab() {
     queryFn: () => affiliateMarketingApi.get(referralLink),
     enabled: Boolean(referralLink),
   })
-
-  const [imgError, setImgError] = useState(false)
-  const imageUrl = affiliate ? `/api/affiliate-promo-image/${affiliate.referral_code}` : ''
 
   if (!materials) return <p className="text-sm text-base-400">Loading…</p>
 
@@ -52,22 +48,15 @@ export function MarketingTab() {
 
       <div className="card p-6">
         <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-base-300">
-          <ImageIcon size={15} /> Promotional Image
+          <Sparkles size={15} /> AI Image Prompt
         </h2>
-        {!imgError ? (
-          <img
-            src={imageUrl}
-            alt="Promotional graphic with your referral link and QR code"
-            className="w-full max-w-lg rounded-lg border border-base-700/60"
-            onError={() => setImgError(true)}
-          />
-        ) : (
-          <p className="text-sm text-base-500">Image could not be loaded.</p>
-        )}
-        <div className="mt-3">
-          <a href={imageUrl} download={`referral-${affiliate?.referral_code}.png`} className="btn-secondary inline-flex">
-            <Download size={14} /> Download Image
-          </a>
+        <p className="mb-3 text-sm text-base-400">
+          Paste this into Gemini, ChatGPT, or any AI image generator to create a professional, click-worthy promotional
+          image for your referral link.
+        </p>
+        <div className="whitespace-pre-wrap rounded-lg bg-base-850 p-4 text-sm text-base-200">{materials.image_prompt}</div>
+        <div className="mt-3 flex justify-end">
+          <CopyButton text={materials.image_prompt} label="Copy Prompt" />
         </div>
       </div>
     </div>

@@ -123,11 +123,12 @@ export function AffiliateProgramSettings() {
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="label">Promotional Image Headline</label>
+              <label className="label">AI Image Prompt Headline</label>
               <input className="input" value={promoHeadline} onChange={(e) => setPromoHeadline(e.target.value)} placeholder="e.g. Join thousands growing their sales pipeline" />
+              <p className="mt-1 text-xs text-base-500">Used to build the AI image-generation prompt shown to affiliates — not rendered as an image directly.</p>
             </div>
             <div>
-              <label className="label">Promotional Image Subheadline</label>
+              <label className="label">AI Image Prompt Subheadline</label>
               <input className="input" value={promoSubheadline} onChange={(e) => setPromoSubheadline(e.target.value)} placeholder="e.g. Start your free trial today" />
             </div>
           </div>

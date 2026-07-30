@@ -172,8 +172,7 @@ export interface MarketingMaterials {
   facebook_post: string
   email_subject: string
   email_body: string
-  promo_headline: string | null
-  promo_subheadline: string | null
+  image_prompt: string
   program_terms: string | null
 }
 
