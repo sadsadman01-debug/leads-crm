@@ -26,7 +26,6 @@ import {
   deleteAttachment,
 } from './routes/attachments.js'
 import { importRows, importFromSheet, exportLeads } from './routes/importExport.js'
-import { searchLeadGeneration, importLeadGenerationCandidates } from './routes/leadGeneration.js'
 import { getDashboardSummary } from './routes/dashboard.js'
 import { listStages, createStage, renameStage, reorderStages, deleteStage } from './routes/pipelineStages.js'
 import { getSettings, updateSettings } from './routes/settings.js'
@@ -324,11 +323,6 @@ export const handler: Handler = async (event) => {
         else if (method === 'DELETE') response = await deleteLead(id, event, user)
         else throw new HttpError(405, 'Method not allowed')
       }
-    } else if (resource === 'lead-generation') {
-      const user = await requireUser(event)
-      if (id === 'search' && method === 'POST') response = await searchLeadGeneration(event, user)
-      else if (id === 'import' && method === 'POST') response = await importLeadGenerationCandidates(event, user)
-      else throw new HttpError(404, 'Not found')
     } else if (resource === 'organizations') {
       const user = await requireUser(event)
       if (!id) {

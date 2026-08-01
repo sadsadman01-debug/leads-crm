@@ -23,7 +23,6 @@ import {
   Wallet,
   ChevronLeft,
   ChevronRight,
-  Radar,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useAuth } from '@/contexts/AuthContext'
@@ -55,7 +54,6 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   const navigate = useNavigate()
   const isSuperAdmin = profile?.role === 'super_admin'
   const isAdminUp = profile?.role === 'admin' || profile?.role === 'super_admin'
-  const canGenerateLeads = isAdminUp || Boolean(profile?.permissions?.canGenerateLeads)
 
   // Tablet-only: the sidebar defaults to an icon-only rail to save width on
   // medium screens, with this toggle temporarily expanding it into the full
@@ -118,9 +116,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   const appName = platformBranding?.platform_name || 'Leadify'
 
   const navItems = [
-    ...NAV_ITEMS.slice(0, 4),
-    ...(canGenerateLeads ? [{ to: '/lead-generation', label: 'Lead Generation', icon: Radar }] : []),
-    NAV_ITEMS[4],
+    ...NAV_ITEMS.slice(0, 5),
     ...(isAdminUp ? [{ to: '/team', label: 'Team', icon: UsersRound }] : []),
     NAV_ITEMS[5],
   ]

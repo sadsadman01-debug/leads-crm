@@ -27,7 +27,6 @@ const FEATURE_ACCESS_TOGGLES: ToggleField[] = [
   { key: 'canManageIndustries', label: 'Can manage Industries' },
   { key: 'canViewTeamPerformance', label: 'Can view Team Performance Analytics' },
   { key: 'canAccessReportBuilder', label: 'Can access the Report Builder' },
-  { key: 'canGenerateLeads', label: 'Can access Lead Generation (OpenStreetMap search)' },
 ]
 
 export function PermissionsPanel({
