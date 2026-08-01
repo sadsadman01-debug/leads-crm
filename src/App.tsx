@@ -37,6 +37,7 @@ import { OfflineBanner } from '@/components/OfflineBanner'
 import { PwaUpdatePrompt } from '@/components/PwaUpdatePrompt'
 import { InstallAppBanner } from '@/components/InstallAppBanner'
 import { SubscriptionGuard } from '@/components/SubscriptionGuard'
+import { useGtmPageView } from '@/hooks/useGtmPageView'
 
 // Charting (recharts) is only needed here — code-split so it doesn't bloat every route.
 const Dashboard = lazy(() => import('@/pages/Dashboard').then((m) => ({ default: m.Dashboard })))
@@ -59,6 +60,8 @@ function PageFallback() {
 }
 
 export default function App() {
+  useGtmPageView()
+
   return (
     <>
       <OfflineBanner />

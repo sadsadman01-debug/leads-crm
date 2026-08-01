@@ -1,7 +1,8 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import { teamApi, auditEventsApi } from '@/lib/api'
+import { pushDataLayerEvent } from '@/lib/gtm'
 import { DEFAULT_USER_PERMISSIONS, type Role, type UserPermissions } from '@/types/team'
 
 export interface CurrentProfile {
@@ -27,8 +28,12 @@ interface AuthContextValue {
   mfaPending: boolean
   signIn: (email: string, password: string) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
-  refreshProfile: () => Promise<void>
-  refreshMfaStatus: () => Promise<void>
+  refreshProfile: () => Promise<CurrentProfile | null>
+  refreshMfaStatus: () => Promise<boolean>
+  /** Called by MfaChallenge right after a successful code verification —
+   * completes the login_attempt GTM event that signIn() deferred, now that
+   * the full flow (password + 2FA) has actually finished. */
+  completeMfaVerification: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
@@ -39,24 +44,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [mfaPending, setMfaPending] = useState(false)
 
+  // Set by signIn() right after a successful password step, so the
+  // login_attempt GTM event can be deferred until the FULL flow resolves —
+  // fired either from syncAuthState below (no 2FA required) or from
+  // completeMfaVerification() once the MFA challenge is also verified. Never
+  // set on a plain session restore (page reload), so those never fire a
+  // stray event.
+  const awaitingLoginEventRef = useRef(false)
+
   async function loadProfile() {
     try {
       const me = await teamApi.me()
       setProfile(me)
+      return me
     } catch {
       setProfile(null)
+      return null
     }
   }
 
   async function refreshMfaStatus() {
     const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
-    setMfaPending(Boolean(data && data.nextLevel === 'aal2' && data.currentLevel !== data.nextLevel))
+    const pending = Boolean(data && data.nextLevel === 'aal2' && data.currentLevel !== data.nextLevel)
+    setMfaPending(pending)
+    return pending
   }
 
   async function syncAuthState(newSession: Session | null) {
     setSession(newSession)
     if (newSession) {
-      await Promise.all([loadProfile(), refreshMfaStatus()])
+      const [loadedProfile, pending] = await Promise.all([loadProfile(), refreshMfaStatus()])
+      // Using the values Promise.all just resolved (not React state, which
+      // may not have committed yet) avoids a race between the two calls.
+      if (awaitingLoginEventRef.current && !pending) {
+        awaitingLoginEventRef.current = false
+        pushDataLayerEvent('login_attempt', { login_success: true, login_role: loadedProfile?.role ?? null })
+      }
     } else {
       setProfile(null)
       setMfaPending(false)
@@ -79,7 +102,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signIn(email: string, password: string) {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     auditEventsApi.logAuthEvent(error ? 'login_failure' : 'login_success', email).catch(() => {})
+
+    if (error) {
+      // A failed password step is itself the final outcome — no 2FA step follows.
+      pushDataLayerEvent('login_attempt', { login_success: false, login_role: null })
+    } else {
+      // Defer: syncAuthState (triggered by the auth state change this
+      // triggers) fires the event once it knows whether 2FA is required.
+      awaitingLoginEventRef.current = true
+    }
+
     return { error: error?.message ?? null }
+  }
+
+  async function completeMfaVerification() {
+    const pending = await refreshMfaStatus()
+    if (awaitingLoginEventRef.current && !pending) {
+      awaitingLoginEventRef.current = false
+      pushDataLayerEvent('login_attempt', { login_success: true, login_role: profile?.role ?? null })
+    }
   }
 
   async function signOut() {
@@ -91,7 +132,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, profile, loading, mfaPending, signIn, signOut, refreshProfile: loadProfile, refreshMfaStatus }}
+      value={{
+        session,
+        profile,
+        loading,
+        mfaPending,
+        signIn,
+        signOut,
+        refreshProfile: loadProfile,
+        refreshMfaStatus,
+        completeMfaVerification,
+      }}
     >
       {children}
     </AuthContext.Provider>

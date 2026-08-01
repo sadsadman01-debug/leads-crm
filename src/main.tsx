@@ -5,7 +5,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from './App'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { OrgProvider } from '@/contexts/OrgContext'
+import { initGtm } from '@/lib/gtm'
 import './index.css'
+
+initGtm()
 
 const queryClient = new QueryClient({
   defaultOptions: {

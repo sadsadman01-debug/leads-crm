@@ -8,7 +8,7 @@ const MAX_ATTEMPTS = 5
 const COOLDOWN_SECONDS = 60
 
 export function MfaChallenge() {
-  const { mfaPending, refreshMfaStatus, signOut } = useAuth()
+  const { mfaPending, completeMfaVerification, signOut } = useAuth()
   const navigate = useNavigate()
 
   const [factorId, setFactorId] = useState<string | null>(null)
@@ -94,7 +94,7 @@ export function MfaChallenge() {
       return
     }
 
-    await refreshMfaStatus()
+    await completeMfaVerification()
     navigate('/', { replace: true })
   }
 
