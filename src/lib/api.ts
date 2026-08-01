@@ -993,6 +993,22 @@ export const referralClicksApi = {
   log: (referral_code: string) => requestPublic<{ success: true }>('/referral-clicks', { method: 'POST', body: JSON.stringify({ referral_code }) }),
 }
 
+export type PageViewType = 'request_access' | 'become_affiliate'
+
+export const pageViewsApi = {
+  /** Public, fire-and-forget — logged on every load of a public entry page, referral or not. */
+  log: (page_type: PageViewType, referral_code?: string | null) =>
+    requestPublic<{ success: true }>('/page-views', { method: 'POST', body: JSON.stringify({ page_type, referral_code }) }),
+
+  /** Super Admin only. */
+  getCount: (page_type: PageViewType, dateFrom?: string, dateTo?: string) => {
+    const qs = new URLSearchParams({ page_type })
+    if (dateFrom) qs.set('dateFrom', dateFrom)
+    if (dateTo) qs.set('dateTo', dateTo)
+    return request<{ count: number }>(`/page-views/count?${qs.toString()}`)
+  },
+}
+
 export const affiliateMarketingApi = {
   get: (referralLink: string) => request<MarketingMaterials>(`/affiliate-marketing?referral_link=${encodeURIComponent(referralLink)}`),
 }

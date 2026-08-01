@@ -172,6 +172,7 @@ import {
   updateWithdrawalStatus,
 } from './routes/withdrawals.js'
 import { logReferralClick } from './routes/referralClicks.js'
+import { logPageView, getPageViewCount } from './routes/pageViews.js'
 import {
   getMyMarketingMaterials,
   getAffiliateSettings,
@@ -641,6 +642,17 @@ export const handler: Handler = async (event) => {
       // Public — logged on every Request Access page load with a valid ?ref=.
       if (!id && method === 'POST') response = await logReferralClick(event)
       else throw new HttpError(404, 'Not found')
+    } else if (resource === 'page-views') {
+      // POST is public (logged on every Request Access / Become an Affiliate
+      // page load); the count read-back is Super Admin only.
+      if (!id && method === 'POST') {
+        response = await logPageView(event)
+      } else if (id === 'count' && method === 'GET') {
+        const user = await requireUser(event)
+        response = await getPageViewCount(event, user)
+      } else {
+        throw new HttpError(404, 'Not found')
+      }
     } else if (resource === 'affiliate-marketing') {
       const user = await requireUser(event)
       if (!id && method === 'GET') response = await getMyMarketingMaterials(event, user)

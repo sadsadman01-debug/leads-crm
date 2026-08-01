@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { UserPlus2, Mail, Phone } from 'lucide-react'
 import { signupRequestsApi } from '@/lib/api'
 import { Badge } from '@/components/ui/Badge'
+import { ConversionStatsRow } from '@/components/ConversionStatsRow'
 import { PRICING_TIER_LABELS, type PaymentStatus } from '@/types/billing'
 import type { SignupRequest, SignupRequestStatus } from '@/types/signupRequest'
 import { ApproveFlow } from './ApproveFlow'
@@ -52,6 +53,11 @@ export function SignupRequestsPage() {
           Review and manually approve or reject requests submitted from the login page's "Request Access" form.
         </p>
       </div>
+
+      <ConversionStatsRow
+        pageType="request_access"
+        records={requests.map((r) => ({ date: r.requested_at, approved: r.status === 'approved' }))}
+      />
 
       <div className="flex gap-1 rounded-lg bg-base-850 p-1 w-fit">
         {(['pending', 'approved', 'rejected', 'all'] as Tab[]).map((t) => (

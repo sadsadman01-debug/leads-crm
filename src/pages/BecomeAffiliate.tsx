@@ -1,13 +1,24 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Handshake, ArrowLeft, AlertCircle, Loader2, CheckCircle2 } from 'lucide-react'
-import { affiliateApplicationsApi, affiliateSettingsApi } from '@/lib/api'
+import { affiliateApplicationsApi, affiliateSettingsApi, pageViewsApi } from '@/lib/api'
 import { usePlatformBranding } from '@/hooks/usePlatformBranding'
 import { PreAuthHelpWidget } from '@/components/PreAuthHelpWidget'
 
 export function BecomeAffiliate() {
   usePlatformBranding()
+
+  // Fire-and-forget, once per page load — captures every visit regardless
+  // of whether the visitor ever submits the application form.
+  const loggedPageViewRef = useRef(false)
+  useEffect(() => {
+    if (!loggedPageViewRef.current) {
+      loggedPageViewRef.current = true
+      pageViewsApi.log('become_affiliate').catch(() => {})
+    }
+  }, [])
+
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [howTheyPlanToPromote, setHowTheyPlanToPromote] = useState('')

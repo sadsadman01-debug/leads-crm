@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Building2, ArrowLeft, AlertCircle, Loader2, CheckCircle2, Sparkles, PartyPopper, X } from 'lucide-react'
-import { signupRequestsApi, billingApi, referralClicksApi } from '@/lib/api'
+import { signupRequestsApi, billingApi, referralClicksApi, pageViewsApi } from '@/lib/api'
 import { usePlatformBranding } from '@/hooks/usePlatformBranding'
 import { PreAuthHelpWidget } from '@/components/PreAuthHelpWidget'
 import { PRICING_TIER_LABELS, type BillingCycle } from '@/types/billing'
@@ -28,6 +28,17 @@ export function RequestAccess() {
     if (referralCode && !loggedClickRef.current) {
       loggedClickRef.current = true
       referralClicksApi.log(referralCode).catch(() => {})
+    }
+  }, [referralCode])
+
+  // Platform-wide aggregate view of every visit (referred or not) — logged
+  // once per page load, complementary to the per-affiliate referral click
+  // logged above. Fire-and-forget: never awaited, never blocks rendering.
+  const loggedPageViewRef = useRef(false)
+  useEffect(() => {
+    if (!loggedPageViewRef.current) {
+      loggedPageViewRef.current = true
+      pageViewsApi.log('request_access', referralCode).catch(() => {})
     }
   }, [referralCode])
 

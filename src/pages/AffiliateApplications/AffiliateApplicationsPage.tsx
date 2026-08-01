@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Handshake, Mail } from 'lucide-react'
 import { affiliateApplicationsApi } from '@/lib/api'
 import { Badge } from '@/components/ui/Badge'
+import { ConversionStatsRow } from '@/components/ConversionStatsRow'
 import type { AffiliateApplication, AffiliateApplicationStatus } from '@/types/affiliate'
 import { ApproveAffiliateFlow } from './ApproveAffiliateFlow'
 import { RejectAffiliateModal } from './RejectAffiliateModal'
@@ -36,6 +37,11 @@ export function AffiliateApplicationsPage() {
         <h1 className="text-2xl font-semibold text-base-100">Affiliate Applications</h1>
         <p className="mt-1 text-sm text-base-400">Review and approve or reject applications from the "Become an Affiliate" form.</p>
       </div>
+
+      <ConversionStatsRow
+        pageType="become_affiliate"
+        records={applications.map((a) => ({ date: a.applied_at, approved: a.status === 'approved' }))}
+      />
 
       <div className="flex gap-1 rounded-lg bg-base-850 p-1 w-fit">
         {(['pending', 'approved', 'rejected', 'all'] as Tab[]).map((t) => (
