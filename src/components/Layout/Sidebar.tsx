@@ -23,6 +23,7 @@ import {
   Wallet,
   ChevronLeft,
   ChevronRight,
+  MessageSquareText,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useAuth } from '@/contexts/AuthContext'
@@ -37,6 +38,7 @@ import {
   billingApi,
   affiliateApplicationsApi,
   withdrawalsApi,
+  productReviewsApi,
 } from '@/lib/api'
 
 const NAV_ITEMS = [
@@ -109,6 +111,14 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
     refetchInterval: 60_000,
   })
   const pendingWithdrawalCount = (withdrawalRequestsData?.withdrawals ?? []).filter((w) => w.status === 'pending').length
+
+  const { data: productReviewsData } = useQuery({
+    queryKey: ['product-reviews', { reply_status: 'not_replied' as const }],
+    queryFn: () => productReviewsApi.listAll({ reply_status: 'not_replied' }),
+    enabled: isSuperAdmin,
+    refetchInterval: 60_000,
+  })
+  const pendingReplyCount = productReviewsData?.reviews.length ?? 0
 
   const { data: branding } = useQuery({ queryKey: ['org-branding'], queryFn: brandingApi.get })
   const { data: platformBranding } = useQuery({ queryKey: ['platform-branding'], queryFn: platformBrandingApi.get })
@@ -291,6 +301,11 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           {isSuperAdmin && (
             <NavItem to="/withdrawal-requests" icon={Wallet} badge={pendingWithdrawalCount}>
               Withdrawal Requests
+            </NavItem>
+          )}
+          {isSuperAdmin && (
+            <NavItem to="/product-reviews" icon={MessageSquareText} badge={pendingReplyCount}>
+              Product Reviews
             </NavItem>
           )}
           {navItems.map(({ to, label, icon: Icon }) => (

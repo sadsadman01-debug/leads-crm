@@ -170,6 +170,13 @@ import {
   getWithdrawalDetail,
   updateWithdrawalStatus,
 } from './routes/withdrawals.js'
+import {
+  submitReview,
+  listMyReviews,
+  listAllReviews,
+  getReviewStats,
+  replyToReview,
+} from './routes/productReviews.js'
 import { logReferralClick } from './routes/referralClicks.js'
 import { logPageView, getPageViewCount } from './routes/pageViews.js'
 import {
@@ -631,6 +638,14 @@ export const handler: Handler = async (event) => {
       else if (!id && method === 'GET') response = await listWithdrawalRequests(event, user)
       else if (id && sub === 'status' && method === 'PATCH') response = await updateWithdrawalStatus(id, event, user)
       else if (id && method === 'GET') response = await getWithdrawalDetail(id, user)
+      else throw new HttpError(404, 'Not found')
+    } else if (resource === 'product-reviews') {
+      const user = await requireUser(event)
+      if (!id && method === 'GET') response = await listAllReviews(event, user)
+      else if (!id && method === 'POST') response = await submitReview(event, user)
+      else if (id === 'mine' && method === 'GET') response = await listMyReviews(user)
+      else if (id === 'stats' && method === 'GET') response = await getReviewStats(event, user)
+      else if (id && sub === 'reply' && method === 'PUT') response = await replyToReview(id, event, user)
       else throw new HttpError(404, 'Not found')
     } else if (resource === 'referral-clicks') {
       // Public — logged on every Request Access page load with a valid ?ref=.

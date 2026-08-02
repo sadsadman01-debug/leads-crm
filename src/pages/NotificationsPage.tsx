@@ -14,6 +14,7 @@ import {
   CheckCheck,
   ChevronLeft,
   ChevronRight,
+  MessageSquareText,
 } from 'lucide-react'
 import { notificationsApi } from '@/lib/api'
 import { formatRelativeTime } from '@/lib/relativeTime'
@@ -28,6 +29,7 @@ const TYPE_ICON: Record<NotificationType, typeof Bell> = {
   deal_closing_soon: CalendarClock,
   deal_closed_won: Trophy,
   deal_closed_lost: XCircle,
+  product_review_reply: MessageSquareText,
 }
 
 const TYPE_LABELS: Array<{ value: NotificationType | ''; label: string }> = [

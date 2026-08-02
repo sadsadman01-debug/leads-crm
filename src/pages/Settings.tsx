@@ -22,6 +22,7 @@ import { ChangePasswordCard } from '@/components/ChangePasswordCard'
 import { DataExportSettings } from '@/components/DataExportSettings'
 import { RecentlyMergedSettings } from '@/components/RecentlyMergedSettings'
 import { AffiliateProgramSettings } from '@/components/AffiliateProgramSettings'
+import { MyFeedbackSettings } from '@/components/MyFeedbackSettings'
 
 /** Wraps a settings section in a disabled fieldset unless the caller passes
  * (or is granted) write access — same "view only, greyed out" convention
@@ -125,6 +126,7 @@ export function Settings() {
         <Section canWrite={!isUser}>
           <QuotaSettings />
         </Section>
+        {!isSuperAdmin && <MyFeedbackSettings />}
       </div>
     </div>
   )

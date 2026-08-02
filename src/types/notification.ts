@@ -7,6 +7,7 @@ export type NotificationType =
   | 'deal_closing_soon'
   | 'deal_closed_won'
   | 'deal_closed_lost'
+  | 'product_review_reply'
 
 export interface AppNotification {
   id: string

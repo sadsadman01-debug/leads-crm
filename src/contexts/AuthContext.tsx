@@ -15,6 +15,8 @@ export interface CurrentProfile {
   organization_name: string | null
   permissions: UserPermissions
   force_password_change: boolean
+  review_due: boolean
+  pending_review_number: number | null
 }
 
 interface AuthContextValue {

@@ -12,6 +12,7 @@ export type NotificationType =
   | 'deal_closed_lost'
   | 'affiliate_application'
   | 'withdrawal_request'
+  | 'product_review_reply'
 
 interface NotificationInput {
   recipient_profile_id: string

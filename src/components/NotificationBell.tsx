@@ -12,6 +12,7 @@ import {
   Trophy,
   XCircle,
   CheckCheck,
+  MessageSquareText,
 } from 'lucide-react'
 import { notificationsApi } from '@/lib/api'
 import { supabase } from '@/lib/supabase'
@@ -28,6 +29,7 @@ const TYPE_ICON: Record<NotificationType, typeof Bell> = {
   deal_closing_soon: CalendarClock,
   deal_closed_won: Trophy,
   deal_closed_lost: XCircle,
+  product_review_reply: MessageSquareText,
 }
 
 export function NotificationBell() {

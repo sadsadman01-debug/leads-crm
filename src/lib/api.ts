@@ -64,6 +64,7 @@ import type {
   MarketingMaterials,
   AffiliateStatus,
 } from '@/types/affiliate'
+import type { ProductReview, ProductReviewWithReviewer, ProductReviewStats, ProductReviewFilters } from '@/types/productReview'
 import { withOrgScope } from './orgScope'
 
 export class ApiError extends Error {
@@ -676,6 +677,8 @@ export const teamApi = {
     organization_name: string | null
     permissions: UserPermissions
     force_password_change: boolean
+    review_due: boolean
+    pending_review_number: number | null
   }>('/team-members/me'),
 
   clearForcePasswordChange: () =>
@@ -963,6 +966,39 @@ export const withdrawalsApi = {
     id: string,
     payload: { status: WithdrawalStatus; actual_amount_sent_usd?: number; notes?: string; rejection_reason?: string }
   ) => request<WithdrawalRequest>(`/withdrawals/${id}/status`, { method: 'PATCH', body: JSON.stringify(payload) }),
+}
+
+export const productReviewsApi = {
+  submit: (payload: { rating: number; comment?: string; suggestions?: string }) =>
+    request<ProductReview>('/product-reviews', { method: 'POST', body: JSON.stringify(payload) }),
+
+  listMine: () => request<{ reviews: ProductReview[] }>('/product-reviews/mine'),
+
+  /** Super Admin only. */
+  listAll: (filters: ProductReviewFilters = {}) => {
+    const qs = new URLSearchParams()
+    if (filters.rating) qs.set('rating', String(filters.rating))
+    if (filters.organization_id) qs.set('organization_id', filters.organization_id)
+    if (filters.role) qs.set('role', filters.role)
+    if (filters.reply_status) qs.set('reply_status', filters.reply_status)
+    if (filters.date_from) qs.set('date_from', filters.date_from)
+    if (filters.date_to) qs.set('date_to', filters.date_to)
+    const query = qs.toString()
+    return request<{ reviews: ProductReviewWithReviewer[] }>(`/product-reviews${query ? `?${query}` : ''}`)
+  },
+
+  /** Super Admin only. */
+  stats: (range?: { date_from?: string; date_to?: string }) => {
+    const qs = new URLSearchParams()
+    if (range?.date_from) qs.set('date_from', range.date_from)
+    if (range?.date_to) qs.set('date_to', range.date_to)
+    const query = qs.toString()
+    return request<ProductReviewStats>(`/product-reviews/stats${query ? `?${query}` : ''}`)
+  },
+
+  /** Super Admin only — sends a first reply or overwrites an existing one. */
+  reply: (id: string, reply: string) =>
+    request<ProductReview>(`/product-reviews/${id}/reply`, { method: 'PUT', body: JSON.stringify({ reply }) }),
 }
 
 export const referralClicksApi = {

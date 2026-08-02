@@ -41,6 +41,8 @@ export type AuditEventType =
   | 'affiliate_commission_generated'
   | 'withdrawal_requested'
   | 'withdrawal_status_changed'
+  | 'product_review_submitted'
+  | 'product_review_reply_sent'
 
 interface InsertAuditLogParams {
   eventType: AuditEventType

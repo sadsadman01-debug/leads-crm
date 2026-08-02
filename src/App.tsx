@@ -37,6 +37,7 @@ import { OfflineBanner } from '@/components/OfflineBanner'
 import { PwaUpdatePrompt } from '@/components/PwaUpdatePrompt'
 import { InstallAppBanner } from '@/components/InstallAppBanner'
 import { SubscriptionGuard } from '@/components/SubscriptionGuard'
+import { ProductReviewGate } from '@/components/ProductReviewGate'
 import { useGtmPageView } from '@/hooks/useGtmPageView'
 
 // Charting (recharts) is only needed here — code-split so it doesn't bloat every route.
@@ -51,6 +52,10 @@ const AffiliatesPage = lazy(() => import('@/pages/Affiliates/AffiliatesPage').th
 const WithdrawalRequestsPage = lazy(() =>
   import('@/pages/WithdrawalRequests/WithdrawalRequestsPage').then((m) => ({ default: m.WithdrawalRequestsPage }))
 )
+// Pulls in recharts (via the rating distribution donut) — code-split like the other chart-heavy pages above.
+const ProductReviewsPage = lazy(() =>
+  import('@/pages/ProductReviews/ProductReviewsPage').then((m) => ({ default: m.ProductReviewsPage }))
+)
 function PageFallback() {
   return <div className="p-12 text-center text-base-400">Loading…</div>
 }
@@ -64,6 +69,7 @@ export default function App() {
       <PwaUpdatePrompt />
       <InstallAppBanner />
       <SubscriptionGuard />
+      <ProductReviewGate />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/request-access" element={<RequestAccess />} />
@@ -112,6 +118,14 @@ export default function App() {
                       element={
                         <Suspense fallback={<PageFallback />}>
                           <WithdrawalRequestsPage />
+                        </Suspense>
+                      }
+                    />
+                    <Route
+                      path="/product-reviews"
+                      element={
+                        <Suspense fallback={<PageFallback />}>
+                          <ProductReviewsPage />
                         </Suspense>
                       }
                     />

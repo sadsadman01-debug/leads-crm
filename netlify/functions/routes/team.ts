@@ -5,6 +5,7 @@ import { requireAdminOrAbove, requireSuperAdmin, isSuperAdmin, resolveOrganizati
 import { DEFAULT_USER_PERMISSIONS, normalizePermissions } from '../lib/userPermissions.js'
 import { performPasswordReset } from './passwordResetRequests.js'
 import { logAuditEvent } from '../lib/auditLog.js'
+import { getReviewStatus } from './productReviews.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const PROFILE_COLUMNS = 'id, email, nickname, role, is_active, created_at'
@@ -23,6 +24,8 @@ export async function getMyProfile(user: AuthedUser) {
     organizationName = data?.name ?? null
   }
 
+  const reviewStatus = await getReviewStatus(user)
+
   return json(200, {
     id: user.id,
     email: user.email,
@@ -33,6 +36,8 @@ export async function getMyProfile(user: AuthedUser) {
     organization_name: organizationName,
     permissions: user.permissions,
     force_password_change: user.force_password_change,
+    review_due: reviewStatus.due,
+    pending_review_number: reviewStatus.pendingReviewNumber,
   })
 }
 
