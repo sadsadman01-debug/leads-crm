@@ -37,6 +37,11 @@ export type AuditEventType =
   | 'affiliate_commission_generated'
   | 'withdrawal_requested'
   | 'withdrawal_status_changed'
+  | 'product_review_submitted'
+  | 'product_review_reply_sent'
+  | 'promo_code_created'
+  | 'promo_code_updated'
+  | 'promo_code_deleted'
 
 export interface AuditLogEntry {
   id: string
@@ -106,6 +111,11 @@ export const AUDIT_EVENT_LABELS: Record<AuditEventType, string> = {
   affiliate_commission_generated: 'Affiliate commission generated',
   withdrawal_requested: 'Withdrawal requested',
   withdrawal_status_changed: 'Withdrawal status changed',
+  product_review_submitted: 'Product review submitted',
+  product_review_reply_sent: 'Product review reply sent',
+  promo_code_created: 'Promo code created',
+  promo_code_updated: 'Promo code updated',
+  promo_code_deleted: 'Promo code deleted',
 }
 
 /** Security-relevant events get one color family in the UI; every other

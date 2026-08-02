@@ -24,6 +24,7 @@ import {
   ChevronLeft,
   ChevronRight,
   MessageSquareText,
+  Tag,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useAuth } from '@/contexts/AuthContext'
@@ -306,6 +307,11 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           {isSuperAdmin && (
             <NavItem to="/product-reviews" icon={MessageSquareText} badge={pendingReplyCount}>
               Product Reviews
+            </NavItem>
+          )}
+          {isSuperAdmin && (
+            <NavItem to="/promo-codes" icon={Tag}>
+              Promo Codes
             </NavItem>
           )}
           {navItems.map(({ to, label, icon: Icon }) => (

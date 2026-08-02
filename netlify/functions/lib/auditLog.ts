@@ -43,6 +43,9 @@ export type AuditEventType =
   | 'withdrawal_status_changed'
   | 'product_review_submitted'
   | 'product_review_reply_sent'
+  | 'promo_code_created'
+  | 'promo_code_updated'
+  | 'promo_code_deleted'
 
 interface InsertAuditLogParams {
   eventType: AuditEventType

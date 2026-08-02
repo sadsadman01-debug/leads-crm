@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Building2, ArrowLeft, AlertCircle, Loader2, CheckCircle2, Sparkles, PartyPopper, X } from 'lucide-react'
-import { signupRequestsApi, billingApi, referralClicksApi, pageViewsApi } from '@/lib/api'
+import { Building2, ArrowLeft, AlertCircle, Loader2, CheckCircle2, Sparkles, PartyPopper, X, Tag } from 'lucide-react'
+import { signupRequestsApi, billingApi, promoCodesApi, referralClicksApi, pageViewsApi } from '@/lib/api'
 import { usePlatformBranding } from '@/hooks/usePlatformBranding'
 import { PreAuthHelpWidget } from '@/components/PreAuthHelpWidget'
 import { PRICING_TIER_LABELS, type BillingCycle } from '@/types/billing'
@@ -23,6 +23,9 @@ export function RequestAccess() {
   const [zipCode, setZipCode] = useState('')
   const [billingCycle, setBillingCycle] = useState<BillingCycle>('monthly')
   const [bannerDismissed, setBannerDismissed] = useState(() => sessionStorage.getItem('early-bird-banner-dismissed') === '1')
+  const [promoCode, setPromoCode] = useState('')
+  const [promoError, setPromoError] = useState<string | null>(null)
+  const [appliedPromo, setAppliedPromo] = useState<{ code: string; discount_type: 'flat' | 'percent'; discount_value: number } | null>(null)
 
   // Logged once per page load, before the visitor necessarily submits
   // anything — this is what makes the affiliate conversion funnel's "Link
@@ -51,6 +54,26 @@ export function RequestAccess() {
 
   const countryNotAllowed = country !== '' && !ALLOWED_SIGNUP_COUNTRIES.includes(country)
 
+  const applyPromoMutation = useMutation({
+    mutationFn: () => promoCodesApi.validate(promoCode.trim()),
+    onSuccess: (data) => {
+      setAppliedPromo(data)
+      setPromoError(null)
+    },
+    onError: (err) => {
+      setAppliedPromo(null)
+      setPromoError((err as Error).message)
+    },
+  })
+
+  const discountAmount =
+    appliedPromo && pricing
+      ? appliedPromo.discount_type === 'percent'
+        ? Math.round(pricing.monthly_price_usd * (appliedPromo.discount_value / 100))
+        : Math.min(Math.round(appliedPromo.discount_value), pricing.monthly_price_usd)
+      : 0
+  const finalMonthlyPrice = pricing ? Math.max(pricing.monthly_price_usd - discountAmount, 0) : null
+
   const mutation = useMutation({
     mutationFn: () =>
       signupRequestsApi.create({
@@ -64,6 +87,7 @@ export function RequestAccess() {
         zip_code: zipCode.trim(),
         billing_cycle: billingCycle,
         ...(referralCode ? { ref: referralCode } : {}),
+        ...(appliedPromo ? { promo_code: appliedPromo.code } : {}),
       }),
   })
 
@@ -200,6 +224,67 @@ export function RequestAccess() {
                       </button>
                     )
                   })}
+                </div>
+                <div className="mt-3 border-t border-base-700/60 pt-3">
+                  <label className="label" htmlFor="promo-code">Promo Code (optional)</label>
+                  <div className="flex gap-2">
+                    <input
+                      id="promo-code"
+                      className="input"
+                      value={promoCode}
+                      disabled={Boolean(appliedPromo)}
+                      onChange={(e) => {
+                        setPromoCode(e.target.value)
+                        setPromoError(null)
+                      }}
+                      placeholder="e.g. WELCOME15"
+                    />
+                    {appliedPromo ? (
+                      <button
+                        type="button"
+                        className="btn-secondary shrink-0"
+                        onClick={() => {
+                          setAppliedPromo(null)
+                          setPromoCode('')
+                          setPromoError(null)
+                        }}
+                      >
+                        Remove
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn-secondary shrink-0"
+                        disabled={!promoCode.trim() || applyPromoMutation.isPending}
+                        onClick={() => applyPromoMutation.mutate()}
+                      >
+                        {applyPromoMutation.isPending ? 'Checking…' : 'Apply'}
+                      </button>
+                    )}
+                  </div>
+                  {promoError && (
+                    <p className="mt-1.5 flex items-center gap-1.5 text-xs text-danger">
+                      <AlertCircle size={13} className="shrink-0" />
+                      {promoError}
+                    </p>
+                  )}
+                  {appliedPromo && billingCycle === 'monthly' && (
+                    <div className="mt-1.5 flex items-center gap-1.5 text-xs text-success">
+                      <CheckCircle2 size={13} className="shrink-0" />
+                      <span>
+                        <span className="line-through text-base-500">৳{pricing.monthly_price_usd}</span>{' '}
+                        −৳{discountAmount} ({appliedPromo.code}) ={' '}
+                        <strong>৳{finalMonthlyPrice}/mo</strong>
+                      </span>
+                    </div>
+                  )}
+                  {appliedPromo && billingCycle === 'annual' && (
+                    <p className="mt-1.5 flex items-center gap-1.5 text-xs text-success">
+                      <CheckCircle2 size={13} className="shrink-0" />
+                      <Tag size={13} className="shrink-0" />
+                      {appliedPromo.code} applied — discount applies to the monthly rate only.
+                    </p>
+                  )}
                 </div>
                 {pricing.payment_instructions && (
                   <p className="mt-3 whitespace-pre-wrap text-xs text-base-500">{pricing.payment_instructions}</p>

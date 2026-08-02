@@ -30,6 +30,8 @@ import {
   CalendarX,
   Handshake,
   Wallet,
+  MessageSquareText,
+  Tag,
   type LucideIcon,
 } from 'lucide-react'
 import { auditLogApi, organizationsApi } from '@/lib/api'
@@ -83,6 +85,11 @@ const EVENT_ICONS: Record<AuditEventType, LucideIcon> = {
   affiliate_commission_generated: CircleDollarSign,
   withdrawal_requested: Wallet,
   withdrawal_status_changed: Wallet,
+  product_review_submitted: MessageSquareText,
+  product_review_reply_sent: MessageSquareText,
+  promo_code_created: Tag,
+  promo_code_updated: Tag,
+  promo_code_deleted: Tag,
 }
 
 const ALL_EVENT_TYPES = Object.keys(AUDIT_EVENT_LABELS) as AuditEventType[]

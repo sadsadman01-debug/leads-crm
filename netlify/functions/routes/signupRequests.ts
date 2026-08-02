@@ -7,10 +7,35 @@ import { notifySuperAdmins } from '../lib/notifications.js'
 import { insertAuditLog, logAuditEvent, getClientIp } from '../lib/auditLog.js'
 import { getOrCreateBillingSettingsRow, computeCurrentPricingTier, computeAnnualTotal, addBillingPeriod } from '../lib/billingSettings.js'
 import { ALLOWED_SIGNUP_COUNTRIES } from '../lib/allowedSignupCountries.js'
+import { PAYMENT_METHODS } from '../lib/paymentMethods.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const COLUMNS =
-  'id, organization_name, contact_name, email, phone, message, city, country, zip_code, status, requested_at, reviewed_at, reviewed_by, rejection_reason, pricing_tier, monthly_price_usd, payment_status, billing_cycle, annual_total_usd, referred_by_affiliate_id'
+  'id, organization_name, contact_name, email, phone, message, city, country, zip_code, status, requested_at, reviewed_at, reviewed_by, rejection_reason, pricing_tier, monthly_price_usd, payment_status, billing_cycle, annual_total_usd, referred_by_affiliate_id, promo_code_id, promo_code_text, original_price_bdt, discount_amount_bdt, final_price_bdt, payment_method'
+
+/** Looks up an active promo code and computes the discount against
+ * `originalPrice`. Never throws for an unknown/inactive code — the caller
+ * decides whether that should block submission (it doesn't; a bad code is
+ * simply not applied). Percent discounts round to the nearest Taka; the
+ * final price is floored at 0. */
+async function resolvePromoDiscount(codeInput: string, originalPrice: number) {
+  const supabase = getSupabaseAdmin()
+  const code = codeInput.trim().toUpperCase()
+  if (!code) return null
+
+  const { data } = await supabase
+    .from('promo_codes')
+    .select('id, code, discount_type, discount_value, is_active')
+    .eq('code', code)
+    .maybeSingle()
+  if (!data || !data.is_active) return null
+
+  const rawDiscount = data.discount_type === 'percent' ? originalPrice * (Number(data.discount_value) / 100) : Number(data.discount_value)
+  const discount_amount_bdt = Math.min(Math.round(rawDiscount), originalPrice)
+  const final_price_bdt = Math.max(originalPrice - discount_amount_bdt, 0)
+
+  return { promo_code_id: data.id as string, promo_code_text: data.code as string, discount_amount_bdt, final_price_bdt }
+}
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -50,6 +75,25 @@ export async function createSignupRequest(event: HandlerEvent) {
   const billing_cycle = body.billing_cycle === 'annual' ? 'annual' : 'monthly'
   const annual_total_usd = billing_cycle === 'annual' ? computeAnnualTotal(monthly_price_usd) : null
 
+  // Discount is always computed against the monthly rate, matching the
+  // literal wording of the spec — an annual signup's annual_total_usd is
+  // unaffected by the promo code.
+  const original_price_bdt = monthly_price_usd
+  let promo_code_id: string | null = null
+  let promo_code_text: string | null = null
+  let discount_amount_bdt = 0
+  let final_price_bdt = original_price_bdt
+  const promoCodeInput = (body.promo_code ?? '').trim()
+  if (promoCodeInput) {
+    const resolved = await resolvePromoDiscount(promoCodeInput, original_price_bdt)
+    if (resolved) {
+      promo_code_id = resolved.promo_code_id
+      promo_code_text = resolved.promo_code_text
+      discount_amount_bdt = resolved.discount_amount_bdt
+      final_price_bdt = resolved.final_price_bdt
+    }
+  }
+
   // Silent referral capture — a stale/invalid code just leaves this null,
   // never surfaced as an error to the requester.
   let referred_by_affiliate_id: string | null = null
@@ -76,6 +120,11 @@ export async function createSignupRequest(event: HandlerEvent) {
       billing_cycle,
       annual_total_usd,
       referred_by_affiliate_id,
+      promo_code_id,
+      promo_code_text,
+      original_price_bdt,
+      discount_amount_bdt,
+      final_price_bdt,
     })
     .select(COLUMNS)
     .single()
@@ -147,6 +196,11 @@ export async function approveSignupRequest(id: string, event: HandlerEvent, user
     ? body.payment_status
     : request.payment_status
 
+  if (!PAYMENT_METHODS.includes(body.payment_method)) {
+    throw new HttpError(400, `payment_method must be one of ${PAYMENT_METHODS.join(', ')}`)
+  }
+  const payment_method = body.payment_method as (typeof PAYMENT_METHODS)[number]
+
   const temporaryPassword = generateTempPassword()
   const now = new Date()
   const firstPaymentConfirmedAt = now.toISOString()
@@ -169,9 +223,15 @@ export async function approveSignupRequest(id: string, event: HandlerEvent, user
       first_payment_confirmed_at: firstPaymentConfirmedAt,
       subscription_end_date: subscriptionEndDate,
       referred_by_affiliate_id: request.referred_by_affiliate_id,
+      promo_code_id: request.promo_code_id,
+      promo_code_text: request.promo_code_text,
+      original_price_bdt: request.original_price_bdt,
+      discount_amount_bdt: request.discount_amount_bdt,
+      final_price_bdt: request.final_price_bdt,
+      payment_method,
     })
     .select(
-      'id, name, city, country, zip_code, pricing_tier, monthly_price_usd, billing_cycle, annual_total_usd, payment_status, subscription_end_date, referred_by_affiliate_id'
+      'id, name, city, country, zip_code, pricing_tier, monthly_price_usd, billing_cycle, annual_total_usd, payment_status, subscription_end_date, referred_by_affiliate_id, promo_code_id, promo_code_text, original_price_bdt, discount_amount_bdt, final_price_bdt, payment_method'
     )
     .single()
   if (orgErr) throw new HttpError(500, orgErr.message)
@@ -209,6 +269,28 @@ export async function approveSignupRequest(id: string, event: HandlerEvent, user
     .select(COLUMNS)
     .single()
   if (reqErr) throw new HttpError(500, reqErr.message)
+
+  // First billing_history record — the promo discount only ever applies to
+  // the monthly rate, same reasoning as annual_total_usd being unaffected above.
+  const firstPaymentAmount = request.billing_cycle === 'annual' ? request.annual_total_usd : request.final_price_bdt ?? request.monthly_price_usd
+  await supabase.from('billing_history').insert({
+    organization_id: org.id,
+    amount_usd: firstPaymentAmount,
+    paid_at: firstPaymentConfirmedAt.slice(0, 10),
+    recorded_by: user.id,
+    payment_method,
+  })
+
+  // Increment times_used exactly once, only on approval (never on rejection).
+  if (request.promo_code_id) {
+    const { data: promo } = await supabase.from('promo_codes').select('times_used').eq('id', request.promo_code_id).maybeSingle()
+    if (promo) {
+      await supabase
+        .from('promo_codes')
+        .update({ times_used: promo.times_used + 1 })
+        .eq('id', request.promo_code_id)
+    }
+  }
 
   await logAuditEvent('signup_request_approved', user, event, {
     organizationId: org.id,

@@ -2,6 +2,19 @@ export type PricingTier = 'early_bird' | 'standard'
 export type PaymentStatus = 'pending' | 'received' | 'waived'
 export type BillingStatus = 'pending' | 'overdue' | 'due_soon' | 'paid'
 export type BillingCycle = 'monthly' | 'annual'
+export type PaymentMethod = 'bkash' | 'nagad' | 'rocket' | 'bank_transfer' | 'payoneer' | 'crypto' | 'other'
+
+export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
+  bkash: 'bKash',
+  nagad: 'Nagad',
+  rocket: 'Rocket',
+  bank_transfer: 'Bank Transfer',
+  payoneer: 'Payoneer',
+  crypto: 'Crypto',
+  other: 'Other',
+}
+
+export const PAYMENT_METHODS: PaymentMethod[] = ['bkash', 'nagad', 'rocket', 'bank_transfer', 'payoneer', 'crypto', 'other']
 
 export interface PublicPricing {
   pricing_tier: PricingTier
@@ -38,6 +51,7 @@ export interface OrganizationBillingRow {
   payment_status: PaymentStatus | null
   subscription_end_date: string | null
   billing_status: BillingStatus
+  payment_method: PaymentMethod | null
 }
 
 export interface MyOrgBilling {

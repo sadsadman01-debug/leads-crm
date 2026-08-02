@@ -14,7 +14,9 @@ export async function listOrganizations(user: AuthedUser) {
 
   const { data: orgs, error } = await supabase
     .from('organizations')
-    .select('id, name, city, country, zip_code, status, created_at, pricing_tier, monthly_price_usd, payment_status, subscription_end_date, referred_by_affiliate_id')
+    .select(
+      'id, name, city, country, zip_code, status, created_at, pricing_tier, monthly_price_usd, payment_status, subscription_end_date, referred_by_affiliate_id, promo_code_id, promo_code_text, original_price_bdt, discount_amount_bdt, final_price_bdt, payment_method'
+    )
     .order('created_at', { ascending: true })
   if (error) throw new HttpError(500, error.message)
 
@@ -84,7 +86,9 @@ export async function getOrganization(id: string, user: AuthedUser) {
   const supabase = getSupabaseAdmin()
   const { data, error } = await supabase
     .from('organizations')
-    .select('id, name, city, country, zip_code, status, created_at, pricing_tier, monthly_price_usd, payment_status, subscription_end_date, referred_by_affiliate_id')
+    .select(
+      'id, name, city, country, zip_code, status, created_at, pricing_tier, monthly_price_usd, payment_status, subscription_end_date, referred_by_affiliate_id, promo_code_id, promo_code_text, original_price_bdt, discount_amount_bdt, final_price_bdt, payment_method'
+    )
     .eq('id', id)
     .maybeSingle()
   if (error) throw new HttpError(500, error.message)

@@ -4,7 +4,15 @@ import { CircleDollarSign, Receipt } from 'lucide-react'
 import { billingApi } from '@/lib/api'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
-import { PRICING_TIER_LABELS, amountForCycle, type BillingStatus, type OrganizationBillingRow } from '@/types/billing'
+import {
+  PRICING_TIER_LABELS,
+  amountForCycle,
+  PAYMENT_METHOD_LABELS,
+  PAYMENT_METHODS,
+  type BillingStatus,
+  type OrganizationBillingRow,
+  type PaymentMethod,
+} from '@/types/billing'
 
 const STATUS_TONE: Record<BillingStatus, 'success' | 'warn' | 'danger' | 'neutral'> = {
   paid: 'success',
@@ -50,6 +58,7 @@ export function BillingPage() {
                 <th className="px-3 py-2 font-medium">Tier</th>
                 <th className="px-3 py-2 font-medium">Price</th>
                 <th className="px-3 py-2 font-medium">Subscription Ends</th>
+                <th className="px-3 py-2 font-medium">Payment Method</th>
                 <th className="px-3 py-2 font-medium">Status</th>
                 <th className="px-3 py-2 font-medium">Actions</th>
               </tr>
@@ -64,6 +73,9 @@ export function BillingPage() {
                   </td>
                   <td className="px-3 py-3 text-base-400">
                     {org.subscription_end_date ? new Date(org.subscription_end_date).toLocaleDateString() : '—'}
+                  </td>
+                  <td className="px-3 py-3 text-base-400">
+                    {org.payment_method ? PAYMENT_METHOD_LABELS[org.payment_method] : '—'}
                   </td>
                   <td className="px-3 py-3">
                     <Badge tone={STATUS_TONE[org.billing_status]}>{STATUS_LABELS[org.billing_status]}</Badge>
@@ -92,24 +104,33 @@ function RecordPaymentModal({ org, onClose }: { org: OrganizationBillingRow | nu
   const [paidAt, setPaidAt] = useState(() => new Date().toISOString().slice(0, 10))
   const [notes, setNotes] = useState('')
   const [extendFrom, setExtendFrom] = useState<'current_expiry' | 'payment_date'>('current_expiry')
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | ''>('')
 
   function reset() {
     setAmount('')
     setPaidAt(new Date().toISOString().slice(0, 10))
     setNotes('')
     setExtendFrom('current_expiry')
+    setPaymentMethod('')
   }
 
   useEffect(() => {
     if (!org) return
     setAmount(org.monthly_price_usd != null ? String(org.billing_cycle === 'annual' ? org.annual_total_usd : org.monthly_price_usd) : '')
     setExtendFrom(org.billing_status === 'overdue' ? 'payment_date' : 'current_expiry')
+    setPaymentMethod(org.payment_method ?? '')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [org?.id])
 
   const mutation = useMutation({
     mutationFn: () =>
-      billingApi.recordPayment(org!.id, { amount_usd: Number(amount), paid_at: paidAt, notes: notes.trim() || undefined, extend_from: extendFrom }),
+      billingApi.recordPayment(org!.id, {
+        amount_usd: Number(amount),
+        paid_at: paidAt,
+        notes: notes.trim() || undefined,
+        extend_from: extendFrom,
+        payment_method: paymentMethod as PaymentMethod,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['billing'] })
       onClose()
@@ -145,6 +166,15 @@ function RecordPaymentModal({ org, onClose }: { org: OrganizationBillingRow | nu
         <div>
           <label className="label">Payment Date</label>
           <input type="date" required className="input" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
+        </div>
+        <div>
+          <label className="label">Payment Method</label>
+          <select className="input" required value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}>
+            <option value="">Select payment method…</option>
+            {PAYMENT_METHODS.map((m) => (
+              <option key={m} value={m}>{PAYMENT_METHOD_LABELS[m]}</option>
+            ))}
+          </select>
         </div>
         <div>
           <label className="label">Notes (optional)</label>

@@ -84,6 +84,13 @@ import {
   updateSignupRequestPaymentStatus,
 } from './routes/signupRequests.js'
 import {
+  listPromoCodes,
+  createPromoCode,
+  updatePromoCode,
+  deletePromoCode,
+  validatePromoCode,
+} from './routes/promoCodes.js'
+import {
   createPasswordResetRequest,
   listPasswordResetRequests,
   resolvePasswordResetRequest,
@@ -670,6 +677,19 @@ export const handler: Handler = async (event) => {
       else if (id === 'stats' && method === 'GET') response = await getReviewStats(event, user)
       else if (id && sub === 'reply' && method === 'PUT') response = await replyToReview(id, event, user)
       else throw new HttpError(404, 'Not found')
+    } else if (resource === 'promo-codes') {
+      // Same shape as signup-requests: validating a code from the public
+      // Request Access form needs no session; everything else is Super-Admin-only.
+      if (id === 'validate' && method === 'POST') {
+        response = await validatePromoCode(event)
+      } else {
+        const user = await requireUser(event)
+        if (!id && method === 'GET') response = await listPromoCodes(user)
+        else if (!id && method === 'POST') response = await createPromoCode(event, user)
+        else if (id && method === 'PUT') response = await updatePromoCode(id, event, user)
+        else if (id && method === 'DELETE') response = await deletePromoCode(id, event, user)
+        else throw new HttpError(404, 'Not found')
+      }
     } else if (resource === 'referral-clicks') {
       // Public — logged on every Request Access page load with a valid ?ref=.
       if (!id && method === 'POST') response = await logReferralClick(event)

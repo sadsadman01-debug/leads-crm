@@ -30,6 +30,7 @@ import { MfaResetRequestsPage } from '@/pages/MfaResetRequests/MfaResetRequestsP
 import { SupportContactsPage } from '@/pages/SupportContacts/SupportContactsPage'
 import { AuditLogPage } from '@/pages/AuditLog/AuditLogPage'
 import { BillingPage } from '@/pages/Billing/BillingPage'
+import { PromoCodesPage } from '@/pages/PromoCodes/PromoCodesPage'
 import { AffiliateApplicationsPage } from '@/pages/AffiliateApplications/AffiliateApplicationsPage'
 import { NotificationsPage } from '@/pages/NotificationsPage'
 import { SubscriptionExpired } from '@/pages/SubscriptionExpired'
@@ -104,6 +105,7 @@ export default function App() {
                     <Route path="/support-contacts" element={<SupportContactsPage />} />
                     <Route path="/audit-log" element={<AuditLogPage />} />
                     <Route path="/billing" element={<BillingPage />} />
+                    <Route path="/promo-codes" element={<PromoCodesPage />} />
                     <Route path="/affiliate-applications" element={<AffiliateApplicationsPage />} />
                     <Route
                       path="/affiliates"

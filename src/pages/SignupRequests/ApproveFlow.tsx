@@ -4,7 +4,8 @@ import { AlertTriangle, CircleDollarSign } from 'lucide-react'
 import { signupRequestsApi } from '@/lib/api'
 import { Modal } from '@/components/ui/Modal'
 import { TempPasswordResult } from '@/components/TempPasswordResult'
-import { PRICING_TIER_LABELS, amountForCycle } from '@/types/billing'
+import { PRICING_TIER_LABELS, amountForCycle, PAYMENT_METHOD_LABELS, PAYMENT_METHODS } from '@/types/billing'
+import type { PaymentMethod } from '@/types/billing'
 import type { ApproveSignupRequestResult, SignupRequest } from '@/types/signupRequest'
 
 function draftWelcomeMessage(result: ApproveSignupRequestResult): string {
@@ -28,16 +29,18 @@ export function ApproveFlow({ request, onClose }: { request: SignupRequest | nul
   const queryClient = useQueryClient()
   const [result, setResult] = useState<ApproveSignupRequestResult | null>(null)
   const [draft, setDraft] = useState('')
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | ''>('')
 
   useEffect(() => {
     if (request) {
       setResult(null)
       setDraft('')
+      setPaymentMethod('')
     }
   }, [request])
 
   const mutation = useMutation({
-    mutationFn: () => signupRequestsApi.approve(request!.id),
+    mutationFn: () => signupRequestsApi.approve(request!.id, paymentMethod as PaymentMethod),
     onSuccess: (data) => {
       setResult(data)
       setDraft(draftWelcomeMessage(data))
@@ -104,9 +107,29 @@ export function ApproveFlow({ request, onClose }: { request: SignupRequest | nul
               {PRICING_TIER_LABELS[request.pricing_tier]}, {request.billing_cycle === 'annual' ? 'annual' : 'monthly'}) — Payment status:{' '}
               <strong className="capitalize">{request.payment_status}</strong>
               {request.payment_status === 'pending' && ' — approving now will not change this.'}
+              {request.promo_code_text && (
+                <>
+                  {' '}— Promo <strong>{request.promo_code_text}</strong> applied (
+                  {'−'}৳{request.discount_amount_bdt}, final ৳{request.final_price_bdt})
+                </>
+              )}
             </p>
           </div>
         )}
+
+        <div>
+          <label className="mb-1 block text-xs font-medium text-base-400">Payment Method *</label>
+          <select
+            className="input"
+            value={paymentMethod}
+            onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+          >
+            <option value="">Select payment method…</option>
+            {PAYMENT_METHODS.map((m) => (
+              <option key={m} value={m}>{PAYMENT_METHOD_LABELS[m]}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {mutation.isError && (
@@ -118,7 +141,7 @@ export function ApproveFlow({ request, onClose }: { request: SignupRequest | nul
 
       <div className="mt-5 flex justify-end gap-3 border-t border-base-700/60 pt-4">
         <button className="btn-secondary" onClick={handleClose}>Cancel</button>
-        <button className="btn-primary" disabled={mutation.isPending} onClick={() => mutation.mutate()}>
+        <button className="btn-primary" disabled={mutation.isPending || !paymentMethod} onClick={() => mutation.mutate()}>
           {mutation.isPending ? 'Creating…' : 'Approve & Create Account'}
         </button>
       </div>

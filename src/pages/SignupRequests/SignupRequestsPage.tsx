@@ -4,7 +4,7 @@ import { UserPlus2, Mail, Phone, MapPin } from 'lucide-react'
 import { signupRequestsApi } from '@/lib/api'
 import { Badge } from '@/components/ui/Badge'
 import { ConversionStatsRow } from '@/components/ConversionStatsRow'
-import { PRICING_TIER_LABELS, type PaymentStatus } from '@/types/billing'
+import { PRICING_TIER_LABELS, PAYMENT_METHOD_LABELS, type PaymentStatus } from '@/types/billing'
 import type { SignupRequest, SignupRequestStatus } from '@/types/signupRequest'
 import { ApproveFlow } from './ApproveFlow'
 import { RejectModal } from './RejectModal'
@@ -136,9 +136,19 @@ export function SignupRequestsPage() {
                   <td className="px-3 py-3 text-base-300">
                     {r.pricing_tier ? (
                       <div>
-                        <p className="font-medium text-base-100">
-                          {r.billing_cycle === 'annual' ? `৳${Math.round(r.annual_total_usd ?? 0)}/yr` : `৳${r.monthly_price_usd}/mo`}
-                        </p>
+                        {r.promo_code_text ? (
+                          <>
+                            <p className="text-xs text-base-500 line-through">৳{r.original_price_bdt}</p>
+                            <p className="text-xs text-accent-400">{r.promo_code_text}: −৳{r.discount_amount_bdt}</p>
+                            <p className="font-medium text-base-100">
+                              ৳{r.final_price_bdt}{r.billing_cycle === 'annual' ? '/yr' : '/mo'}
+                            </p>
+                          </>
+                        ) : (
+                          <p className="font-medium text-base-100">
+                            {r.billing_cycle === 'annual' ? `৳${Math.round(r.annual_total_usd ?? 0)}/yr` : `৳${r.monthly_price_usd}/mo`}
+                          </p>
+                        )}
                         <p className="text-xs text-base-500">
                           {PRICING_TIER_LABELS[r.pricing_tier]} · {r.billing_cycle === 'annual' ? 'Annual' : 'Monthly'}
                         </p>
@@ -160,7 +170,12 @@ export function SignupRequestsPage() {
                         <option value="waived">Waived</option>
                       </select>
                     ) : (
-                      <Badge tone={PAYMENT_STATUS_TONE[r.payment_status]}>{r.payment_status}</Badge>
+                      <div>
+                        <Badge tone={PAYMENT_STATUS_TONE[r.payment_status]}>{r.payment_status}</Badge>
+                        {r.status === 'approved' && r.payment_method && (
+                          <p className="mt-1 text-xs text-base-500">{PAYMENT_METHOD_LABELS[r.payment_method]}</p>
+                        )}
+                      </div>
                     )}
                   </td>
                   <td className="px-3 py-3 text-base-400">{new Date(r.requested_at).toLocaleDateString()}</td>

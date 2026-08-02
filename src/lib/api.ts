@@ -30,6 +30,7 @@ import type { Organization, OrganizationSummary, OrgBranding, PlatformBranding }
 import type { CustomFieldDefinition, AppliesTo, FieldType } from '@/types/customField'
 import type { SavedReport, ReportRunResult, ReportType, ChartType, ReportFilters } from '@/types/report'
 import type { SignupRequest, ApproveSignupRequestResult } from '@/types/signupRequest'
+import type { PromoCode } from '@/types/promoCode'
 import type { PasswordResetRequest, PasswordResetResult } from '@/types/passwordResetRequest'
 import type { MfaResetRequest, MfaResetResult } from '@/types/mfaResetRequest'
 import type { AppNotification, NotificationListResponse } from '@/types/notification'
@@ -47,7 +48,7 @@ import type {
   MergedDealResult,
   MergeSnapshotSummary,
 } from '@/types/duplicateMerge'
-import type { PublicPricing, BillingSettings, OrganizationBillingRow, MyOrgBilling, PaymentStatus, BillingCycle } from '@/types/billing'
+import type { PublicPricing, BillingSettings, OrganizationBillingRow, MyOrgBilling, PaymentStatus, BillingCycle, PaymentMethod } from '@/types/billing'
 import type {
   AffiliateApplication,
   ApproveAffiliateApplicationResult,
@@ -595,14 +596,15 @@ export const signupRequestsApi = {
     zip_code: string
     billing_cycle?: BillingCycle
     ref?: string
+    promo_code?: string
   }) => requestPublic<SignupRequest>('/signup-requests', { method: 'POST', body: JSON.stringify(payload) }),
 
   list: () => request<{ requests: SignupRequest[] }>('/signup-requests'),
 
-  approve: (id: string, payment_status?: PaymentStatus) =>
+  approve: (id: string, payment_method: PaymentMethod, payment_status?: PaymentStatus) =>
     request<ApproveSignupRequestResult>(`/signup-requests/${id}/approve`, {
       method: 'POST',
-      body: JSON.stringify(payment_status ? { payment_status } : {}),
+      body: JSON.stringify(payment_status ? { payment_method, payment_status } : { payment_method }),
     }),
 
   reject: (id: string, rejection_reason?: string) =>
@@ -631,10 +633,35 @@ export const billingApi = {
 
   recordPayment: (
     organizationId: string,
-    payload: { amount_usd: number; paid_at: string; notes?: string; extend_from: 'current_expiry' | 'payment_date' }
+    payload: {
+      amount_usd: number
+      paid_at: string
+      notes?: string
+      extend_from: 'current_expiry' | 'payment_date'
+      payment_method: PaymentMethod
+    }
   ) => request<OrganizationBillingRow>(`/billing/${organizationId}/record-payment`, { method: 'POST', body: JSON.stringify(payload) }),
 
   getMyOrganization: () => request<MyOrgBilling>('/billing/my-organization'),
+}
+
+export const promoCodesApi = {
+  list: () => request<{ promo_codes: PromoCode[] }>('/promo-codes'),
+
+  create: (payload: { code: string; discount_type: 'flat' | 'percent'; discount_value: number }) =>
+    request<PromoCode>('/promo-codes', { method: 'POST', body: JSON.stringify(payload) }),
+
+  update: (id: string, payload: Partial<{ discount_type: 'flat' | 'percent'; discount_value: number; is_active: boolean }>) =>
+    request<PromoCode>(`/promo-codes/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+
+  remove: (id: string) => request<{ success: true }>(`/promo-codes/${id}`, { method: 'DELETE' }),
+
+  /** Public — reachable from the Request Access form's "Apply" button before any session exists. */
+  validate: (code: string) =>
+    requestPublic<{ id: string; code: string; discount_type: 'flat' | 'percent'; discount_value: number }>('/promo-codes/validate', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
+    }),
 }
 
 export const passwordResetRequestsApi = {

@@ -1,4 +1,4 @@
-import type { PricingTier, PaymentStatus, BillingCycle } from './billing'
+import type { PricingTier, PaymentStatus, BillingCycle, PaymentMethod } from './billing'
 
 export type SignupRequestStatus = 'pending' | 'approved' | 'rejected'
 
@@ -24,6 +24,12 @@ export interface SignupRequest {
   annual_total_usd: number | null
   referred_by_affiliate_id: string | null
   referred_by_affiliate_name?: string | null
+  promo_code_id: string | null
+  promo_code_text: string | null
+  original_price_bdt: number | null
+  discount_amount_bdt: number
+  final_price_bdt: number | null
+  payment_method: PaymentMethod | null
 }
 
 export interface ApproveSignupRequestResult {
@@ -40,6 +46,12 @@ export interface ApproveSignupRequestResult {
     annual_total_usd: number | null
     payment_status: PaymentStatus | null
     subscription_end_date: string | null
+    promo_code_id: string | null
+    promo_code_text: string | null
+    original_price_bdt: number | null
+    discount_amount_bdt: number
+    final_price_bdt: number | null
+    payment_method: PaymentMethod | null
   }
   admin: { email: string; nickname: string; temporary_password: string }
 }

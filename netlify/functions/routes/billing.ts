@@ -12,6 +12,7 @@ import {
 } from '../lib/billingSettings.js'
 import { logAuditEvent } from '../lib/auditLog.js'
 import { getOrCreateAffiliateSettingsRow } from '../lib/affiliateSettings.js'
+import { PAYMENT_METHODS } from '../lib/paymentMethods.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const DUE_SOON_DAYS = 5
@@ -117,7 +118,9 @@ export async function listBilling(event: HandlerEvent, user: AuthedUser) {
   const supabase = getSupabaseAdmin()
   const { data, error } = await supabase
     .from('organizations')
-    .select('id, name, status, pricing_tier, monthly_price_usd, billing_cycle, annual_total_usd, payment_status, subscription_end_date')
+    .select(
+      'id, name, status, pricing_tier, monthly_price_usd, billing_cycle, annual_total_usd, payment_status, subscription_end_date, payment_method'
+    )
     .order('created_at', { ascending: true })
   if (error) throw new HttpError(500, error.message)
 
@@ -216,6 +219,10 @@ export async function recordPayment(organizationId: string, event: HandlerEvent,
   const paidAt = body.paid_at || new Date().toISOString().slice(0, 10)
   const notes = (body.notes ?? '').trim() || null
   const extendFrom = body.extend_from === 'current_expiry' ? 'current_expiry' : 'payment_date'
+  if (!PAYMENT_METHODS.includes(body.payment_method)) {
+    throw new HttpError(400, `payment_method must be one of ${PAYMENT_METHODS.join(', ')}`)
+  }
+  const payment_method = body.payment_method as (typeof PAYMENT_METHODS)[number]
 
   const { data: org, error: orgErr } = await supabase
     .from('organizations')
@@ -234,7 +241,7 @@ export async function recordPayment(organizationId: string, event: HandlerEvent,
 
   const { error: insErr } = await supabase
     .from('billing_history')
-    .insert({ organization_id: organizationId, amount_usd: amount, paid_at: paidAt, recorded_by: user.id, notes })
+    .insert({ organization_id: organizationId, amount_usd: amount, paid_at: paidAt, recorded_by: user.id, notes, payment_method })
   if (insErr) throw new HttpError(500, insErr.message)
 
   if (org.referred_by_affiliate_id) {
@@ -244,7 +251,7 @@ export async function recordPayment(organizationId: string, event: HandlerEvent,
   const baseDate = extendFrom === 'current_expiry' && org.subscription_end_date ? org.subscription_end_date : paidAt
   const newSubscriptionEndDate = addBillingPeriod(baseDate, org.billing_cycle as BillingCycle)
 
-  const update: Record<string, any> = { subscription_end_date: newSubscriptionEndDate }
+  const update: Record<string, any> = { subscription_end_date: newSubscriptionEndDate, payment_method }
   if (org.payment_status !== 'received') update.payment_status = 'received'
 
   const wasExpired = Boolean(org.subscription_end_date) && new Date(org.subscription_end_date) < new Date()
@@ -253,7 +260,7 @@ export async function recordPayment(organizationId: string, event: HandlerEvent,
     .from('organizations')
     .update(update)
     .eq('id', organizationId)
-    .select('id, name, pricing_tier, monthly_price_usd, billing_cycle, annual_total_usd, payment_status, subscription_end_date')
+    .select('id, name, pricing_tier, monthly_price_usd, billing_cycle, annual_total_usd, payment_status, subscription_end_date, payment_method')
     .single()
   if (updateErr) throw new HttpError(500, updateErr.message)
 
@@ -264,6 +271,7 @@ export async function recordPayment(organizationId: string, event: HandlerEvent,
       amountUsd: amount,
       paidAt,
       extendFrom,
+      paymentMethod: payment_method,
       previousSubscriptionEndDate: org.subscription_end_date,
       newSubscriptionEndDate,
       restoredFromExpiry: wasExpired,
