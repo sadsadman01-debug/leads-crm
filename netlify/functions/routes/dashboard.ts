@@ -183,17 +183,21 @@ export async function getDashboardSummary(event: HandlerEvent, user: AuthedUser)
   }
 
   const reminderItems = rows
-    .map((lead: any, i: number) => ({ lead, reminder: computeReminder(statuses[i]) }))
-    .filter((r) => r.reminder.is_overdue || r.reminder.is_due_today)
-    .sort((a, b) => (a.reminder.next_follow_up_due_at! < b.reminder.next_follow_up_due_at! ? -1 : 1))
+    .flatMap((lead: any, i: number) =>
+      computeReminder(statuses[i])
+        .reminders.filter((r) => r.is_overdue || r.is_due_today)
+        .map((r) => ({
+          id: lead.id,
+          company_name: lead.company_name,
+          priority: lead.priority,
+          channel: r.channel,
+          stage: r.stage,
+          due_at: r.due_at,
+          is_overdue: r.is_overdue,
+        }))
+    )
+    .sort((a, b) => (a.due_at < b.due_at ? -1 : 1))
     .slice(0, MAX_REMINDER_ITEMS)
-    .map(({ lead, reminder }) => ({
-      id: lead.id,
-      company_name: lead.company_name,
-      priority: lead.priority,
-      due_at: reminder.next_follow_up_due_at,
-      is_overdue: reminder.is_overdue,
-    }))
 
   const overdueCount = statuses.filter((s: any) => computeReminder(s).is_overdue).length
   const dueTodayCount = statuses.filter((s: any) => computeReminder(s).is_due_today).length

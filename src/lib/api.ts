@@ -762,8 +762,23 @@ export const pipelineStagesApi = {
 export const settingsApi = {
   get: () => request<AppSettings>('/settings'),
 
-  update: (payload: Partial<Pick<AppSettings, 'follow_up_interval_days' | 'default_currency'>>) =>
-    request<AppSettings>('/settings', { method: 'PUT', body: JSON.stringify(payload) }),
+  update: (
+    payload: Partial<
+      Pick<
+        AppSettings,
+        | 'email_followup1_interval_days'
+        | 'email_followup2_interval_days'
+        | 'email_followup3_interval_days'
+        | 'whatsapp_followup1_interval_days'
+        | 'whatsapp_followup2_interval_days'
+        | 'whatsapp_followup3_interval_days'
+        | 'linkedin_followup1_interval_days'
+        | 'linkedin_followup2_interval_days'
+        | 'linkedin_followup3_interval_days'
+        | 'default_currency'
+      >
+    >
+  ) => request<AppSettings>('/settings', { method: 'PUT', body: JSON.stringify(payload) }),
 }
 
 export const dealStagesApi = {

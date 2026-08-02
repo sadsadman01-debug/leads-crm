@@ -421,6 +421,12 @@ export const STATUS_FIELDS: Record<string, { flagField: string; tsField: string;
   linkedin_sent: { flagField: 'linkedin_sent', tsField: 'linkedin_sent_at', label: 'LinkedIn Sent' },
   sms_sent: { flagField: 'sms_sent', tsField: 'sms_sent_at', label: 'SMS Sent' },
   cold_call_made: { flagField: 'cold_call_made', tsField: 'cold_call_made_at', label: 'Cold Call Made' },
+  whatsapp_followup1_sent: { flagField: 'whatsapp_followup1_sent', tsField: 'whatsapp_followup1_sent_at', label: 'WhatsApp Follow-up 1 Sent' },
+  whatsapp_followup2_sent: { flagField: 'whatsapp_followup2_sent', tsField: 'whatsapp_followup2_sent_at', label: 'WhatsApp Follow-up 2 Sent' },
+  whatsapp_followup3_sent: { flagField: 'whatsapp_followup3_sent', tsField: 'whatsapp_followup3_sent_at', label: 'WhatsApp Follow-up 3 Sent' },
+  linkedin_followup1_sent: { flagField: 'linkedin_followup1_sent', tsField: 'linkedin_followup1_sent_at', label: 'LinkedIn Follow-up 1 Sent' },
+  linkedin_followup2_sent: { flagField: 'linkedin_followup2_sent', tsField: 'linkedin_followup2_sent_at', label: 'LinkedIn Follow-up 2 Sent' },
+  linkedin_followup3_sent: { flagField: 'linkedin_followup3_sent', tsField: 'linkedin_followup3_sent_at', label: 'LinkedIn Follow-up 3 Sent' },
 }
 
 export async function updateLeadStatus(id: string, event: HandlerEvent, user: AuthedUser) {
@@ -432,7 +438,6 @@ export async function updateLeadStatus(id: string, event: HandlerEvent, user: Au
 
   const update: Record<string, any> = {}
   const activityMessages: string[] = []
-  let intervalDays: number | null = null
 
   for (const [key, { flagField, tsField, label }] of Object.entries(STATUS_FIELDS)) {
     if (key in body) {
@@ -444,7 +449,7 @@ export async function updateLeadStatus(id: string, event: HandlerEvent, user: Au
       const trigger = FOLLOW_UP_DUE_TRIGGERS[key]
       if (trigger) {
         if (value) {
-          intervalDays ??= await getFollowUpIntervalDays(orgId)
+          const intervalDays = await getFollowUpIntervalDays(orgId, trigger.channel, trigger.stage)
           const due = new Date()
           due.setUTCDate(due.getUTCDate() + intervalDays)
           update[trigger.setsDueField] = due.toISOString()
@@ -524,7 +529,11 @@ const KANBAN_SELECT = `
   id, company_name, priority, stage_id, assigned_to,
   lead_status ( cold_email_sent, followup1_sent, followup2_sent, followup3_sent,
     whatsapp_sent, linkedin_sent, sms_sent, replied, converted,
-    followup1_due_at, followup2_due_at, followup3_due_at )
+    followup1_due_at, followup2_due_at, followup3_due_at,
+    whatsapp_followup1_sent, whatsapp_followup2_sent, whatsapp_followup3_sent,
+    whatsapp_followup1_due_at, whatsapp_followup2_due_at, whatsapp_followup3_due_at,
+    linkedin_followup1_sent, linkedin_followup2_sent, linkedin_followup3_sent,
+    linkedin_followup1_due_at, linkedin_followup2_due_at, linkedin_followup3_due_at )
 `
 const KANBAN_MAX_LEADS = 1000
 

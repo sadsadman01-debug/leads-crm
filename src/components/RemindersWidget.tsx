@@ -1,8 +1,14 @@
 import { useNavigate } from 'react-router-dom'
-import { AlertCircle, Clock } from 'lucide-react'
+import { AlertCircle, Clock, Mail, MessageCircle, Linkedin } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { PriorityBadge } from '@/components/ui/Badge'
-import type { DashboardSummary } from '@/types/lead'
+import type { DashboardSummary, ReminderChannel } from '@/types/lead'
+
+const CHANNEL_ICON: Record<ReminderChannel, typeof Mail> = {
+  email: Mail,
+  whatsapp: MessageCircle,
+  linkedin: Linkedin,
+}
 
 export function RemindersWidget({ reminders }: { reminders: DashboardSummary['reminders'] }) {
   const navigate = useNavigate()
@@ -32,25 +38,29 @@ export function RemindersWidget({ reminders }: { reminders: DashboardSummary['re
         <p className="py-6 text-center text-sm text-base-400">Nothing needs action right now — nice work.</p>
       ) : (
         <ul className="max-h-80 space-y-1.5 overflow-y-auto">
-          {items.map((item) => (
-            <li
-              key={item.id}
-              onClick={() => navigate(`/leads/${item.id}`)}
-              className="flex cursor-pointer flex-col gap-1 rounded-lg px-3 py-2.5 transition-colors hover:bg-base-850 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div className="flex min-w-0 items-center gap-2.5">
-                <span
-                  className={`h-2 w-2 shrink-0 rounded-full ${item.is_overdue ? 'bg-danger' : 'bg-warn'}`}
-                />
-                <span className="truncate text-sm text-base-100">{item.company_name}</span>
-                <PriorityBadge priority={item.priority} />
-              </div>
-              <span className={`shrink-0 pl-4 text-xs sm:pl-0 ${item.is_overdue ? 'text-danger' : 'text-warn'}`}>
-                {item.is_overdue ? 'Overdue since ' : 'Due '}
-                {format(parseISO(item.due_at), 'MMM d')}
-              </span>
-            </li>
-          ))}
+          {items.map((item) => {
+            const ChannelIcon = CHANNEL_ICON[item.channel]
+            return (
+              <li
+                key={`${item.id}-${item.channel}-${item.stage}`}
+                onClick={() => navigate(`/leads/${item.id}`)}
+                className="flex cursor-pointer flex-col gap-1 rounded-lg px-3 py-2.5 transition-colors hover:bg-base-850 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span
+                    className={`h-2 w-2 shrink-0 rounded-full ${item.is_overdue ? 'bg-danger' : 'bg-warn'}`}
+                  />
+                  <ChannelIcon size={13} className="shrink-0 text-base-400" />
+                  <span className="truncate text-sm text-base-100">{item.company_name}</span>
+                  <PriorityBadge priority={item.priority} />
+                </div>
+                <span className={`shrink-0 pl-4 text-xs sm:pl-0 ${item.is_overdue ? 'text-danger' : 'text-warn'}`}>
+                  {item.is_overdue ? 'Overdue since ' : 'Due '}
+                  {format(parseISO(item.due_at), 'MMM d')}
+                </span>
+              </li>
+            )
+          })}
         </ul>
       )}
     </div>

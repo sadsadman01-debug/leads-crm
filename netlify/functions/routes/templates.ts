@@ -4,7 +4,11 @@ import { HttpError, json } from '../lib/http.js'
 import { requireFeaturePermission, resolveOrganizationId, scopeToOrg, requireRowInOrgScope } from '../lib/permissions.js'
 import type { AuthedUser } from '../lib/auth.js'
 
-const TEMPLATE_TYPES = ['cold_email', 'followup1', 'followup2', 'followup3', 'whatsapp', 'linkedin', 'sms']
+const TEMPLATE_TYPES = [
+  'cold_email', 'followup1', 'followup2', 'followup3', 'whatsapp', 'linkedin', 'sms',
+  'whatsapp_followup1', 'whatsapp_followup2', 'whatsapp_followup3',
+  'linkedin_followup1', 'linkedin_followup2', 'linkedin_followup3',
+]
 const COLUMNS = 'id, name, subject, body, template_type, created_at, updated_at'
 
 export async function listTemplates(event: HandlerEvent, user: AuthedUser) {

@@ -58,10 +58,28 @@ export interface LeadStatus {
   cold_call_made: boolean
   cold_call_made_at: string | null
   cold_call_outcome: ColdCallOutcome | null
+  whatsapp_followup1_sent: boolean
+  whatsapp_followup1_sent_at: string | null
+  whatsapp_followup2_sent: boolean
+  whatsapp_followup2_sent_at: string | null
+  whatsapp_followup3_sent: boolean
+  whatsapp_followup3_sent_at: string | null
+  linkedin_followup1_sent: boolean
+  linkedin_followup1_sent_at: string | null
+  linkedin_followup2_sent: boolean
+  linkedin_followup2_sent_at: string | null
+  linkedin_followup3_sent: boolean
+  linkedin_followup3_sent_at: string | null
   updated_at: string
   followup1_due_at?: string | null
   followup2_due_at?: string | null
   followup3_due_at?: string | null
+  whatsapp_followup1_due_at?: string | null
+  whatsapp_followup2_due_at?: string | null
+  whatsapp_followup3_due_at?: string | null
+  linkedin_followup1_due_at?: string | null
+  linkedin_followup2_due_at?: string | null
+  linkedin_followup3_due_at?: string | null
   next_follow_up_due_at?: string | null
   is_overdue?: boolean
   is_due_today?: boolean
@@ -100,7 +118,20 @@ export interface Industry {
   name: string
 }
 
-export type TemplateType = 'cold_email' | 'followup1' | 'followup2' | 'followup3' | 'whatsapp' | 'linkedin' | 'sms'
+export type TemplateType =
+  | 'cold_email'
+  | 'followup1'
+  | 'followup2'
+  | 'followup3'
+  | 'whatsapp'
+  | 'linkedin'
+  | 'sms'
+  | 'whatsapp_followup1'
+  | 'whatsapp_followup2'
+  | 'whatsapp_followup3'
+  | 'linkedin_followup1'
+  | 'linkedin_followup2'
+  | 'linkedin_followup3'
 
 export const TEMPLATE_TYPES: Array<{ value: TemplateType; label: string; hasSubject: boolean }> = [
   { value: 'cold_email', label: 'Cold Email', hasSubject: true },
@@ -110,6 +141,12 @@ export const TEMPLATE_TYPES: Array<{ value: TemplateType; label: string; hasSubj
   { value: 'whatsapp', label: 'WhatsApp Message', hasSubject: false },
   { value: 'linkedin', label: 'LinkedIn Message', hasSubject: false },
   { value: 'sms', label: 'SMS', hasSubject: false },
+  { value: 'whatsapp_followup1', label: 'WhatsApp Follow-up 1', hasSubject: false },
+  { value: 'whatsapp_followup2', label: 'WhatsApp Follow-up 2', hasSubject: false },
+  { value: 'whatsapp_followup3', label: 'WhatsApp Follow-up 3', hasSubject: false },
+  { value: 'linkedin_followup1', label: 'LinkedIn Follow-up 1', hasSubject: false },
+  { value: 'linkedin_followup2', label: 'LinkedIn Follow-up 2', hasSubject: false },
+  { value: 'linkedin_followup3', label: 'LinkedIn Follow-up 3', hasSubject: false },
 ]
 
 export interface Template {
@@ -154,6 +191,12 @@ export interface KanbanLead {
     | 'whatsapp_sent'
     | 'linkedin_sent'
     | 'sms_sent'
+    | 'whatsapp_followup1_sent'
+    | 'whatsapp_followup2_sent'
+    | 'whatsapp_followup3_sent'
+    | 'linkedin_followup1_sent'
+    | 'linkedin_followup2_sent'
+    | 'linkedin_followup3_sent'
     | 'replied'
     | 'converted'
     | 'next_follow_up_due_at'
@@ -162,8 +205,18 @@ export interface KanbanLead {
   > | null
 }
 
+export type ReminderChannel = 'email' | 'whatsapp' | 'linkedin'
+
 export interface AppSettings {
-  follow_up_interval_days: number
+  email_followup1_interval_days: number
+  email_followup2_interval_days: number
+  email_followup3_interval_days: number
+  whatsapp_followup1_interval_days: number
+  whatsapp_followup2_interval_days: number
+  whatsapp_followup3_interval_days: number
+  linkedin_followup1_interval_days: number
+  linkedin_followup2_interval_days: number
+  linkedin_followup3_interval_days: number
   default_currency: string
 }
 
@@ -171,6 +224,8 @@ export interface ReminderItem {
   id: string
   company_name: string
   priority: Priority
+  channel: ReminderChannel
+  stage: 1 | 2 | 3
   due_at: string
   is_overdue: boolean
 }
@@ -213,6 +268,12 @@ export const STATUS_TOGGLE_FIELDS: Array<{ field: keyof LeadStatus; label: strin
   { field: 'linkedin_sent', label: 'LinkedIn Sent' },
   { field: 'sms_sent', label: 'SMS Sent' },
   { field: 'cold_call_made', label: 'Cold Call Made' },
+  { field: 'whatsapp_followup1_sent', label: 'WhatsApp Follow-up 1 Sent' },
+  { field: 'whatsapp_followup2_sent', label: 'WhatsApp Follow-up 2 Sent' },
+  { field: 'whatsapp_followup3_sent', label: 'WhatsApp Follow-up 3 Sent' },
+  { field: 'linkedin_followup1_sent', label: 'LinkedIn Follow-up 1 Sent' },
+  { field: 'linkedin_followup2_sent', label: 'LinkedIn Follow-up 2 Sent' },
+  { field: 'linkedin_followup3_sent', label: 'LinkedIn Follow-up 3 Sent' },
 ]
 
 export interface LeadFilters {
