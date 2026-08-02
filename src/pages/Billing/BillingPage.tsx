@@ -131,7 +131,7 @@ function RecordPaymentModal({ org, onClose }: { org: OrganizationBillingRow | nu
         className="space-y-4"
       >
         <div>
-          <label className="label">Amount ($)</label>
+          <label className="label">Amount (৳)</label>
           <input
             type="number"
             min={0}

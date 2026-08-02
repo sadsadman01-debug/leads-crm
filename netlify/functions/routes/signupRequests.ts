@@ -6,6 +6,7 @@ import { generateTempPassword } from '../lib/passwordGen.js'
 import { notifySuperAdmins } from '../lib/notifications.js'
 import { insertAuditLog, logAuditEvent, getClientIp } from '../lib/auditLog.js'
 import { getOrCreateBillingSettingsRow, computeCurrentPricingTier, computeAnnualTotal, addBillingPeriod } from '../lib/billingSettings.js'
+import { ALLOWED_SIGNUP_COUNTRIES } from '../lib/allowedSignupCountries.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const COLUMNS =
@@ -35,6 +36,12 @@ export async function createSignupRequest(event: HandlerEvent) {
   if (!city) throw new HttpError(400, 'City is required')
   if (!country) throw new HttpError(400, 'Country is required')
   if (!zip_code) throw new HttpError(400, 'ZIP/Postal Code is required')
+  if (!ALLOWED_SIGNUP_COUNTRIES.includes(country)) {
+    throw new HttpError(
+      400,
+      `Leadify is currently only available in ${ALLOWED_SIGNUP_COUNTRIES.join(', ')}. We'll be expanding to more countries soon — thank you for your interest!`
+    )
+  }
 
   // Locked in NOW, not at approval time, so a review delay never changes the
   // price a requester was shown when they submitted.

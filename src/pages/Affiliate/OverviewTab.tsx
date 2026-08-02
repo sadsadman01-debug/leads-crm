@@ -68,17 +68,17 @@ export function OverviewTab() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <StatTile label="Total Lifetime Earned" value={`$${balances.lifetimeEarned}`} icon={DollarSign} tone="accent" />
+        <StatTile label="Total Lifetime Earned" value={`৳${balances.lifetimeEarned}`} icon={DollarSign} tone="accent" />
         <StatTile
           label="This Month's Earnings"
-          value={`$${balances.thisMonthEarned}`}
+          value={`৳${balances.thisMonthEarned}`}
           subvalue={lastMonthEarned > 0 || balances.thisMonthEarned > 0 ? `${monthChangePct >= 0 ? '+' : ''}${monthChangePct}% vs last month` : undefined}
           icon={monthChangePct >= 0 ? TrendingUp : TrendingDown}
           tone={monthChangePct >= 0 ? 'success' : 'warn'}
         />
-        <StatTile label="Available Balance" value={`$${balances.availableBalance}`} icon={Wallet} tone="success" />
-        <StatTile label="Pending Withdrawal" value={`$${balances.pendingWithdrawal}`} icon={CalendarClock} tone="warn" />
-        <StatTile label="Total Paid Out" value={`$${balances.totalPaidOut}`} icon={CheckCircle2} tone="neutral" />
+        <StatTile label="Available Balance" value={`৳${balances.availableBalance}`} icon={Wallet} tone="success" />
+        <StatTile label="Pending Withdrawal" value={`৳${balances.pendingWithdrawal}`} icon={CalendarClock} tone="warn" />
+        <StatTile label="Total Paid Out" value={`৳${balances.totalPaidOut}`} icon={CheckCircle2} tone="neutral" />
       </div>
 
       <div className="card p-5">

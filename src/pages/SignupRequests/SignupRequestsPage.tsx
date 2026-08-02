@@ -137,7 +137,7 @@ export function SignupRequestsPage() {
                     {r.pricing_tier ? (
                       <div>
                         <p className="font-medium text-base-100">
-                          {r.billing_cycle === 'annual' ? `$${r.annual_total_usd}/yr` : `$${r.monthly_price_usd}/mo`}
+                          {r.billing_cycle === 'annual' ? `৳${Math.round(r.annual_total_usd ?? 0)}/yr` : `৳${r.monthly_price_usd}/mo`}
                         </p>
                         <p className="text-xs text-base-500">
                           {PRICING_TIER_LABELS[r.pricing_tier]} · {r.billing_cycle === 'annual' ? 'Annual' : 'Monthly'}

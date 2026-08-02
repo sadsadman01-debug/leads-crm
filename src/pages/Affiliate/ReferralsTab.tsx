@@ -37,7 +37,7 @@ export function ReferralsTab() {
                 <Badge tone={r.first_payment_confirmed_at ? 'success' : 'warn'}>{r.first_payment_confirmed_at ? 'Paying Customer' : 'Pending Payment'}</Badge>
               </td>
               <td className="px-3 py-3 text-base-400">{new Date(r.created_at).toLocaleDateString()}</td>
-              <td className="px-3 py-3 tabular-nums text-base-200">${r.commission_earned_usd}</td>
+              <td className="px-3 py-3 tabular-nums text-base-200">৳{r.commission_earned_usd}</td>
             </tr>
           ))}
         </tbody>

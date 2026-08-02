@@ -73,7 +73,7 @@ export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
 }
 
 export function amountForCycle(cycle: BillingCycle | null, monthlyPriceUsd: number | null, annualTotalUsd: number | null): string {
-  if (cycle === 'annual' && annualTotalUsd != null) return `$${annualTotalUsd}/year`
-  if (monthlyPriceUsd != null) return `$${monthlyPriceUsd}/month`
+  if (cycle === 'annual' && annualTotalUsd != null) return `৳${Math.round(annualTotalUsd)}/year`
+  if (monthlyPriceUsd != null) return `৳${monthlyPriceUsd}/month`
   return '—'
 }

@@ -19,8 +19,8 @@ export function BillingSettings() {
   const [paymentInstructions, setPaymentInstructions] = useState('')
   const [promotionalBannerText, setPromotionalBannerText] = useState('')
   const [earlyBirdThreshold, setEarlyBirdThreshold] = useState('50')
-  const [earlyBirdPrice, setEarlyBirdPrice] = useState('5')
-  const [standardPrice, setStandardPrice] = useState('10')
+  const [earlyBirdPrice, setEarlyBirdPrice] = useState('499')
+  const [standardPrice, setStandardPrice] = useState('999')
   const [gracePeriodDays, setGracePeriodDays] = useState('0')
   const [saved, setSaved] = useState(false)
 
@@ -83,7 +83,7 @@ export function BillingSettings() {
           <p className="mt-1 text-xs text-base-500">First N organizations ever created</p>
         </div>
         <div>
-          <label className="label">Early Bird Price ($/month)</label>
+          <label className="label">Early Bird Price (৳/month)</label>
           <input
             type="number"
             min={0}
@@ -94,7 +94,7 @@ export function BillingSettings() {
           />
         </div>
         <div>
-          <label className="label">Standard Price ($/month)</label>
+          <label className="label">Standard Price (৳/month)</label>
           <input
             type="number"
             min={0}

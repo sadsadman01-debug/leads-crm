@@ -43,8 +43,8 @@ export function WithdrawalsTab() {
   function validate(): string | null {
     const n = Number(amount)
     if (!amount || !Number.isFinite(n) || n <= 0) return 'Enter a valid amount'
-    if (n > availableBalance) return `Amount exceeds your available balance of $${availableBalance}`
-    if (minWithdrawal && n < minWithdrawal) return `Minimum withdrawal amount is $${minWithdrawal}`
+    if (n > availableBalance) return `Amount exceeds your available balance of ৳${availableBalance}`
+    if (minWithdrawal && n < minWithdrawal) return `Minimum withdrawal amount is ৳${minWithdrawal}`
     if (!selectedMethodId) return 'Select a payout method'
     return null
   }
@@ -63,8 +63,8 @@ export function WithdrawalsTab() {
       <div className="card p-6">
         <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-base-300">Withdraw</h2>
         <p className="mb-4 text-xs text-base-400">
-          Available Balance: <strong className="text-base-100">${availableBalance}</strong>
-          {minWithdrawal ? <> · Minimum withdrawal: ${minWithdrawal}</> : null}
+          Available Balance: <strong className="text-base-100">৳{availableBalance}</strong>
+          {minWithdrawal ? <> · Minimum withdrawal: ৳{minWithdrawal}</> : null}
         </p>
 
         {methods.length === 0 ? (
@@ -86,7 +86,7 @@ export function WithdrawalsTab() {
               </select>
             </div>
             <div>
-              <label className="label">Withdrawal Amount ($)</label>
+              <label className="label">Withdrawal Amount (৳)</label>
               <input
                 type="number"
                 min={0}
@@ -133,7 +133,7 @@ export function WithdrawalsTab() {
                 {withdrawals.map((w) => (
                   <tr key={w.id} className="border-b border-base-800">
                     <td className="py-3 pr-3 text-base-300">{new Date(w.requested_at).toLocaleDateString()}</td>
-                    <td className="px-3 py-3 tabular-nums text-base-100">${w.actual_amount_sent_usd ?? w.amount_usd}</td>
+                    <td className="px-3 py-3 tabular-nums text-base-100">৳{w.actual_amount_sent_usd ?? w.amount_usd}</td>
                     <td className="px-3 py-3 text-base-400">{w.payout_method?.label ?? '—'}</td>
                     <td className="px-3 py-3">
                       <Badge tone={STATUS_TONE[w.status]}>{w.status}</Badge>

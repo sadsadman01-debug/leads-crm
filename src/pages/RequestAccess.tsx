@@ -7,6 +7,7 @@ import { usePlatformBranding } from '@/hooks/usePlatformBranding'
 import { PreAuthHelpWidget } from '@/components/PreAuthHelpWidget'
 import { PRICING_TIER_LABELS, type BillingCycle } from '@/types/billing'
 import { COUNTRIES } from '@/lib/countries'
+import { ALLOWED_SIGNUP_COUNTRIES } from '@/lib/allowedSignupCountries'
 
 export function RequestAccess() {
   usePlatformBranding()
@@ -47,6 +48,8 @@ export function RequestAccess() {
   }, [referralCode])
 
   const { data: pricing } = useQuery({ queryKey: ['public-pricing'], queryFn: billingApi.getPublicPricing })
+
+  const countryNotAllowed = country !== '' && !ALLOWED_SIGNUP_COUNTRIES.includes(country)
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -100,7 +103,7 @@ export function RequestAccess() {
                 <p className="text-base-200">
                   Your locked-in rate:{' '}
                   <strong className="text-base-100">
-                    {billingCycle === 'annual' ? `$${pricing.annual_total_usd}/year` : `$${pricing.monthly_price_usd}/month`}
+                    {billingCycle === 'annual' ? `৳${Math.round(pricing.annual_total_usd)}/year` : `৳${pricing.monthly_price_usd}/month`}
                   </strong>{' '}
                   <span className="text-base-500">
                     ({PRICING_TIER_LABELS[pricing.pricing_tier]}, {billingCycle === 'annual' ? 'billed annually' : 'billed monthly'})
@@ -144,11 +147,11 @@ export function RequestAccess() {
                 </button>
                 <p className="flex items-center justify-center gap-1.5 text-center text-sm font-semibold text-accent-400">
                   <PartyPopper size={15} />
-                  🎉 Early Bird pricing: ${pricing.monthly_price_usd}/month
+                  🎉 Early Bird pricing: ৳{pricing.monthly_price_usd}/month
                 </p>
                 <p className="mt-1 text-center text-xs text-base-400">
-                  <span className="line-through">${pricing.standard_price_usd}/month</span>{' '}
-                  <span className="font-medium text-success">save ${pricing.standard_price_usd - pricing.monthly_price_usd}/month</span>
+                  <span className="line-through">৳{pricing.standard_price_usd}/month</span>{' '}
+                  <span className="font-medium text-success">save ৳{pricing.standard_price_usd - pricing.monthly_price_usd}/month</span>
                 </p>
                 <p className="mt-1 text-center text-xs font-medium text-warn">Only {pricing.spots_remaining} Early Bird spots left!</p>
                 {pricing.promotional_benefits.length > 0 && (
@@ -169,7 +172,7 @@ export function RequestAccess() {
                 {pricing.pricing_tier === 'standard' && (
                   <p className="mb-3 flex items-center justify-center gap-1.5 text-sm font-semibold text-base-200">
                     <Sparkles size={15} className="text-accent-400" />
-                    Pricing: ${pricing.monthly_price_usd}/month
+                    Pricing: ৳{pricing.monthly_price_usd}/month
                   </p>
                 )}
                 <div className="flex gap-2">
@@ -189,8 +192,8 @@ export function RequestAccess() {
                         }`}
                       >
                         <span className="block font-semibold">
-                          {showStandard && <span className="mr-1.5 font-normal text-base-500 line-through">${standardPrice}</span>}
-                          ${price}
+                          {showStandard && <span className="mr-1.5 font-normal text-base-500 line-through">৳{Math.round(standardPrice)}</span>}
+                          ৳{Math.round(price)}
                           {cycle === 'monthly' ? '/mo' : '/yr'}
                         </span>
                         <span className="block text-xs text-base-400">{cycle === 'monthly' ? 'Monthly' : 'Annual (save 20%)'}</span>
@@ -308,6 +311,13 @@ export function RequestAccess() {
                 </div>
               </div>
 
+              {countryNotAllowed && (
+                <div className="flex items-center gap-2.5 rounded-lg bg-warn-bg px-3 py-2.5 text-sm text-warn animate-fadeIn">
+                  <AlertCircle size={16} className="shrink-0" />
+                  Leadify is currently only available in Bangladesh. We'll be expanding to more countries soon — thank you for your interest!
+                </div>
+              )}
+
               {mutation.isError && (
                 <div className="flex items-center gap-2 rounded-lg bg-danger-bg px-3 py-2 text-sm text-danger animate-fadeIn">
                   <AlertCircle size={16} className="shrink-0" />
@@ -315,7 +325,11 @@ export function RequestAccess() {
                 </div>
               )}
 
-              <button type="submit" disabled={mutation.isPending} className="btn-primary w-full hover:scale-[1.01] active:scale-[0.98]">
+              <button
+                type="submit"
+                disabled={mutation.isPending || countryNotAllowed}
+                className="btn-primary w-full hover:scale-[1.01] active:scale-[0.98]"
+              >
                 {mutation.isPending ? (
                   <>
                     <Loader2 size={16} className="animate-spin" />

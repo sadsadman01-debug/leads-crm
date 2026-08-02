@@ -72,7 +72,7 @@ export function WithdrawalRequestsPage() {
               {withdrawals.map((w) => (
                 <tr key={w.id} className="cursor-pointer border-b border-base-800 hover:bg-base-850" onClick={() => setViewing(w)}>
                   <td className="py-3 pr-3 font-medium text-base-100">{w.affiliate?.full_name ?? '—'}</td>
-                  <td className="px-3 py-3 tabular-nums text-base-200">${w.amount_usd}</td>
+                  <td className="px-3 py-3 tabular-nums text-base-200">৳{w.amount_usd}</td>
                   <td className="px-3 py-3 text-base-400">
                     {w.payout_method ? `${w.payout_method.method_type === 'mfs' ? '📱' : w.payout_method.method_type === 'bank_account' ? '🏦' : '₿'} ${w.payout_method.label}` : '—'}
                   </td>

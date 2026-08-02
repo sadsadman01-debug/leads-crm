@@ -94,7 +94,7 @@ export function WithdrawalDetailModal({ withdrawalId, onClose }: { withdrawalId:
           </div>
           <div className="rounded-lg bg-base-850 p-3">
             <p className="text-xs text-base-500">Amount Requested</p>
-            <p className="text-base-100">${request.amount_usd}</p>
+            <p className="text-base-100">৳{request.amount_usd}</p>
           </div>
           <div className="rounded-lg bg-base-850 p-3">
             <p className="text-xs text-base-500">Status</p>
@@ -130,7 +130,7 @@ export function WithdrawalDetailModal({ withdrawalId, onClose }: { withdrawalId:
         {confirmingAction === 'approved' && (
           <div className="space-y-3 rounded-lg border border-success/30 bg-success-bg p-4">
             <div>
-              <label className="label">Actual Amount Sent ($)</label>
+              <label className="label">Actual Amount Sent (৳)</label>
               <input type="number" step={0.01} className="input" value={actualAmount} onChange={(e) => setActualAmount(e.target.value)} />
             </div>
             <div>

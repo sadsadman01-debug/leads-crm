@@ -6,6 +6,7 @@ import { generateTempPassword } from '../lib/passwordGen.js'
 import { generateUniqueReferralCode } from '../lib/referralCode.js'
 import { notifySuperAdmins } from '../lib/notifications.js'
 import { logAuditEvent, insertAuditLog, getClientIp } from '../lib/auditLog.js'
+import { ALLOWED_SIGNUP_COUNTRIES } from '../lib/allowedSignupCountries.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const COLUMNS = 'id, full_name, email, how_they_plan_to_promote, city, country, zip_code, status, applied_at, reviewed_at, reviewed_by, rejection_reason'
@@ -31,6 +32,12 @@ export async function createAffiliateApplication(event: HandlerEvent) {
   if (!city) throw new HttpError(400, 'City is required')
   if (!country) throw new HttpError(400, 'Country is required')
   if (!zip_code) throw new HttpError(400, 'ZIP/Postal Code is required')
+  if (!ALLOWED_SIGNUP_COUNTRIES.includes(country)) {
+    throw new HttpError(
+      400,
+      `Leadify is currently only available in ${ALLOWED_SIGNUP_COUNTRIES.join(', ')}. We'll be expanding to more countries soon — thank you for your interest!`
+    )
+  }
 
   const { data, error } = await supabase
     .from('affiliate_applications')

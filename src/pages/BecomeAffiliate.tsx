@@ -6,6 +6,7 @@ import { affiliateApplicationsApi, affiliateSettingsApi, pageViewsApi } from '@/
 import { usePlatformBranding } from '@/hooks/usePlatformBranding'
 import { PreAuthHelpWidget } from '@/components/PreAuthHelpWidget'
 import { COUNTRIES } from '@/lib/countries'
+import { ALLOWED_SIGNUP_COUNTRIES } from '@/lib/allowedSignupCountries'
 
 export function BecomeAffiliate() {
   usePlatformBranding()
@@ -28,6 +29,8 @@ export function BecomeAffiliate() {
   const [zipCode, setZipCode] = useState('')
 
   const { data: programInfo } = useQuery({ queryKey: ['public-affiliate-program-info'], queryFn: affiliateSettingsApi.getPublic })
+
+  const countryNotAllowed = country !== '' && !ALLOWED_SIGNUP_COUNTRIES.includes(country)
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -179,6 +182,13 @@ export function BecomeAffiliate() {
                 </div>
               </div>
 
+              {countryNotAllowed && (
+                <div className="flex items-center gap-2.5 rounded-lg bg-warn-bg px-3 py-2.5 text-sm text-warn animate-fadeIn">
+                  <AlertCircle size={16} className="shrink-0" />
+                  Leadify is currently only available in Bangladesh. We'll be expanding to more countries soon — thank you for your interest!
+                </div>
+              )}
+
               {mutation.isError && (
                 <div className="flex items-center gap-2 rounded-lg bg-danger-bg px-3 py-2 text-sm text-danger animate-fadeIn">
                   <AlertCircle size={16} className="shrink-0" />
@@ -186,7 +196,11 @@ export function BecomeAffiliate() {
                 </div>
               )}
 
-              <button type="submit" disabled={mutation.isPending} className="btn-primary w-full hover:scale-[1.01] active:scale-[0.98]">
+              <button
+                type="submit"
+                disabled={mutation.isPending || countryNotAllowed}
+                className="btn-primary w-full hover:scale-[1.01] active:scale-[0.98]"
+              >
                 {mutation.isPending ? (
                   <>
                     <Loader2 size={16} className="animate-spin" />

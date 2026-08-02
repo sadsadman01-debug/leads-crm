@@ -26,7 +26,7 @@ export async function getMyMarketingMaterials(event: HandlerEvent, user: AuthedU
   const fields = {
     affiliate_name: affiliate.full_name,
     referral_link: referralLink,
-    price: `$${pricing.monthly_price_usd}/month`,
+    price: `৳${pricing.monthly_price_usd}/month`,
     platform_name: platformName,
   }
 
@@ -38,7 +38,7 @@ export async function getMyMarketingMaterials(event: HandlerEvent, user: AuthedU
     `Subheadline text: "${subheadline}"`,
     `Include this referral link as clearly readable text somewhere in the image: ${referralLink || '{{your referral link}}'}`,
     `Style: modern SaaS marketing graphic, dark background with a vibrant accent color, bold clean sans-serif typography, subtle abstract shapes or a dashboard/graph motif suggesting sales growth, high contrast, premium and trustworthy feel — the kind of image that gets clicks on Facebook or LinkedIn ads.`,
-    `Do not include any fake logos, fake testimonials, or misleading claims — keep the tone confident and benefit-driven (e.g. pipeline growth, more closed deals, ${pricing.monthly_price_usd ? `pricing starting at $${pricing.monthly_price_usd}/month` : 'affordable pricing'}) without being deceptive.`,
+    `Do not include any fake logos, fake testimonials, or misleading claims — keep the tone confident and benefit-driven (e.g. pipeline growth, more closed deals, ${pricing.monthly_price_usd ? `pricing starting at ৳${pricing.monthly_price_usd}/month` : 'affordable pricing'}) without being deceptive.`,
   ].join('\n')
 
   return json(200, {

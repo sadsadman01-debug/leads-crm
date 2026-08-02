@@ -95,8 +95,8 @@ export function AffiliateProgramSettings() {
           )}
         </div>
         <div>
-          <label className="label">Minimum Withdrawal ($, optional)</label>
-          <input type="number" min={0} step={0.01} className="input" value={minWithdrawal} onChange={(e) => setMinWithdrawal(e.target.value)} placeholder="e.g. 10" />
+          <label className="label">Minimum Withdrawal (৳, optional)</label>
+          <input type="number" min={0} step={0.01} className="input" value={minWithdrawal} onChange={(e) => setMinWithdrawal(e.target.value)} placeholder="e.g. 1000" />
         </div>
       </div>
 
