@@ -86,6 +86,23 @@ export function MergeLeadsModal({
     Object.fromEntries(STATUS_TOGGLE_FIELDS.map(({ field }) => [field, Boolean((left.status as any)?.[field]) || Boolean((right.status as any)?.[field])]))
   )
 
+  const unionStages = useMemo(() => {
+    const map = new Map<string, { id: string; label: string }>()
+    for (const p of [...left.outreach_progress, ...right.outreach_progress]) {
+      map.set(p.outreach_sequence_stage_id, { id: p.outreach_sequence_stage_id, label: p.stage_label })
+    }
+    return [...map.values()]
+  }, [left, right])
+
+  const [stageChecks, setStageChecks] = useState<Record<string, boolean>>(() => {
+    const leftById = new Map(left.outreach_progress.map((p) => [p.outreach_sequence_stage_id, p]))
+    const rightById = new Map(right.outreach_progress.map((p) => [p.outreach_sequence_stage_id, p]))
+    const ids = new Set([...leftById.keys(), ...rightById.keys()])
+    return Object.fromEntries(
+      [...ids].map((id) => [id, Boolean(leftById.get(id)?.completed_at) || Boolean(rightById.get(id)?.completed_at)])
+    )
+  })
+
   function renderValue(key: string, lead: Lead): string {
     const value = (lead as any)[key]
     if (key === 'stage_id') return value ? stageNameById.get(value) ?? '—' : '—'
@@ -122,7 +139,14 @@ export function MergeLeadsModal({
       for (const d of leadCustomDefs) {
         customFields[d.id] = (customPicks[d.id] ?? 'left') === 'left' ? left.custom_fields?.[d.id] ?? null : right.custom_fields?.[d.id] ?? null
       }
-      return leadsApi.merge({ survivorId: survivor.id, loserId: loser.id, fields, customFields, statusOverrides: statusChecks })
+      return leadsApi.merge({
+        survivorId: survivor.id,
+        loserId: loser.id,
+        fields,
+        customFields,
+        statusOverrides: statusChecks,
+        stageOverrides: stageChecks,
+      })
     },
     onSuccess: (result) => onMerged(result),
   })
@@ -222,6 +246,27 @@ export function MergeLeadsModal({
               {attachmentCount > 0 ? `${attachmentCount} attachment(s) combined` : 'No attachments'}
             </div>
           </div>
+
+          {unionStages.length > 0 && (
+            <>
+              <p className="mt-3 px-2 text-xs font-semibold uppercase tracking-wide text-base-400">
+                Outreach Sequence Progress — defaults to complete if either lead has it marked
+              </p>
+              <div className="grid grid-cols-1 gap-1.5 px-2 sm:grid-cols-2">
+                {unionStages.map(({ id, label }) => (
+                  <label key={id} className="flex items-center gap-2 rounded-md px-1 py-1 text-sm text-base-200 hover:bg-base-800/60">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-base-600 bg-base-800 text-accent-500 focus:ring-accent-500"
+                      checked={Boolean(stageChecks[id])}
+                      onChange={(e) => setStageChecks((s) => ({ ...s, [id]: e.target.checked }))}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
 
           <p className="mt-3 px-2 text-xs font-semibold uppercase tracking-wide text-base-400">
             Outreach Status — defaults to true if either lead has it marked

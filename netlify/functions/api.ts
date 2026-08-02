@@ -10,6 +10,7 @@ import {
   deleteLead,
   checkDuplicate,
   updateLeadStatus,
+  updateOutreachProgress,
   updateLeadStage,
   getKanbanLeads,
   getLeadActivities,
@@ -38,6 +39,12 @@ import {
   reorderDealStages,
   deleteDealStage,
 } from './routes/dealStages.js'
+import {
+  listOutreachStages,
+  createOutreachStage,
+  updateOutreachStage,
+  deactivateOutreachStage,
+} from './routes/outreachSequences.js'
 import {
   listWinLossReasons,
   createWinLossReason,
@@ -318,6 +325,9 @@ export const handler: Handler = async (event) => {
       } else if (sub === 'status') {
         if (method === 'PATCH') response = await updateLeadStatus(id, event, user)
         else throw new HttpError(405, 'Method not allowed')
+      } else if (sub === 'outreach-progress') {
+        if (method === 'PATCH') response = await updateOutreachProgress(id, event, user)
+        else throw new HttpError(405, 'Method not allowed')
       } else if (sub === 'stage') {
         if (method === 'PATCH') response = await updateLeadStage(id, event, user)
         else throw new HttpError(405, 'Method not allowed')
@@ -446,6 +456,19 @@ export const handler: Handler = async (event) => {
       } else {
         if (method === 'PUT') response = await updateDealStageConfig(id, event, user)
         else if (method === 'DELETE') response = await deleteDealStage(id, event, user)
+        else throw new HttpError(405, 'Method not allowed')
+      }
+    } else if (resource === 'outreach-sequence-stages') {
+      const user = await requireUser(event)
+      if (!id) {
+        if (method === 'GET') response = await listOutreachStages(event, user)
+        else if (method === 'POST') response = await createOutreachStage(event, user)
+        else throw new HttpError(405, 'Method not allowed')
+      } else if (sub === 'deactivate') {
+        if (method === 'POST') response = await deactivateOutreachStage(id, event, user)
+        else throw new HttpError(405, 'Method not allowed')
+      } else {
+        if (method === 'PUT') response = await updateOutreachStage(id, event, user)
         else throw new HttpError(405, 'Method not allowed')
       }
     } else if (resource === 'win-loss-reasons') {

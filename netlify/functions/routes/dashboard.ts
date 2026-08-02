@@ -10,19 +10,10 @@ const MAX_REMINDER_ITEMS = 50
 
 const MAX_LEADS_FOR_AGGREGATION = 20000
 
-const OUTREACH_FIELDS = [
-  'cold_email_sent',
-  'followup1_sent',
-  'followup2_sent',
-  'followup3_sent',
-  'whatsapp_sent',
-  'linkedin_sent',
-  'sms_sent',
-  'cold_call_made',
-  'no_whatsapp',
-  'email_invalid',
-  'phone_invalid',
-] as const
+/** Non-sequence outreach fields only — Cold-Contact/Follow-up completion
+ * across Email/WhatsApp/LinkedIn is reported via the dynamic `outreachStages`
+ * aggregation below instead, since stage count/labels are per-org configurable. */
+const OUTREACH_FIELDS = ['sms_sent', 'cold_call_made', 'no_whatsapp', 'email_invalid', 'phone_invalid'] as const
 
 const SENTIMENTS = ['Positive', 'Neutral', 'Negative', 'Not Interested'] as const
 
@@ -33,14 +24,35 @@ function pct(count: number, total: number): number {
   return Math.round((count / total) * 1000) / 10
 }
 
+/** True if this lead has completed the given channel's initial-contact stage
+ * (stage_number 0) — the dynamic-sequence equivalent of the old fixed
+ * cold_email_sent/whatsapp_sent/linkedin_sent flags. */
+function hasCompletedInitialTouch(progress: any[], channel: string): boolean {
+  return progress.some(
+    (p) => p.completed_at && p.outreach_sequence_stages?.is_active && p.outreach_sequence_stages?.channel === channel && p.outreach_sequence_stages?.stage_number === 0
+  )
+}
+
+function initialTouchCompletedAt(progress: any[], channel: string): string | null {
+  const row = progress.find(
+    (p) => p.completed_at && p.outreach_sequence_stages?.is_active && p.outreach_sequence_stages?.channel === channel && p.outreach_sequence_stages?.stage_number === 0
+  )
+  return row?.completed_at ?? null
+}
+
+/** True if any channel has at least one completed follow-up stage (stage_number >= 1). */
+function hasAnyFollowUpCompleted(progress: any[]): boolean {
+  return progress.some((p) => p.completed_at && p.outreach_sequence_stages?.is_active && p.outreach_sequence_stages?.stage_number >= 1)
+}
+
 /** Mirrors the status-summary classification used in the leads list table, so the
  * dashboard's "status distribution" chart matches what the list view shows. */
-function classifyStatus(status: any): string {
+function classifyStatus(status: any, progress: any[]): string {
   if (!status) return 'New'
   if (status.converted) return 'Converted'
   if (status.email_invalid || status.phone_invalid) return 'Invalid Contact'
   if (status.replied) return 'Replied'
-  if (status.cold_email_sent || status.whatsapp_sent) return 'Outreach Sent'
+  if (hasCompletedInitialTouch(progress, 'email') || hasCompletedInitialTouch(progress, 'whatsapp')) return 'Outreach Sent'
   return 'New'
 }
 
@@ -82,6 +94,13 @@ function buildBucketRange(granularity: Granularity): string[] {
   return [...new Set(keys)]
 }
 
+const OUTREACH_PROGRESS_SELECT = `
+  lead_outreach_progress (
+    outreach_sequence_stage_id, completed_at, due_date,
+    outreach_sequence_stages ( channel, stage_number, stage_label, is_active )
+  )
+`
+
 export async function getDashboardSummary(event: HandlerEvent, user: AuthedUser) {
   const supabase = getSupabaseAdmin()
   const orgId = resolveOrganizationId(user, event)
@@ -97,7 +116,7 @@ export async function getDashboardSummary(event: HandlerEvent, user: AuthedUser)
 
   let leadsQuery = supabase
     .from('leads')
-    .select('id, company_name, created_at, lead_source, priority, industry_id, assigned_to, lead_status(*)')
+    .select(`id, company_name, created_at, lead_source, priority, industry_id, assigned_to, lead_status(*), ${OUTREACH_PROGRESS_SELECT}`)
     .order('created_at', { ascending: true })
     .limit(MAX_LEADS_FOR_AGGREGATION)
   leadsQuery = scopeToOrg(leadsQuery as any, orgId) as any
@@ -112,6 +131,7 @@ export async function getDashboardSummary(event: HandlerEvent, user: AuthedUser)
   const totalLeads = rows.length
 
   const statuses = rows.map((r: any) => (Array.isArray(r.lead_status) ? r.lead_status[0] : r.lead_status))
+  const progressRows = rows.map((r: any) => r.lead_outreach_progress ?? [])
 
   const outreach: Record<string, { count: number; pct: number }> = {}
   for (const field of OUTREACH_FIELDS) {
@@ -129,11 +149,12 @@ export async function getDashboardSummary(event: HandlerEvent, user: AuthedUser)
   }
 
   const convertedCount = statuses.filter((s: any) => s?.converted).length
+  const coldEmailSentCount = progressRows.filter((p: any) => hasCompletedInitialTouch(p, 'email')).length
 
   const funnel = [
     { stage: 'Leads', count: totalLeads },
-    { stage: 'Cold Email Sent', count: outreach.cold_email_sent.count },
-    { stage: 'Followed Up', count: statuses.filter((s: any) => s?.followup1_sent || s?.followup2_sent || s?.followup3_sent).length },
+    { stage: 'Cold Email Sent', count: coldEmailSentCount },
+    { stage: 'Followed Up', count: progressRows.filter((p: any) => hasAnyFollowUpCompleted(p)).length },
     { stage: 'Replied', count: repliedStatuses.length },
     { stage: 'Converted', count: convertedCount },
   ]
@@ -146,7 +167,7 @@ export async function getDashboardSummary(event: HandlerEvent, user: AuthedUser)
     const lead = rows[i] as any
     leadSourceCounts.set(lead.lead_source, (leadSourceCounts.get(lead.lead_source) ?? 0) + 1)
     priorityCounts.set(lead.priority, (priorityCounts.get(lead.priority) ?? 0) + 1)
-    const label = classifyStatus(statuses[i])
+    const label = classifyStatus(statuses[i], progressRows[i])
     statusDistCounts.set(label, (statusDistCounts.get(label) ?? 0) + 1)
   }
 
@@ -164,7 +185,7 @@ export async function getDashboardSummary(event: HandlerEvent, user: AuthedUser)
     if (bucketSet.has(createdKey)) {
       leadsAddedByBucket.set(createdKey, (leadsAddedByBucket.get(createdKey) ?? 0) + 1)
     }
-    const sentAt = statuses[i]?.cold_email_sent_at
+    const sentAt = initialTouchCompletedAt(progressRows[i], 'email')
     if (sentAt) {
       const sentKey = bucketKey(new Date(sentAt), granularity)
       if (bucketSet.has(sentKey)) {
@@ -184,14 +205,14 @@ export async function getDashboardSummary(event: HandlerEvent, user: AuthedUser)
 
   const reminderItems = rows
     .flatMap((lead: any, i: number) =>
-      computeReminder(statuses[i])
+      computeReminder(progressRows[i], statuses[i])
         .reminders.filter((r) => r.is_overdue || r.is_due_today)
         .map((r) => ({
           id: lead.id,
           company_name: lead.company_name,
           priority: lead.priority,
           channel: r.channel,
-          stage: r.stage,
+          stageLabel: r.stageLabel,
           due_at: r.due_at,
           is_overdue: r.is_overdue,
         }))
@@ -199,8 +220,39 @@ export async function getDashboardSummary(event: HandlerEvent, user: AuthedUser)
     .sort((a, b) => (a.due_at < b.due_at ? -1 : 1))
     .slice(0, MAX_REMINDER_ITEMS)
 
-  const overdueCount = statuses.filter((s: any) => computeReminder(s).is_overdue).length
-  const dueTodayCount = statuses.filter((s: any) => computeReminder(s).is_due_today).length
+  const overdueCount = rows.filter((_r: any, i: number) => computeReminder(progressRows[i], statuses[i]).is_overdue).length
+  const dueTodayCount = rows.filter((_r: any, i: number) => computeReminder(progressRows[i], statuses[i]).is_due_today).length
+
+  // --- Dynamic per-stage stat cards: one row per currently-active configured stage ---
+  let stagesQuery = supabase
+    .from('outreach_sequence_stages')
+    .select('id, channel, stage_number, stage_label')
+    .eq('is_active', true)
+  stagesQuery = scopeToOrg(stagesQuery as any, orgId) as any
+  const { data: activeStages, error: stagesErr } = await stagesQuery
+  if (stagesErr) throw new HttpError(500, stagesErr.message)
+
+  const completedCountByStage = new Map<string, number>()
+  for (const progress of progressRows) {
+    for (const p of progress) {
+      if (p.completed_at && p.outreach_sequence_stages?.is_active) {
+        completedCountByStage.set(p.outreach_sequence_stage_id, (completedCountByStage.get(p.outreach_sequence_stage_id) ?? 0) + 1)
+      }
+    }
+  }
+  const outreachStages = (activeStages ?? [])
+    .map((s) => {
+      const count = completedCountByStage.get(s.id) ?? 0
+      return {
+        id: s.id,
+        channel: s.channel,
+        stage_number: s.stage_number,
+        stage_label: s.stage_label,
+        count,
+        pct: pct(count, totalLeads),
+      }
+    })
+    .sort((a, b) => a.channel.localeCompare(b.channel) || a.stage_number - b.stage_number)
 
   // Lazily-triggered notification checks — no cron job exists in this app (same
   // "check on next request" pattern already used for exchange-rate refresh), so
@@ -212,8 +264,10 @@ export async function getDashboardSummary(event: HandlerEvent, user: AuthedUser)
   // this is about the org's own Admin/User accountability, not the platform view.
   if (!isSuperAdmin(user) && orgId) {
     if (isAdminOrAbove(user)) {
-      const allStatusesForDigest = allRows.map((r: any) => (Array.isArray(r.lead_status) ? r.lead_status[0] : r.lead_status))
-      const orgOverdueCount = allStatusesForDigest.filter((s: any) => computeReminder(s).is_overdue).length
+      const orgOverdueCount = allRows.filter((r: any) => {
+        const s = Array.isArray(r.lead_status) ? r.lead_status[0] : r.lead_status
+        return computeReminder(r.lead_outreach_progress ?? [], s).is_overdue
+      }).length
       await maybeCreateOverdueDigest({
         recipientId: user.id,
         organizationId: orgId,
@@ -223,8 +277,10 @@ export async function getDashboardSummary(event: HandlerEvent, user: AuthedUser)
       })
     } else {
       const selfRows = allRows.filter((r: any) => r.assigned_to === user.id)
-      const selfStatuses = selfRows.map((r: any) => (Array.isArray(r.lead_status) ? r.lead_status[0] : r.lead_status))
-      const selfOverdueCount = selfStatuses.filter((s: any) => computeReminder(s).is_overdue).length
+      const selfOverdueCount = selfRows.filter((r: any) => {
+        const s = Array.isArray(r.lead_status) ? r.lead_status[0] : r.lead_status
+        return computeReminder(r.lead_outreach_progress ?? [], s).is_overdue
+      }).length
       await maybeCreateOverdueDigest({
         recipientId: user.id,
         organizationId: orgId,
@@ -276,8 +332,9 @@ export async function getDashboardSummary(event: HandlerEvent, user: AuthedUser)
       const industryStatuses = industryLeads.map((l: any) =>
         Array.isArray(l.lead_status) ? l.lead_status[0] : l.lead_status
       )
+      const industryProgress = industryLeads.map((l: any) => l.lead_outreach_progress ?? [])
       const total = industryLeads.length
-      const coldEmailCount = industryStatuses.filter((s: any) => s?.cold_email_sent).length
+      const coldEmailCount = industryProgress.filter((p: any) => hasCompletedInitialTouch(p, 'email')).length
       const repliedCount = industryStatuses.filter((s: any) => s?.replied).length
       const convertedCount2 = industryStatuses.filter((s: any) => s?.converted).length
 
@@ -309,7 +366,8 @@ export async function getDashboardSummary(event: HandlerEvent, user: AuthedUser)
     teamPerformance = (members ?? []).map((m) => {
       const memberLeads = allRows.filter((r: any) => r.assigned_to === m.id)
       const memberStatuses = memberLeads.map((l: any) => (Array.isArray(l.lead_status) ? l.lead_status[0] : l.lead_status))
-      const coldEmailCount = memberStatuses.filter((s: any) => s?.cold_email_sent).length
+      const memberProgress = memberLeads.map((l: any) => l.lead_outreach_progress ?? [])
+      const coldEmailCount = memberProgress.filter((p: any) => hasCompletedInitialTouch(p, 'email')).length
       const repliedCount = memberStatuses.filter((s: any) => s?.replied).length
       const convertedCountMember = memberStatuses.filter((s: any) => s?.converted).length
 
@@ -337,6 +395,7 @@ export async function getDashboardSummary(event: HandlerEvent, user: AuthedUser)
     reminders: { overdueCount, dueTodayCount, items: reminderItems },
     totals: { leads: totalLeads },
     outreach,
+    outreachStages,
     replies: {
       total: repliedStatuses.length,
       rate: pct(repliedStatuses.length, totalLeads),

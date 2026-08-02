@@ -1,19 +1,19 @@
 import { useState } from 'react'
-import { Mail, Tag as TagIcon, Trash2, X } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { Mail, MessageCircle, Linkedin, Tag as TagIcon, Trash2, X } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { TagInput } from '@/components/TagInput'
+import { outreachSequencesApi } from '@/lib/api'
+import type { OutreachChannel } from '@/types/lead'
 
-const QUICK_STATUS_ACTIONS = [
-  { field: 'cold_email_sent', label: 'Cold Email Sent' },
-  { field: 'followup1_sent', label: '1st Follow-up' },
-  { field: 'followup2_sent', label: '2nd Follow-up' },
-  { field: 'followup3_sent', label: '3rd Follow-up' },
-]
+const CHANNEL_ICON: Record<OutreachChannel, typeof Mail> = { email: Mail, whatsapp: MessageCircle, linkedin: Linkedin }
+const CHANNELS: OutreachChannel[] = ['email', 'whatsapp', 'linkedin']
 
 export function BulkActionsBar({
   selectedCount,
   onClear,
   onMarkStatus,
+  onMarkOutreachStage,
   onAddTags,
   onDelete,
   busy,
@@ -21,6 +21,7 @@ export function BulkActionsBar({
   selectedCount: number
   onClear: () => void
   onMarkStatus: (field: string) => void
+  onMarkOutreachStage: (stageId: string) => void
   onAddTags: (tagNames: string[]) => void
   onDelete: () => void
   busy: boolean
@@ -28,6 +29,14 @@ export function BulkActionsBar({
   const [tagModalOpen, setTagModalOpen] = useState(false)
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [tagNames, setTagNames] = useState<string[]>([])
+  const { data: sequenceData } = useQuery({ queryKey: ['outreach-sequence-stages'], queryFn: outreachSequencesApi.list })
+
+  // Only the initial-contact stage per channel — the most common bulk quick
+  // action ("mark these leads as emailed") — since per-stage-number bulk UI
+  // for arbitrarily long sequences isn't worth the added complexity here.
+  const initialTouchStages = CHANNELS.map((channel) =>
+    (sequenceData?.stages ?? []).find((s) => s.channel === channel && s.stage_number === 0)
+  ).filter((s): s is NonNullable<typeof s> => Boolean(s))
 
   if (selectedCount === 0) return null
 
@@ -39,17 +48,20 @@ export function BulkActionsBar({
       <span className="text-sm font-medium text-base-100">{selectedCount} selected</span>
 
       <div className="ml-auto flex flex-wrap items-center gap-2">
-        {QUICK_STATUS_ACTIONS.map((a) => (
-          <button
-            key={a.field}
-            className="btn-secondary"
-            disabled={busy}
-            onClick={() => onMarkStatus(a.field)}
-          >
-            <Mail size={14} />
-            {a.label}
-          </button>
-        ))}
+        {initialTouchStages.map((stage) => {
+          const Icon = CHANNEL_ICON[stage.channel]
+          return (
+            <button
+              key={stage.id}
+              className="btn-secondary"
+              disabled={busy}
+              onClick={() => onMarkOutreachStage(stage.id)}
+            >
+              <Icon size={14} />
+              Mark {stage.stage_label}
+            </button>
+          )
+        })}
         <button className="btn-secondary" disabled={busy} onClick={() => setTagModalOpen(true)}>
           <TagIcon size={14} />
           Add Tag

@@ -263,14 +263,8 @@ const EXPORT_COLUMNS = [
   'Industry',
   'Tags',
   'Notes',
-  'Cold Email Sent',
-  'Follow-up 1 Sent',
-  'Follow-up 2 Sent',
-  'Follow-up 3 Sent',
   'Replied',
   'Reply Sentiment',
-  'WhatsApp Sent',
-  'LinkedIn Sent',
   'SMS Sent',
   'Converted',
   'Created At',
@@ -289,9 +283,19 @@ export async function exportLeads(event: HandlerEvent, user: AuthedUser) {
   const search = (params.search ?? '').trim()
   const filters = parseFilters(params)
 
+  let stagesQuery = supabase
+    .from('outreach_sequence_stages')
+    .select('id, channel, stage_number, stage_label')
+    .eq('is_active', true)
+  stagesQuery = scopeToOrg(stagesQuery as any, orgId) as any
+  const { data: activeStagesData } = await stagesQuery
+  const activeStages = (activeStagesData ?? []).sort(
+    (a, b) => a.channel.localeCompare(b.channel) || a.stage_number - b.stage_number
+  )
+
   const allowedIds = await resolveJoinFilteredIds(filters)
   if (allowedIds !== null && allowedIds.size === 0) {
-    return csvResponse([], new Map())
+    return csvResponse([], new Map(), [], activeStages)
   }
 
   const rows: any[] = []
@@ -318,7 +322,7 @@ export async function exportLeads(event: HandlerEvent, user: AuthedUser) {
 
   const customFieldDefs = await loadActiveDefinitions(orgId, 'leads')
 
-  return csvResponse(rows, industryNameById, customFieldDefs)
+  return csvResponse(rows, industryNameById, customFieldDefs, activeStages)
 }
 
 function formatCustomFieldForExport(value: any): string {
@@ -327,9 +331,14 @@ function formatCustomFieldForExport(value: any): string {
   return value ?? ''
 }
 
-function csvResponse(leads: any[], industryNameById: Map<string, string>, customFieldDefs: CustomFieldDefRow[] = []) {
+function csvResponse(
+  leads: any[],
+  industryNameById: Map<string, string>,
+  customFieldDefs: CustomFieldDefRow[] = [],
+  activeStages: Array<{ id: string; stage_label: string }> = []
+) {
   const csv = Papa.unparse({
-    fields: [...EXPORT_COLUMNS, ...customFieldDefs.map((d) => d.label)],
+    fields: [...EXPORT_COLUMNS, ...activeStages.map((s) => s.stage_label), ...customFieldDefs.map((d) => d.label)],
     data: leads.map((lead) => [
       lead.company_name,
       lead.address ?? '',
@@ -341,17 +350,14 @@ function csvResponse(leads: any[], industryNameById: Map<string, string>, custom
       (lead.industry_id && industryNameById.get(lead.industry_id)) ?? '',
       lead.tags.map((t: any) => t.name).join(', '),
       lead.notes ?? '',
-      lead.status?.cold_email_sent ? 'Yes' : 'No',
-      lead.status?.followup1_sent ? 'Yes' : 'No',
-      lead.status?.followup2_sent ? 'Yes' : 'No',
-      lead.status?.followup3_sent ? 'Yes' : 'No',
       lead.status?.replied ? 'Yes' : 'No',
       lead.status?.reply_sentiment ?? '',
-      lead.status?.whatsapp_sent ? 'Yes' : 'No',
-      lead.status?.linkedin_sent ? 'Yes' : 'No',
       lead.status?.sms_sent ? 'Yes' : 'No',
       lead.status?.converted ? 'Yes' : 'No',
       lead.created_at,
+      ...activeStages.map((s) =>
+        (lead.outreach_progress ?? []).some((p: any) => p.outreach_sequence_stage_id === s.id && p.completed_at) ? 'Yes' : 'No'
+      ),
       ...customFieldDefs.map((d) => formatCustomFieldForExport(lead.custom_fields?.[d.id])),
     ]),
   })

@@ -26,6 +26,8 @@ export interface MergeLeadsPayload {
   fields?: Record<string, any>
   customFields?: Record<string, any>
   statusOverrides?: Record<string, boolean>
+  /** outreach_sequence_stage_id -> completed override */
+  stageOverrides?: Record<string, boolean>
 }
 
 export interface MergeDealsPayload {

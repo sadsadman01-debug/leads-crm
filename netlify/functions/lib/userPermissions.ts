@@ -11,6 +11,7 @@ export interface UserPermissions {
   canManageTemplates: boolean
   canManageCustomFields: boolean
   canManageStages: boolean
+  canManageOutreachSequences: boolean
   canManageIndustries: boolean
   canViewTeamPerformance: boolean
   canAccessReportBuilder: boolean
@@ -29,6 +30,7 @@ export const DEFAULT_USER_PERMISSIONS: UserPermissions = {
   canManageTemplates: false,
   canManageCustomFields: false,
   canManageStages: false,
+  canManageOutreachSequences: false,
   canManageIndustries: false,
   canViewTeamPerformance: false,
   canAccessReportBuilder: false,
@@ -47,6 +49,7 @@ export const PERMISSION_PRESETS: Record<string, UserPermissions> = {
     canManageTemplates: false,
     canManageCustomFields: false,
     canManageStages: false,
+    canManageOutreachSequences: false,
     canManageIndustries: false,
     canViewTeamPerformance: false,
     canAccessReportBuilder: false,
@@ -62,6 +65,7 @@ export const PERMISSION_PRESETS: Record<string, UserPermissions> = {
     canManageTemplates: false,
     canManageCustomFields: false,
     canManageStages: false,
+    canManageOutreachSequences: false,
     canManageIndustries: false,
     canViewTeamPerformance: false,
     canAccessReportBuilder: false,

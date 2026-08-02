@@ -26,6 +26,8 @@ import { BulkActionsBar } from '@/components/BulkActionsBar'
 import { ImportModal } from '@/components/ImportModal'
 import { FindLeadDuplicatesModal } from '@/components/leads/FindLeadDuplicatesModal'
 import { KanbanBoard } from '@/components/kanban/KanbanBoard'
+import { OutreachChannelPills } from '@/components/OutreachChannelPills'
+import { computeOutreachCompletedCounts } from '@/lib/outreachProgress'
 import { useAuth, hasPermission } from '@/contexts/AuthContext'
 import type { LeadFilters } from '@/types/lead'
 
@@ -201,7 +203,14 @@ export function LeadsList() {
           </td>
         )
       case 'status':
-        return <td key={columnId} className="px-5 py-3.5 desktop:px-6 desktop:py-4">{statusSummary(lead)}</td>
+        return (
+          <td key={columnId} className="px-5 py-3.5 desktop:px-6 desktop:py-4">
+            <div className="flex flex-col items-start gap-1">
+              {statusSummary(lead)}
+              <OutreachChannelPills completedCounts={computeOutreachCompletedCounts(lead.outreach_progress)} />
+            </div>
+          </td>
+        )
       case 'assignedTo':
         return (
           <td key={columnId} className="px-5 py-3.5 desktop:px-6 desktop:py-4">
@@ -285,6 +294,14 @@ export function LeadsList() {
     },
   })
 
+  const bulkOutreachStageMutation = useMutation({
+    mutationFn: (stageId: string) => bulkApi.markOutreachStage([...selectedIds], stageId),
+    onSuccess: () => {
+      invalidateLeads()
+      setSelectedIds(new Set())
+    },
+  })
+
   const bulkTagMutation = useMutation({
     mutationFn: (tagNames: string[]) => bulkApi.addTags([...selectedIds], tagNames),
     onSuccess: () => {
@@ -302,7 +319,8 @@ export function LeadsList() {
     },
   })
 
-  const bulkBusy = bulkStatusMutation.isPending || bulkTagMutation.isPending || bulkDeleteMutation.isPending
+  const bulkBusy =
+    bulkStatusMutation.isPending || bulkOutreachStageMutation.isPending || bulkTagMutation.isPending || bulkDeleteMutation.isPending
 
   async function handleExport() {
     setExporting(true)
@@ -319,7 +337,7 @@ export function LeadsList() {
     if (s.converted) return <Badge tone="success">Converted</Badge>
     if (s.email_invalid || s.phone_invalid) return <Badge tone="danger">Invalid Contact</Badge>
     if (s.replied) return <Badge tone="accent">Replied</Badge>
-    if (s.cold_email_sent || s.whatsapp_sent) return <Badge tone="warn">Outreach Sent</Badge>
+    if (lead.outreach_progress.some((p) => p.completed_at)) return <Badge tone="warn">Outreach Sent</Badge>
     return <Badge tone="neutral">New</Badge>
   }
 
@@ -525,6 +543,7 @@ export function LeadsList() {
         selectedCount={selectedIds.size}
         onClear={() => setSelectedIds(new Set())}
         onMarkStatus={(field) => bulkStatusMutation.mutate(field)}
+        onMarkOutreachStage={(stageId) => bulkOutreachStageMutation.mutate(stageId)}
         onAddTags={(tagNames) => bulkTagMutation.mutate(tagNames)}
         onDelete={() => bulkDeleteMutation.mutate()}
         busy={bulkBusy}
@@ -650,6 +669,10 @@ export function LeadsList() {
                     {lead.stage_id && stageNameById.has(lead.stage_id) && (
                       <Badge tone="neutral">{stageNameById.get(lead.stage_id)}</Badge>
                     )}
+                  </div>
+
+                  <div className="mt-1.5">
+                    <OutreachChannelPills completedCounts={computeOutreachCompletedCounts(lead.outreach_progress)} />
                   </div>
 
                   <p className="mt-2 text-xs text-base-500">

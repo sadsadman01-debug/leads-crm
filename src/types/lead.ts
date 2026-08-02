@@ -28,21 +28,14 @@ export interface Attachment {
   uploaded_at: string
 }
 
+/** Non-sequence outreach state only — Cold-Contact + Follow-up completion
+ * across Email/WhatsApp/LinkedIn is tracked per-Organization-configured stage
+ * in `Lead.outreach_progress` instead (see OutreachSequenceStage below). */
 export interface LeadStatus {
   lead_id: string
-  cold_email_sent: boolean
-  cold_email_sent_at: string | null
-  followup1_sent: boolean
-  followup1_sent_at: string | null
-  followup2_sent: boolean
-  followup2_sent_at: string | null
-  followup3_sent: boolean
-  followup3_sent_at: string | null
   replied: boolean
   replied_at: string | null
   reply_sentiment: ReplySentiment | null
-  whatsapp_sent: boolean
-  whatsapp_sent_at: string | null
   no_whatsapp: boolean
   no_whatsapp_at: string | null
   email_invalid: boolean
@@ -51,38 +44,43 @@ export interface LeadStatus {
   phone_invalid_at: string | null
   converted: boolean
   converted_at: string | null
-  linkedin_sent: boolean
-  linkedin_sent_at: string | null
   sms_sent: boolean
   sms_sent_at: string | null
   cold_call_made: boolean
   cold_call_made_at: string | null
   cold_call_outcome: ColdCallOutcome | null
-  whatsapp_followup1_sent: boolean
-  whatsapp_followup1_sent_at: string | null
-  whatsapp_followup2_sent: boolean
-  whatsapp_followup2_sent_at: string | null
-  whatsapp_followup3_sent: boolean
-  whatsapp_followup3_sent_at: string | null
-  linkedin_followup1_sent: boolean
-  linkedin_followup1_sent_at: string | null
-  linkedin_followup2_sent: boolean
-  linkedin_followup2_sent_at: string | null
-  linkedin_followup3_sent: boolean
-  linkedin_followup3_sent_at: string | null
   updated_at: string
-  followup1_due_at?: string | null
-  followup2_due_at?: string | null
-  followup3_due_at?: string | null
-  whatsapp_followup1_due_at?: string | null
-  whatsapp_followup2_due_at?: string | null
-  whatsapp_followup3_due_at?: string | null
-  linkedin_followup1_due_at?: string | null
-  linkedin_followup2_due_at?: string | null
-  linkedin_followup3_due_at?: string | null
   next_follow_up_due_at?: string | null
   is_overdue?: boolean
   is_due_today?: boolean
+}
+
+export type OutreachChannel = 'email' | 'whatsapp' | 'linkedin'
+
+/** One row per (Organization, channel, stage_number) — the Admin-configured
+ * outreach sequence. stage_number 0 is the initial contact stage (Cold
+ * Email/WhatsApp Message/LinkedIn Message); 1+ are follow-ups. Deactivated
+ * (removed) stages are never returned by the list endpoint — their history
+ * on leads is preserved forever, just no longer offered for new toggling. */
+export interface OutreachSequenceStage {
+  id: string
+  channel: OutreachChannel
+  stage_number: number
+  stage_label: string
+  interval_days: number | null
+  default_template_id: string | null
+  display_order: number
+  is_active: boolean
+}
+
+/** A lead's completion/due-date record against one configured stage. */
+export interface LeadOutreachProgressEntry {
+  outreach_sequence_stage_id: string
+  channel: OutreachChannel
+  stage_number: number
+  stage_label: string
+  completed_at: string | null
+  due_date: string | null
 }
 
 export type ScoreBand = 'Hot' | 'Warm' | 'Cold'
@@ -107,6 +105,7 @@ export interface Lead {
   score: number
   band: ScoreBand
   status?: LeadStatus
+  outreach_progress: LeadOutreachProgressEntry[]
   tags: Tag[]
   social_profiles: SocialProfile[]
   attachments?: Attachment[]
@@ -149,6 +148,24 @@ export const TEMPLATE_TYPES: Array<{ value: TemplateType; label: string; hasSubj
   { value: 'linkedin_followup3', label: 'LinkedIn Follow-up 3', hasSubject: false },
 ]
 
+/** Maps a template type to the outreach channel its stage config lives under
+ * — used to filter "this channel's templates" in the Outreach Sequences
+ * settings screen and to drive the Lead Detail template auto-select. */
+export const TEMPLATE_TYPE_CHANNEL: Partial<Record<TemplateType, OutreachChannel>> = {
+  cold_email: 'email',
+  followup1: 'email',
+  followup2: 'email',
+  followup3: 'email',
+  whatsapp: 'whatsapp',
+  whatsapp_followup1: 'whatsapp',
+  whatsapp_followup2: 'whatsapp',
+  whatsapp_followup3: 'whatsapp',
+  linkedin: 'linkedin',
+  linkedin_followup1: 'linkedin',
+  linkedin_followup2: 'linkedin',
+  linkedin_followup3: 'linkedin',
+}
+
 export interface Template {
   id: string
   name: string
@@ -182,41 +199,11 @@ export interface KanbanLead {
   assigned_to: string | null
   score: number
   band: ScoreBand
-  status: Pick<
-    LeadStatus,
-    | 'cold_email_sent'
-    | 'followup1_sent'
-    | 'followup2_sent'
-    | 'followup3_sent'
-    | 'whatsapp_sent'
-    | 'linkedin_sent'
-    | 'sms_sent'
-    | 'whatsapp_followup1_sent'
-    | 'whatsapp_followup2_sent'
-    | 'whatsapp_followup3_sent'
-    | 'linkedin_followup1_sent'
-    | 'linkedin_followup2_sent'
-    | 'linkedin_followup3_sent'
-    | 'replied'
-    | 'converted'
-    | 'next_follow_up_due_at'
-    | 'is_overdue'
-    | 'is_due_today'
-  > | null
+  outreach_completed_counts: Record<OutreachChannel, number>
+  status: Pick<LeadStatus, 'replied' | 'converted' | 'next_follow_up_due_at' | 'is_overdue' | 'is_due_today'> | null
 }
 
-export type ReminderChannel = 'email' | 'whatsapp' | 'linkedin'
-
 export interface AppSettings {
-  email_followup1_interval_days: number
-  email_followup2_interval_days: number
-  email_followup3_interval_days: number
-  whatsapp_followup1_interval_days: number
-  whatsapp_followup2_interval_days: number
-  whatsapp_followup3_interval_days: number
-  linkedin_followup1_interval_days: number
-  linkedin_followup2_interval_days: number
-  linkedin_followup3_interval_days: number
   default_currency: string
 }
 
@@ -224,8 +211,8 @@ export interface ReminderItem {
   id: string
   company_name: string
   priority: Priority
-  channel: ReminderChannel
-  stage: 1 | 2 | 3
+  channel: OutreachChannel
+  stageLabel: string
   due_at: string
   is_overdue: boolean
 }
@@ -254,26 +241,17 @@ export interface LeadFormInput {
   custom_fields: Record<string, any>
 }
 
+/** The non-sequence toggles only — Cold-Contact/Follow-up completion is
+ * rendered dynamically from the org's configured OutreachSequenceStage list
+ * instead (see StatusPanel.tsx). */
 export const STATUS_TOGGLE_FIELDS: Array<{ field: keyof LeadStatus; label: string }> = [
-  { field: 'cold_email_sent', label: 'Cold Email Sent' },
-  { field: 'followup1_sent', label: '1st Follow-up Sent' },
-  { field: 'followup2_sent', label: '2nd Follow-up Sent' },
-  { field: 'followup3_sent', label: '3rd Follow-up Sent' },
   { field: 'replied', label: 'Replied' },
-  { field: 'whatsapp_sent', label: 'WhatsApp Sent' },
   { field: 'no_whatsapp', label: 'No WhatsApp Available' },
   { field: 'email_invalid', label: 'Email Invalid' },
   { field: 'phone_invalid', label: 'Phone Invalid' },
   { field: 'converted', label: 'Converted to Client' },
-  { field: 'linkedin_sent', label: 'LinkedIn Sent' },
   { field: 'sms_sent', label: 'SMS Sent' },
   { field: 'cold_call_made', label: 'Cold Call Made' },
-  { field: 'whatsapp_followup1_sent', label: 'WhatsApp Follow-up 1 Sent' },
-  { field: 'whatsapp_followup2_sent', label: 'WhatsApp Follow-up 2 Sent' },
-  { field: 'whatsapp_followup3_sent', label: 'WhatsApp Follow-up 3 Sent' },
-  { field: 'linkedin_followup1_sent', label: 'LinkedIn Follow-up 1 Sent' },
-  { field: 'linkedin_followup2_sent', label: 'LinkedIn Follow-up 2 Sent' },
-  { field: 'linkedin_followup3_sent', label: 'LinkedIn Follow-up 3 Sent' },
 ]
 
 export interface LeadFilters {
@@ -281,6 +259,8 @@ export interface LeadFilters {
   leadSource?: LeadSource
   tagIds?: string[]
   statusChecks?: Array<{ field: string; value: boolean }>
+  /** A specific configured outreach-sequence stage id — "leads that have completed this stage". */
+  outreachStageId?: string
   dateFrom?: string
   dateTo?: string
   hasWebsite?: boolean
@@ -302,9 +282,19 @@ export interface TeamPerformanceRow {
   winRate: number
 }
 
+export interface DashboardOutreachStageStat {
+  id: string
+  channel: OutreachChannel
+  stage_number: number
+  stage_label: string
+  count: number
+  pct: number
+}
+
 export interface DashboardSummary {
   totals: { leads: number }
   outreach: Record<string, { count: number; pct: number }>
+  outreachStages: DashboardOutreachStageStat[]
   replies: {
     total: number
     rate: number

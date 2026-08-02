@@ -94,7 +94,10 @@ export async function runLeadsReport(orgId: string | null, groupBy: string | und
   const supabase = getSupabaseAdmin()
   let query = supabase
     .from('leads')
-    .select('id, company_name, priority, lead_source, industry_id, assigned_to, stage_id, created_at, custom_fields, lead_status(*)')
+    .select(
+      'id, company_name, priority, lead_source, industry_id, assigned_to, stage_id, created_at, custom_fields, lead_status(*), ' +
+        'lead_outreach_progress ( outreach_sequence_stage_id, completed_at, outreach_sequence_stages ( channel, stage_number, is_active ) )'
+    )
     .order('created_at', { ascending: false })
     .limit(20000)
   query = scopeToOrg(query as any, orgId) as any
@@ -108,8 +111,17 @@ export async function runLeadsReport(orgId: string | null, groupBy: string | und
   const { data, error } = await query
   if (error) throw new HttpError(500, error.message)
 
+  const emailStage1Completed = (progress: any[]) =>
+    (progress ?? []).some(
+      (p) => p.completed_at && p.outreach_sequence_stages?.is_active && p.outreach_sequence_stages?.channel === 'email' && p.outreach_sequence_stages?.stage_number === 0
+    )
+
   const rows = (data ?? [])
-    .map((r: any) => ({ ...r, status: Array.isArray(r.lead_status) ? r.lead_status[0] : r.lead_status }))
+    .map((r: any) => ({
+      ...r,
+      status: Array.isArray(r.lead_status) ? r.lead_status[0] : r.lead_status,
+      emailStage1Completed: emailStage1Completed(r.lead_outreach_progress),
+    }))
     .filter((r: any) => matchesCustomFieldFilters(r.custom_fields, filters.customFields))
 
   const names = await fetchNameMaps(orgId)
@@ -125,7 +137,7 @@ export async function runLeadsReport(orgId: string | null, groupBy: string | und
         assigned_to: names.memberNameById.get(r.assigned_to) ?? '',
         stage: names.stageNameById.get(r.stage_id) ?? '',
         created_at: r.created_at,
-        cold_email_sent: Boolean(r.status?.cold_email_sent),
+        cold_email_sent: Boolean(r.emailStage1Completed),
         replied: Boolean(r.status?.replied),
         converted: Boolean(r.status?.converted),
         custom_fields: r.custom_fields ?? {},
@@ -143,7 +155,7 @@ export async function runLeadsReport(orgId: string | null, groupBy: string | und
 
   const grouped = [...groups.entries()]
     .map(([group, groupRows]) => {
-      const coldEmailSentCount = groupRows.filter((r) => r.status?.cold_email_sent).length
+      const coldEmailSentCount = groupRows.filter((r) => r.emailStage1Completed).length
       const repliedCount = groupRows.filter((r) => r.status?.replied).length
       const convertedCount = groupRows.filter((r) => r.status?.converted).length
       return {

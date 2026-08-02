@@ -1,19 +1,13 @@
 import { useDraggable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
-import { Mail, Send, MessageCircle, Linkedin, MessageSquare, Reply, Trophy, MoveRight } from 'lucide-react'
+import { Reply, Trophy, MoveRight } from 'lucide-react'
 import clsx from 'clsx'
 import { PriorityBadge, ScoreBadge } from '@/components/ui/Badge'
 import { Avatar } from '@/components/ui/RoleBadge'
+import { OutreachChannelPills } from '@/components/OutreachChannelPills'
 import type { KanbanLead, PipelineStage } from '@/types/lead'
 
-const QUICK_ICONS: Array<{ key: keyof NonNullable<KanbanLead['status']>; icon: typeof Mail; label: string }> = [
-  { key: 'cold_email_sent', icon: Mail, label: 'Cold email sent' },
-  { key: 'followup1_sent', icon: Send, label: '1st follow-up sent' },
-  { key: 'followup2_sent', icon: Send, label: '2nd follow-up sent' },
-  { key: 'followup3_sent', icon: Send, label: '3rd follow-up sent' },
-  { key: 'whatsapp_sent', icon: MessageCircle, label: 'WhatsApp sent' },
-  { key: 'linkedin_sent', icon: Linkedin, label: 'LinkedIn sent' },
-  { key: 'sms_sent', icon: MessageSquare, label: 'SMS sent' },
+const QUICK_ICONS: Array<{ key: 'replied' | 'converted'; icon: typeof Reply; label: string }> = [
   { key: 'replied', icon: Reply, label: 'Replied' },
   { key: 'converted', icon: Trophy, label: 'Converted' },
 ]
@@ -69,9 +63,9 @@ export function KanbanCard({
         <ScoreBadge score={lead.score} band={lead.band} />
       </div>
 
-      {status && (
-        <div className="flex flex-wrap gap-1.5">
-          {QUICK_ICONS.filter((q) => status[q.key]).map((q) => (
+      <div className="flex flex-wrap items-center gap-1.5">
+        {status &&
+          QUICK_ICONS.filter((q) => status[q.key]).map((q) => (
             <span
               key={q.key}
               title={q.label}
@@ -80,8 +74,8 @@ export function KanbanCard({
               <q.icon size={11} />
             </span>
           ))}
-        </div>
-      )}
+        <OutreachChannelPills completedCounts={lead.outreach_completed_counts} />
+      </div>
 
       {/* Touch-drag fallback — always reachable on mobile where drag gestures can be unreliable */}
       <div

@@ -31,7 +31,7 @@ import { DashboardPeriodComparisons } from '@/components/DashboardPeriodComparis
 import { LEAD_SOURCE_COLORS, PRIORITY_COLORS, SENTIMENT_COLORS, STATUS_DIST_COLORS } from '@/lib/chartColors'
 import { useAuth, isAdminOrAbove } from '@/contexts/AuthContext'
 import type { RevenueSummary } from '@/types/deal'
-import type { LeadFilters } from '@/types/lead'
+import type { LeadFilters, OutreachChannel } from '@/types/lead'
 
 const GRANULARITIES: Array<{ value: 'day' | 'week' | 'month'; label: string }> = [
   { value: 'day', label: 'Daily (30d)' },
@@ -85,6 +85,17 @@ export function Dashboard() {
       industryId: industryId || undefined,
       assignedTo: effectiveAssignedTo || undefined,
       statusChecks: statusField ? [{ field: statusField, value: true }] : undefined,
+    }
+    navigate('/leads', { state: { initialFilters: drillFilters, drillLabel: label } })
+  }
+
+  /** Same drill-down, but for a specific configured outreach-sequence stage
+   * rather than a fixed lead_status column. */
+  function drillDownStage(stageId: string, label: string) {
+    const drillFilters: LeadFilters = {
+      industryId: industryId || undefined,
+      assignedTo: effectiveAssignedTo || undefined,
+      outreachStageId: stageId,
     }
     navigate('/leads', { state: { initialFilters: drillFilters, drillLabel: label } })
   }
@@ -164,38 +175,6 @@ export function Dashboard() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 desktop:grid-cols-4">
         <StatTile label="Total Leads" value={data.totals.leads} icon={Users} tone="accent" onClick={() => drillDown(undefined, 'Total Leads')} />
         <StatTile
-          label="Cold Emails Sent"
-          value={data.outreach.cold_email_sent.count}
-          subvalue={`${data.outreach.cold_email_sent.pct}%`}
-          icon={Mail}
-          tone="accent"
-          onClick={() => drillDown('cold_email_sent', 'Cold Email Sent ✓')}
-        />
-        <StatTile
-          label="1st Follow-up"
-          value={data.outreach.followup1_sent.count}
-          subvalue={`${data.outreach.followup1_sent.pct}%`}
-          icon={Send}
-          tone="neutral"
-          onClick={() => drillDown('followup1_sent', '1st Follow-up Sent ✓')}
-        />
-        <StatTile
-          label="2nd Follow-up"
-          value={data.outreach.followup2_sent.count}
-          subvalue={`${data.outreach.followup2_sent.pct}%`}
-          icon={Send}
-          tone="neutral"
-          onClick={() => drillDown('followup2_sent', '2nd Follow-up Sent ✓')}
-        />
-        <StatTile
-          label="3rd Follow-up"
-          value={data.outreach.followup3_sent.count}
-          subvalue={`${data.outreach.followup3_sent.pct}%`}
-          icon={Send}
-          tone="neutral"
-          onClick={() => drillDown('followup3_sent', '3rd Follow-up Sent ✓')}
-        />
-        <StatTile
           label="Replies"
           value={data.replies.total}
           subvalue={`${data.replies.rate}% rate`}
@@ -210,22 +189,6 @@ export function Dashboard() {
           icon={Trophy}
           tone="success"
           onClick={() => drillDown('converted', 'Converted to Client ✓')}
-        />
-        <StatTile
-          label="WhatsApp Sent"
-          value={data.outreach.whatsapp_sent.count}
-          subvalue={`${data.outreach.whatsapp_sent.pct}%`}
-          icon={MessageCircle}
-          tone="success"
-          onClick={() => drillDown('whatsapp_sent', 'WhatsApp Sent ✓')}
-        />
-        <StatTile
-          label="LinkedIn Sent"
-          value={data.outreach.linkedin_sent.count}
-          subvalue={`${data.outreach.linkedin_sent.pct}%`}
-          icon={Linkedin}
-          tone="success"
-          onClick={() => drillDown('linkedin_sent', 'LinkedIn Sent ✓')}
         />
         <StatTile
           label="SMS Sent"
@@ -268,6 +231,34 @@ export function Dashboard() {
           onClick={() => drillDown('phone_invalid', 'Phone Invalid ✓')}
         />
       </div>
+
+      {(['email', 'whatsapp', 'linkedin'] as OutreachChannel[]).map((channel) => {
+        const channelStages = data.outreachStages.filter((s) => s.channel === channel)
+        if (channelStages.length === 0) return null
+        const Icon = channel === 'email' ? Mail : channel === 'whatsapp' ? MessageCircle : Linkedin
+        const sectionLabel = channel === 'email' ? 'Email Sequence' : channel === 'whatsapp' ? 'WhatsApp Sequence' : 'LinkedIn Sequence'
+        return (
+          <div key={channel}>
+            <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-base-300">
+              <Icon size={14} />
+              {sectionLabel}
+            </h2>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 desktop:grid-cols-4">
+              {channelStages.map((stage) => (
+                <StatTile
+                  key={stage.id}
+                  label={stage.stage_label}
+                  value={stage.count}
+                  subvalue={`${stage.pct}%`}
+                  icon={stage.stage_number === 0 ? Icon : Send}
+                  tone={stage.stage_number === 0 ? 'accent' : 'neutral'}
+                  onClick={() => drillDownStage(stage.id, `${stage.stage_label} ✓`)}
+                />
+              ))}
+            </div>
+          </div>
+        )
+      })}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="card p-6">

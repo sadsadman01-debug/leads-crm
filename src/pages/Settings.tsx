@@ -4,7 +4,7 @@ import { useAuth, hasPermission } from '@/contexts/AuthContext'
 import { useOrg } from '@/contexts/OrgContext'
 import { RoleBadge } from '@/components/ui/RoleBadge'
 import { PipelineStagesSettings } from '@/components/PipelineStagesSettings'
-import { FollowUpIntervalSettings } from '@/components/FollowUpIntervalSettings'
+import { OutreachSequencesSettings } from '@/components/OutreachSequencesSettings'
 import { IndustriesSettings } from '@/components/IndustriesSettings'
 import { TemplatesSettings } from '@/components/TemplatesSettings'
 import { DealStagesSettings } from '@/components/DealStagesSettings'
@@ -44,9 +44,10 @@ export function Settings() {
   const canManageTemplates = hasPermission(profile, 'canManageTemplates')
   const canManageCustomFields = hasPermission(profile, 'canManageCustomFields')
   const canManageStages = hasPermission(profile, 'canManageStages')
+  const canManageOutreachSequences = hasPermission(profile, 'canManageOutreachSequences')
   const canManageIndustries = hasPermission(profile, 'canManageIndustries')
 
-  const anyDelegated = canManageTemplates || canManageCustomFields || canManageStages || canManageIndustries
+  const anyDelegated = canManageTemplates || canManageCustomFields || canManageStages || canManageOutreachSequences || canManageIndustries
 
   return (
     <div className="space-y-6">
@@ -102,8 +103,8 @@ export function Settings() {
         <Section canWrite={canManageStages}>
           <PipelineStagesSettings />
         </Section>
-        <Section canWrite={!isUser}>
-          <FollowUpIntervalSettings />
+        <Section canWrite={canManageOutreachSequences}>
+          <OutreachSequencesSettings />
         </Section>
         <Section canWrite={canManageIndustries}>
           <IndustriesSettings />

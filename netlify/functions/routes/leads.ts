@@ -2,10 +2,9 @@ import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
 import { ensureTagIds } from '../lib/tags.js'
-import { computeReminder, FOLLOW_UP_DUE_TRIGGERS } from '../lib/reminders.js'
-import { computeLeadScore } from '../lib/scoring.js'
+import { computeReminder } from '../lib/reminders.js'
+import { computeLeadScore, computeSequenceCompletionCounts } from '../lib/scoring.js'
 import { logActivity, logActivities } from '../lib/activities.js'
-import { getFollowUpIntervalDays } from './settings.js'
 import type { AuthedUser } from '../lib/auth.js'
 import {
   requireCanModifyRecord,
@@ -23,22 +22,51 @@ import { notifyAssignment } from '../lib/notifications.js'
 import { logAuditEvent } from '../lib/auditLog.js'
 import { findLeadDuplicatePairs, groupPairsIntoClusters, dismissalKey } from '../lib/duplicateMatch.js'
 
+const OUTREACH_PROGRESS_SELECT = `
+  lead_outreach_progress (
+    outreach_sequence_stage_id, completed_at, due_date,
+    outreach_sequence_stages ( channel, stage_number, stage_label, is_active )
+  )
+`
+
 export const LEAD_SELECT = `
   id, company_name, contact_name, address, phone, email, website, notes, lead_source, priority,
   stage_id, industry_id, created_by, assigned_to, organization_id, custom_fields, created_at, updated_at,
   lead_status ( * ),
   lead_tags ( tags ( id, name ) ),
-  lead_social_profiles ( id, platform, url )
+  lead_social_profiles ( id, platform, url ),
+  ${OUTREACH_PROGRESS_SELECT}
 `
+
+/** Flattens the joined lead_outreach_progress rows into a simpler shape the
+ * frontend consumes directly (channel/stage_number/stage_label inlined
+ * rather than nested), dropping any row whose stage has since been
+ * deactivated (deactivated stages stop being "current" but their history
+ * is never deleted — this just excludes them from the live checklist/score). */
+function normalizeOutreachProgress(rows: any[] | undefined): any[] {
+  return (rows ?? [])
+    .filter((r) => r.outreach_sequence_stages?.is_active)
+    .map((r) => ({
+      outreach_sequence_stage_id: r.outreach_sequence_stage_id,
+      channel: r.outreach_sequence_stages.channel,
+      stage_number: r.outreach_sequence_stages.stage_number,
+      stage_label: r.outreach_sequence_stages.stage_label,
+      completed_at: r.completed_at,
+      due_date: r.due_date,
+    }))
+}
 
 export function normalizeLead(row: any) {
   if (!row) return row
-  const { lead_tags, lead_social_profiles, lead_status, ...rest } = row
+  const { lead_tags, lead_social_profiles, lead_status, lead_outreach_progress, ...rest } = row
   const status = Array.isArray(lead_status) ? lead_status[0] : lead_status
+  const outreachProgress = normalizeOutreachProgress(lead_outreach_progress)
+  const sequenceCounts = computeSequenceCompletionCounts(lead_outreach_progress)
   return {
     ...rest,
-    status: status ? { ...status, ...computeReminder(status) } : status,
-    ...computeLeadScore(status, rest.priority),
+    status: status ? { ...status, ...computeReminder(lead_outreach_progress, status) } : status,
+    outreach_progress: outreachProgress,
+    ...computeLeadScore(status, rest.priority, sequenceCounts),
     social_profiles: lead_social_profiles ?? [],
     tags: (lead_tags ?? []).map((t: any) => t.tags).filter(Boolean),
   }
@@ -49,6 +77,7 @@ export interface LeadFilters {
   leadSource?: string
   tagIds?: string[]
   statusChecks?: Array<{ field: string; value: boolean }>
+  outreachStageId?: string
   dateFrom?: string
   dateTo?: string
   hasWebsite?: boolean
@@ -95,6 +124,16 @@ export async function resolveJoinFilteredIds(filters: LeadFilters): Promise<Set<
       q = q.eq(check.field, Boolean(check.value))
     }
     const { data, error } = await q
+    if (error) throw new HttpError(500, error.message)
+    intersect((data ?? []).map((r: any) => r.lead_id))
+  }
+
+  if (filters.outreachStageId) {
+    const { data, error } = await supabase
+      .from('lead_outreach_progress')
+      .select('lead_id')
+      .eq('outreach_sequence_stage_id', filters.outreachStageId)
+      .not('completed_at', 'is', null)
     if (error) throw new HttpError(500, error.message)
     intersect((data ?? []).map((r: any) => r.lead_id))
   }
@@ -407,26 +446,18 @@ export async function deleteLead(id: string, event: HandlerEvent, user: AuthedUs
   return json(200, { success: true })
 }
 
+/** The non-sequence outreach toggles — Cold-Contact + Follow-up completion
+ * for Email/WhatsApp/LinkedIn is handled by updateOutreachProgress/
+ * lead_outreach_progress instead (see below), per the configurable
+ * outreach-sequence restructuring. */
 export const STATUS_FIELDS: Record<string, { flagField: string; tsField: string; label: string }> = {
-  cold_email_sent: { flagField: 'cold_email_sent', tsField: 'cold_email_sent_at', label: 'Cold Email Sent' },
-  followup1_sent: { flagField: 'followup1_sent', tsField: 'followup1_sent_at', label: '1st Follow-up Sent' },
-  followup2_sent: { flagField: 'followup2_sent', tsField: 'followup2_sent_at', label: '2nd Follow-up Sent' },
-  followup3_sent: { flagField: 'followup3_sent', tsField: 'followup3_sent_at', label: '3rd Follow-up Sent' },
   replied: { flagField: 'replied', tsField: 'replied_at', label: 'Replied' },
-  whatsapp_sent: { flagField: 'whatsapp_sent', tsField: 'whatsapp_sent_at', label: 'WhatsApp Sent' },
   no_whatsapp: { flagField: 'no_whatsapp', tsField: 'no_whatsapp_at', label: 'No WhatsApp Available' },
   email_invalid: { flagField: 'email_invalid', tsField: 'email_invalid_at', label: 'Email Invalid' },
   phone_invalid: { flagField: 'phone_invalid', tsField: 'phone_invalid_at', label: 'Phone Invalid' },
   converted: { flagField: 'converted', tsField: 'converted_at', label: 'Converted to Client' },
-  linkedin_sent: { flagField: 'linkedin_sent', tsField: 'linkedin_sent_at', label: 'LinkedIn Sent' },
   sms_sent: { flagField: 'sms_sent', tsField: 'sms_sent_at', label: 'SMS Sent' },
   cold_call_made: { flagField: 'cold_call_made', tsField: 'cold_call_made_at', label: 'Cold Call Made' },
-  whatsapp_followup1_sent: { flagField: 'whatsapp_followup1_sent', tsField: 'whatsapp_followup1_sent_at', label: 'WhatsApp Follow-up 1 Sent' },
-  whatsapp_followup2_sent: { flagField: 'whatsapp_followup2_sent', tsField: 'whatsapp_followup2_sent_at', label: 'WhatsApp Follow-up 2 Sent' },
-  whatsapp_followup3_sent: { flagField: 'whatsapp_followup3_sent', tsField: 'whatsapp_followup3_sent_at', label: 'WhatsApp Follow-up 3 Sent' },
-  linkedin_followup1_sent: { flagField: 'linkedin_followup1_sent', tsField: 'linkedin_followup1_sent_at', label: 'LinkedIn Follow-up 1 Sent' },
-  linkedin_followup2_sent: { flagField: 'linkedin_followup2_sent', tsField: 'linkedin_followup2_sent_at', label: 'LinkedIn Follow-up 2 Sent' },
-  linkedin_followup3_sent: { flagField: 'linkedin_followup3_sent', tsField: 'linkedin_followup3_sent_at', label: 'LinkedIn Follow-up 3 Sent' },
 }
 
 export async function updateLeadStatus(id: string, event: HandlerEvent, user: AuthedUser) {
@@ -445,18 +476,6 @@ export async function updateLeadStatus(id: string, event: HandlerEvent, user: Au
       update[flagField] = value
       update[tsField] = value ? new Date().toISOString() : null
       activityMessages.push(`${label} marked ${value ? 'done' : 'not done'}`)
-
-      const trigger = FOLLOW_UP_DUE_TRIGGERS[key]
-      if (trigger) {
-        if (value) {
-          const intervalDays = await getFollowUpIntervalDays(orgId, trigger.channel, trigger.stage)
-          const due = new Date()
-          due.setUTCDate(due.getUTCDate() + intervalDays)
-          update[trigger.setsDueField] = due.toISOString()
-        } else {
-          update[trigger.setsDueField] = null
-        }
-      }
     }
   }
 
@@ -484,7 +503,91 @@ export async function updateLeadStatus(id: string, event: HandlerEvent, user: Au
 
   await logActivities(activityMessages.map((message) => ({ leadId: id, type: 'status', message, userId: user.id })))
 
-  return json(200, { ...data, ...computeReminder(data) })
+  const { data: progressRows } = await supabase.from('lead_outreach_progress').select(OUTREACH_PROGRESS_SELECT).eq('lead_id', id)
+  return json(200, { ...data, ...computeReminder(progressRows as any, data) })
+}
+
+/** Body: { outreach_sequence_stage_id, completed }. Marks one configured
+ * outreach-sequence stage complete/incomplete for this lead — the dynamic
+ * replacement for the old fixed cold_email_sent/followup1_sent/etc. toggles.
+ * On completion, unlocks the next active stage in the same channel (smallest
+ * stage_number greater than this one) with a due date computed from ITS
+ * currently configured interval_days — later interval changes never
+ * retroactively move an already-set due date. */
+export async function updateOutreachProgress(id: string, event: HandlerEvent, user: AuthedUser) {
+  const supabase = getSupabaseAdmin()
+  const body = JSON.parse(event.body || '{}')
+  const stageId = body.outreach_sequence_stage_id
+  const completed = Boolean(body.completed)
+  if (!stageId) throw new HttpError(400, 'outreach_sequence_stage_id is required')
+
+  const { existing, orgId } = await fetchLeadInScope(id, user, event)
+  requireCanModifyRecord(user, existing, 'lead')
+
+  let stageQuery = supabase
+    .from('outreach_sequence_stages')
+    .select('id, channel, stage_number, stage_label, is_active')
+    .eq('id', stageId)
+  stageQuery = scopeToOrg(stageQuery as any, orgId) as any
+  const { data: stage, error: stageErr } = await stageQuery.maybeSingle()
+  if (stageErr) throw new HttpError(500, stageErr.message)
+  if (!stage || !stage.is_active) throw new HttpError(404, 'Outreach sequence stage not found')
+
+  const completedAt = completed ? new Date().toISOString() : null
+  const { error: upsertErr } = await supabase
+    .from('lead_outreach_progress')
+    .upsert({ lead_id: id, outreach_sequence_stage_id: stageId, completed_at: completedAt }, { onConflict: 'lead_id,outreach_sequence_stage_id' })
+  if (upsertErr) throw new HttpError(500, upsertErr.message)
+
+  await logActivity(id, 'status', `${stage.stage_label} marked ${completed ? 'done' : 'not done'}`, user.id)
+
+  if (completed) {
+    let nextQuery = supabase
+      .from('outreach_sequence_stages')
+      .select('id, interval_days')
+      .eq('channel', stage.channel)
+      .eq('is_active', true)
+      .gt('stage_number', stage.stage_number)
+    nextQuery = scopeToOrg(nextQuery as any, orgId) as any
+    const { data: nextStage } = await nextQuery.order('stage_number', { ascending: true }).limit(1).maybeSingle()
+
+    if (nextStage) {
+      const due = new Date()
+      due.setUTCDate(due.getUTCDate() + (nextStage.interval_days ?? 3))
+      await supabase
+        .from('lead_outreach_progress')
+        .upsert(
+          { lead_id: id, outreach_sequence_stage_id: nextStage.id, due_date: due.toISOString() },
+          { onConflict: 'lead_id,outreach_sequence_stage_id', ignoreDuplicates: false }
+        )
+    }
+  } else {
+    // Unmarking clears the next stage's not-yet-completed due date, mirroring
+    // the old fixed-toggle behavior — completing it again later resets the due date fresh.
+    let nextQuery = supabase
+      .from('outreach_sequence_stages')
+      .select('id')
+      .eq('channel', stage.channel)
+      .eq('is_active', true)
+      .gt('stage_number', stage.stage_number)
+    nextQuery = scopeToOrg(nextQuery as any, orgId) as any
+    const { data: nextStage } = await nextQuery.order('stage_number', { ascending: true }).limit(1).maybeSingle()
+    if (nextStage) {
+      await supabase
+        .from('lead_outreach_progress')
+        .update({ due_date: null })
+        .eq('lead_id', id)
+        .eq('outreach_sequence_stage_id', nextStage.id)
+        .is('completed_at', null)
+    }
+  }
+
+  const { data: progressRows } = await supabase.from('lead_outreach_progress').select(OUTREACH_PROGRESS_SELECT).eq('lead_id', id)
+  const { data: statusRow } = await supabase.from('lead_status').select('replied, converted').eq('lead_id', id).maybeSingle()
+  return json(200, {
+    outreach_progress: normalizeOutreachProgress(progressRows as any),
+    ...computeReminder(progressRows as any, statusRow),
+  })
 }
 
 export async function updateLeadStage(id: string, event: HandlerEvent, user: AuthedUser) {
@@ -527,13 +630,8 @@ export async function getLeadActivities(id: string, event: HandlerEvent, user: A
 
 const KANBAN_SELECT = `
   id, company_name, priority, stage_id, assigned_to,
-  lead_status ( cold_email_sent, followup1_sent, followup2_sent, followup3_sent,
-    whatsapp_sent, linkedin_sent, sms_sent, replied, converted,
-    followup1_due_at, followup2_due_at, followup3_due_at,
-    whatsapp_followup1_sent, whatsapp_followup2_sent, whatsapp_followup3_sent,
-    whatsapp_followup1_due_at, whatsapp_followup2_due_at, whatsapp_followup3_due_at,
-    linkedin_followup1_sent, linkedin_followup2_sent, linkedin_followup3_sent,
-    linkedin_followup1_due_at, linkedin_followup2_due_at, linkedin_followup3_due_at )
+  lead_status ( replied, converted ),
+  ${OUTREACH_PROGRESS_SELECT}
 `
 const KANBAN_MAX_LEADS = 1000
 
@@ -555,14 +653,16 @@ export async function getKanbanLeads(event: HandlerEvent, user: AuthedUser) {
 
   const leads = (data ?? []).map((row: any) => {
     const status = Array.isArray(row.lead_status) ? row.lead_status[0] : row.lead_status
+    const sequenceCounts = computeSequenceCompletionCounts(row.lead_outreach_progress)
     return {
       id: row.id,
       company_name: row.company_name,
       priority: row.priority,
       stage_id: row.stage_id,
       assigned_to: row.assigned_to,
-      status: status ? { ...status, ...computeReminder(status) } : status,
-      ...computeLeadScore(status, row.priority),
+      outreach_completed_counts: sequenceCounts,
+      status: status ? { ...status, ...computeReminder(row.lead_outreach_progress, status) } : status,
+      ...computeLeadScore(status, row.priority, sequenceCounts),
     }
   })
 
@@ -634,6 +734,62 @@ export async function bulkAction(event: HandlerEvent, user: AuthedUser) {
         leadId,
         type: 'status',
         message: `${label} marked ${boolValue ? 'done' : 'not done'} (bulk)`,
+        userId: user.id,
+      }))
+    )
+
+    return json(200, { success: true, updated: ids.length })
+  }
+
+  if (type === 'outreach_progress') {
+    const ids = await restrictIdsToPermitted(requireIds(body), user, orgId)
+    if (ids.length === 0) return json(200, { success: true, updated: 0 })
+    const stageId = body.outreach_sequence_stage_id
+    if (!stageId) throw new HttpError(400, 'outreach_sequence_stage_id is required')
+
+    let stageQuery = supabase
+      .from('outreach_sequence_stages')
+      .select('id, channel, stage_number, stage_label, interval_days, is_active')
+      .eq('id', stageId)
+    stageQuery = scopeToOrg(stageQuery as any, orgId) as any
+    const { data: stage, error: stageErr } = await stageQuery.maybeSingle()
+    if (stageErr) throw new HttpError(500, stageErr.message)
+    if (!stage || !stage.is_active) throw new HttpError(404, 'Outreach sequence stage not found')
+
+    const now = new Date().toISOString()
+    const { error } = await supabase
+      .from('lead_outreach_progress')
+      .upsert(
+        ids.map((leadId) => ({ lead_id: leadId, outreach_sequence_stage_id: stageId, completed_at: now })),
+        { onConflict: 'lead_id,outreach_sequence_stage_id' }
+      )
+    if (error) throw new HttpError(500, error.message)
+
+    let nextQuery = supabase
+      .from('outreach_sequence_stages')
+      .select('id, interval_days')
+      .eq('channel', stage.channel)
+      .eq('is_active', true)
+      .gt('stage_number', stage.stage_number)
+    nextQuery = scopeToOrg(nextQuery as any, orgId) as any
+    const { data: nextStage } = await nextQuery.order('stage_number', { ascending: true }).limit(1).maybeSingle()
+    if (nextStage) {
+      const due = new Date()
+      due.setUTCDate(due.getUTCDate() + (nextStage.interval_days ?? 3))
+      const { error: dueErr } = await supabase
+        .from('lead_outreach_progress')
+        .upsert(
+          ids.map((leadId) => ({ lead_id: leadId, outreach_sequence_stage_id: nextStage.id, due_date: due.toISOString() })),
+          { onConflict: 'lead_id,outreach_sequence_stage_id' }
+        )
+      if (dueErr) throw new HttpError(500, dueErr.message)
+    }
+
+    await logActivities(
+      ids.map((leadId) => ({
+        leadId,
+        type: 'status',
+        message: `${stage.stage_label} marked done (bulk)`,
         userId: user.id,
       }))
     )
@@ -762,10 +918,11 @@ async function fetchLeadForMerge(id: string, orgId: string | null) {
  * decisions (already resolved to final values by the frontend, which had
  * both full records to compare — this endpoint just validates and applies
  * them), always UNIONs tags/social profiles/attachments (never a pick),
- * OR-merges the 13 outreach-status toggles (unless explicitly overridden),
- * reassigns the loser's Deals/Activity Timeline onto the survivor, records a
- * pre-merge snapshot for undo, then hard-deletes the loser. The survivor
- * keeps its own id, so any existing links to it remain valid. */
+ * OR-merges the non-sequence status toggles and every outreach-sequence
+ * stage's completion (unless explicitly overridden), reassigns the loser's
+ * Deals/Activity Timeline onto the survivor, records a pre-merge snapshot for
+ * undo, then hard-deletes the loser. The survivor keeps its own id, so any
+ * existing links to it remain valid. */
 export async function mergeLeads(event: HandlerEvent, user: AuthedUser) {
   requireAdminOrAbove(user)
   await requireAal2IfEnrolled(user)
@@ -828,12 +985,53 @@ export async function mergeLeads(event: HandlerEvent, user: AuthedUser) {
     }
   }
 
+  // --- Outreach sequence progress: true-if-either, unless explicitly overridden ---
+  const survivorProgress: any[] = survivor.outreach_progress ?? []
+  const loserProgress: any[] = loser.outreach_progress ?? []
+  const stageOverrides = body.stageOverrides ?? {}
+  const survivorProgressByStage = new Map(survivorProgress.map((p: any) => [p.outreach_sequence_stage_id, p]))
+  const loserProgressByStage = new Map(loserProgress.map((p: any) => [p.outreach_sequence_stage_id, p]))
+  const allStageIds = new Set([...survivorProgressByStage.keys(), ...loserProgressByStage.keys()])
+  const progressBackup: Array<{ outreach_sequence_stage_id: string; completed_at: string | null; due_date: string | null }> = []
+
+  for (const stageId of allStageIds) {
+    const sRow = survivorProgressByStage.get(stageId)
+    const lRow = loserProgressByStage.get(stageId)
+    const orCompleted = Boolean(sRow?.completed_at) || Boolean(lRow?.completed_at)
+    const finalCompleted = stageId in stageOverrides ? Boolean(stageOverrides[stageId]) : orCompleted
+    if (finalCompleted === Boolean(sRow?.completed_at)) continue
+
+    progressBackup.push({
+      outreach_sequence_stage_id: stageId as string,
+      completed_at: sRow?.completed_at ?? null,
+      due_date: sRow?.due_date ?? null,
+    })
+  }
+
   if (Object.keys(fieldUpdate).length > 0) {
     const { error } = await supabase.from('leads').update(fieldUpdate).eq('id', survivorId)
     if (error) throw new HttpError(500, error.message)
   }
   if (Object.keys(statusUpdate).length > 0) {
     const { error } = await supabase.from('lead_status').update(statusUpdate).eq('lead_id', survivorId)
+    if (error) throw new HttpError(500, error.message)
+  }
+  for (const backup of progressBackup) {
+    const sRow = survivorProgressByStage.get(backup.outreach_sequence_stage_id)
+    const lRow = loserProgressByStage.get(backup.outreach_sequence_stage_id)
+    const finalCompleted =
+      backup.outreach_sequence_stage_id in stageOverrides
+        ? Boolean(stageOverrides[backup.outreach_sequence_stage_id])
+        : Boolean(sRow?.completed_at) || Boolean(lRow?.completed_at)
+    const { error } = await supabase.from('lead_outreach_progress').upsert(
+      {
+        lead_id: survivorId,
+        outreach_sequence_stage_id: backup.outreach_sequence_stage_id,
+        completed_at: finalCompleted ? sRow?.completed_at || lRow?.completed_at || new Date().toISOString() : null,
+        due_date: sRow?.due_date ?? lRow?.due_date ?? null,
+      },
+      { onConflict: 'lead_id,outreach_sequence_stage_id' }
+    )
     if (error) throw new HttpError(500, error.message)
   }
 
@@ -905,7 +1103,7 @@ export async function mergeLeads(event: HandlerEvent, user: AuthedUser) {
       survivor_id: survivorId,
       loser_id: loserId,
       loser_snapshot: loser,
-      survivor_backup: { fields: survivorFieldBackup, customFields: customFieldsBackup, status: statusBackup },
+      survivor_backup: { fields: survivorFieldBackup, customFields: customFieldsBackup, status: statusBackup, outreachProgress: progressBackup },
       moved_activity_ids: (movedActivities ?? []).map((a) => a.id),
       moved_deal_ids: (movedDeals ?? []).map((d) => d.id),
       moved_attachment_ids: (movedAttachments ?? []).map((a) => a.id),

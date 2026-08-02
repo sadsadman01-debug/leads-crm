@@ -1,13 +1,15 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
+import { Mail, MessageCircle, Linkedin } from 'lucide-react'
 import { Toggle } from '@/components/ui/Toggle'
-import { leadsApi } from '@/lib/api'
+import { leadsApi, outreachSequencesApi } from '@/lib/api'
 import {
   COLD_CALL_OUTCOMES,
   REPLY_SENTIMENTS,
   type ColdCallOutcome,
   type Lead,
   type LeadStatus,
+  type OutreachChannel,
   type ReplySentiment,
 } from '@/types/lead'
 
@@ -20,23 +22,14 @@ interface ToggleDef {
   tone: ToggleTone
 }
 
+/** The non-sequence toggles only — Cold-Contact/Follow-up completion across
+ * Email/WhatsApp/LinkedIn is rendered dynamically below, one group per
+ * channel, from the Organization's currently configured outreach sequence. */
 const TOGGLES: ToggleDef[] = [
-  { key: 'cold_email_sent', tsKey: 'cold_email_sent_at', label: 'Cold Email Sent', tone: 'success' },
-  { key: 'followup1_sent', tsKey: 'followup1_sent_at', label: '1st Follow-up Sent', tone: 'success' },
-  { key: 'followup2_sent', tsKey: 'followup2_sent_at', label: '2nd Follow-up Sent', tone: 'success' },
-  { key: 'followup3_sent', tsKey: 'followup3_sent_at', label: '3rd Follow-up Sent', tone: 'success' },
-  { key: 'whatsapp_sent', tsKey: 'whatsapp_sent_at', label: 'WhatsApp Message Sent', tone: 'success' },
   { key: 'no_whatsapp', tsKey: 'no_whatsapp_at', label: 'No WhatsApp Available', tone: 'warn' },
-  { key: 'linkedin_sent', tsKey: 'linkedin_sent_at', label: 'LinkedIn Message Sent', tone: 'success' },
-  { key: 'sms_sent', tsKey: 'sms_sent_at', label: 'SMS Sent', tone: 'success' },
-  { key: 'whatsapp_followup1_sent', tsKey: 'whatsapp_followup1_sent_at', label: 'WhatsApp Follow-up 1 Sent', tone: 'success' },
-  { key: 'whatsapp_followup2_sent', tsKey: 'whatsapp_followup2_sent_at', label: 'WhatsApp Follow-up 2 Sent', tone: 'success' },
-  { key: 'whatsapp_followup3_sent', tsKey: 'whatsapp_followup3_sent_at', label: 'WhatsApp Follow-up 3 Sent', tone: 'success' },
-  { key: 'linkedin_followup1_sent', tsKey: 'linkedin_followup1_sent_at', label: 'LinkedIn Follow-up 1 Sent', tone: 'success' },
-  { key: 'linkedin_followup2_sent', tsKey: 'linkedin_followup2_sent_at', label: 'LinkedIn Follow-up 2 Sent', tone: 'success' },
-  { key: 'linkedin_followup3_sent', tsKey: 'linkedin_followup3_sent_at', label: 'LinkedIn Follow-up 3 Sent', tone: 'success' },
   { key: 'email_invalid', tsKey: 'email_invalid_at', label: 'Email Invalid', tone: 'danger' },
   { key: 'phone_invalid', tsKey: 'phone_invalid_at', label: 'Phone Invalid', tone: 'danger' },
+  { key: 'sms_sent', tsKey: 'sms_sent_at', label: 'SMS Sent', tone: 'success' },
   { key: 'converted', tsKey: 'converted_at', label: 'Converted to Client', tone: 'success' },
 ]
 
@@ -46,12 +39,26 @@ const TONE_TEXT: Record<ToggleTone, string> = {
   warn: 'text-warn',
 }
 
+const CHANNEL_GROUPS: Array<{ key: OutreachChannel; label: string; icon: typeof Mail }> = [
+  { key: 'email', label: 'Email', icon: Mail },
+  { key: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
+  { key: 'linkedin', label: 'LinkedIn', icon: Linkedin },
+]
+
 export function StatusPanel({ lead, readOnly }: { lead: Lead; readOnly?: boolean }) {
   const queryClient = useQueryClient()
   const status = lead.status
+  const { data: sequenceData } = useQuery({ queryKey: ['outreach-sequence-stages'], queryFn: outreachSequencesApi.list })
+  const stages = sequenceData?.stages ?? []
 
   const mutation = useMutation({
     mutationFn: (payload: Partial<LeadStatus>) => leadsApi.updateStatus(lead.id, payload),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['lead', lead.id] }),
+  })
+
+  const progressMutation = useMutation({
+    mutationFn: (payload: { outreach_sequence_stage_id: string; completed: boolean }) =>
+      leadsApi.updateOutreachProgress(lead.id, payload),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['lead', lead.id] }),
   })
 
@@ -64,6 +71,42 @@ export function StatusPanel({ lead, readOnly }: { lead: Lead; readOnly?: boolean
       </h2>
 
       <fieldset disabled={readOnly} className={readOnly ? 'opacity-60' : ''}>
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {CHANNEL_GROUPS.map(({ key, label, icon: Icon }) => {
+          const channelStages = stages.filter((s) => s.channel === key).sort((a, b) => a.stage_number - b.stage_number)
+          if (channelStages.length === 0) return null
+          return (
+            <div key={key} className="rounded-lg border border-base-700/60 bg-base-850 p-3">
+              <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-base-400">
+                <Icon size={13} />
+                {label}
+              </p>
+              <div className="space-y-2">
+                {channelStages.map((stage) => {
+                  const progress = lead.outreach_progress.find((p) => p.outreach_sequence_stage_id === stage.id)
+                  const checked = Boolean(progress?.completed_at)
+                  return (
+                    <div key={stage.id} className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-base-100">{stage.stage_label}</p>
+                        {checked && progress?.completed_at && (
+                          <p className="text-xs text-success">{format(new Date(progress.completed_at), 'MMM d, yyyy · h:mm a')}</p>
+                        )}
+                      </div>
+                      <Toggle
+                        checked={checked}
+                        disabled={progressMutation.isPending}
+                        onChange={(value) => progressMutation.mutate({ outreach_sequence_stage_id: stage.id, completed: value })}
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {TOGGLES.map(({ key, tsKey, label, tone }) => {
           const checked = Boolean(status[key])

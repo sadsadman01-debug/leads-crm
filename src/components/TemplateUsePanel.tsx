@@ -1,20 +1,49 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Copy, Check, FileText } from 'lucide-react'
-import { templatesApi, industriesApi, teamApi, customFieldsApi } from '@/lib/api'
-import { TEMPLATE_TYPES, type Lead, type TemplateType } from '@/types/lead'
+import { templatesApi, industriesApi, teamApi, customFieldsApi, outreachSequencesApi } from '@/lib/api'
+import { TEMPLATE_TYPES, TEMPLATE_TYPE_CHANNEL, type Lead, type TemplateType, type OutreachChannel, type OutreachSequenceStage } from '@/types/lead'
 import { fillTemplate } from '@/lib/mergeFields'
+
+/** The stage most relevant to prefill a template for — the earliest
+ * not-yet-completed stage in this channel's configured sequence (or the
+ * last one, if every stage is already done), so picking "WhatsApp Follow-up
+ * 2" for instance naturally follows what's actually next for this lead. */
+function currentStageForChannel(
+  channelStages: OutreachSequenceStage[],
+  progress: Lead['outreach_progress']
+): OutreachSequenceStage | undefined {
+  if (channelStages.length === 0) return undefined
+  const progressByStage = new Map(progress.map((p) => [p.outreach_sequence_stage_id, p]))
+  for (const stage of channelStages) {
+    const p = progressByStage.get(stage.id)
+    if (!p || !p.completed_at) return stage
+  }
+  return channelStages[channelStages.length - 1]
+}
 
 export function TemplateUsePanel({ lead }: { lead: Lead }) {
   const { data } = useQuery({ queryKey: ['templates'], queryFn: templatesApi.list })
   const { data: industriesData } = useQuery({ queryKey: ['industries'], queryFn: industriesApi.list })
   const { data: rosterData } = useQuery({ queryKey: ['team-roster'], queryFn: teamApi.roster })
   const { data: customFieldsData } = useQuery({ queryKey: ['custom-fields'], queryFn: customFieldsApi.list })
+  const { data: sequenceData } = useQuery({ queryKey: ['outreach-sequence-stages'], queryFn: outreachSequencesApi.list })
 
   const templates = data?.templates ?? []
+  const stages = sequenceData?.stages ?? []
   const [templateType, setTemplateType] = useState<TemplateType | ''>('')
   const [selectedId, setSelectedId] = useState('')
   const [copied, setCopied] = useState(false)
+
+  const defaultTemplateByChannel = useMemo(() => {
+    const result: Partial<Record<OutreachChannel, string | null>> = {}
+    for (const channel of ['email', 'whatsapp', 'linkedin'] as OutreachChannel[]) {
+      const channelStages = stages.filter((s) => s.channel === channel).sort((a, b) => a.stage_number - b.stage_number)
+      const stage = currentStageForChannel(channelStages, lead.outreach_progress)
+      result[channel] = stage?.default_template_id ?? null
+    }
+    return result
+  }, [stages, lead.outreach_progress])
 
   const typesWithTemplates = useMemo(() => {
     const present = new Set(templates.map((t) => t.template_type))
@@ -48,8 +77,13 @@ export function TemplateUsePanel({ lead }: { lead: Lead }) {
   }, [selected, lead, industryName, assignedToName, customFieldDefs])
 
   function selectType(value: string) {
-    setTemplateType(value as TemplateType | '')
-    setSelectedId('')
+    const type = value as TemplateType | ''
+    setTemplateType(type)
+
+    const channel = type ? TEMPLATE_TYPE_CHANNEL[type] : undefined
+    const defaultId = channel ? defaultTemplateByChannel[channel] : null
+    const availableForType = templates.filter((t) => t.template_type === type)
+    setSelectedId(defaultId && availableForType.some((t) => t.id === defaultId) ? defaultId : '')
   }
 
   async function handleCopy() {

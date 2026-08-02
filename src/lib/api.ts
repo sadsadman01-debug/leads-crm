@@ -9,6 +9,8 @@ import type {
   LeadFilters,
   LeadListResponse,
   LeadStatus,
+  LeadOutreachProgressEntry,
+  OutreachSequenceStage,
   PipelineStage,
   Tag,
   Template,
@@ -178,6 +180,12 @@ export const leadsApi = {
   updateStatus: (id: string, payload: Partial<LeadStatus>) =>
     request<LeadStatus>(`/leads/${id}/status`, { method: 'PATCH', body: JSON.stringify(payload) }),
 
+  updateOutreachProgress: (id: string, payload: { outreach_sequence_stage_id: string; completed: boolean }) =>
+    request<{ outreach_progress: LeadOutreachProgressEntry[] } & Pick<LeadStatus, 'next_follow_up_due_at' | 'is_overdue' | 'is_due_today'>>(
+      `/leads/${id}/outreach-progress`,
+      { method: 'PATCH', body: JSON.stringify(payload) }
+    ),
+
   updateStage: (id: string, stageId: string) =>
     request<Lead>(`/leads/${id}/stage`, { method: 'PATCH', body: JSON.stringify({ stage_id: stageId }) }),
 
@@ -205,6 +213,12 @@ export const bulkApi = {
     request<{ success: true; updated: number }>('/leads/bulk', {
       method: 'POST',
       body: JSON.stringify({ type: 'status', ids, field, value }),
+    }),
+
+  markOutreachStage: (ids: string[], outreach_sequence_stage_id: string) =>
+    request<{ success: true; updated: number }>('/leads/bulk', {
+      method: 'POST',
+      body: JSON.stringify({ type: 'outreach_progress', ids, outreach_sequence_stage_id }),
     }),
 
   addTags: (ids: string[], tagNames: string[]) =>
@@ -762,23 +776,24 @@ export const pipelineStagesApi = {
 export const settingsApi = {
   get: () => request<AppSettings>('/settings'),
 
-  update: (
-    payload: Partial<
-      Pick<
-        AppSettings,
-        | 'email_followup1_interval_days'
-        | 'email_followup2_interval_days'
-        | 'email_followup3_interval_days'
-        | 'whatsapp_followup1_interval_days'
-        | 'whatsapp_followup2_interval_days'
-        | 'whatsapp_followup3_interval_days'
-        | 'linkedin_followup1_interval_days'
-        | 'linkedin_followup2_interval_days'
-        | 'linkedin_followup3_interval_days'
-        | 'default_currency'
-      >
-    >
-  ) => request<AppSettings>('/settings', { method: 'PUT', body: JSON.stringify(payload) }),
+  update: (payload: Partial<Pick<AppSettings, 'default_currency'>>) =>
+    request<AppSettings>('/settings', { method: 'PUT', body: JSON.stringify(payload) }),
+}
+
+export const outreachSequencesApi = {
+  list: () => request<{ stages: OutreachSequenceStage[] }>('/outreach-sequence-stages'),
+
+  create: (payload: { channel: string; stage_label?: string; interval_days?: number; default_template_id?: string | null }) =>
+    request<OutreachSequenceStage>('/outreach-sequence-stages', { method: 'POST', body: JSON.stringify(payload) }),
+
+  update: (id: string, payload: Partial<Pick<OutreachSequenceStage, 'stage_label' | 'interval_days' | 'default_template_id'>>) =>
+    request<OutreachSequenceStage>(`/outreach-sequence-stages/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+
+  deactivate: (id: string, dryRun = false) =>
+    request<{ stage: OutreachSequenceStage | null; affected_lead_count: number }>(
+      `/outreach-sequence-stages/${id}/deactivate${dryRun ? '?dry_run=true' : ''}`,
+      { method: 'POST' }
+    ),
 }
 
 export const dealStagesApi = {

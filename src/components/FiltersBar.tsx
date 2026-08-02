@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Filter, X, ChevronDown } from 'lucide-react'
-import { tagsApi, teamApi, isFiltersEmpty } from '@/lib/api'
+import { tagsApi, teamApi, outreachSequencesApi, isFiltersEmpty } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
-import { LEAD_SOURCES, PRIORITIES, STATUS_TOGGLE_FIELDS, type LeadFilters } from '@/types/lead'
+import { LEAD_SOURCES, PRIORITIES, STATUS_TOGGLE_FIELDS, type LeadFilters, type OutreachChannel } from '@/types/lead'
+
+const CHANNEL_LABEL: Record<OutreachChannel, string> = { email: 'Email', whatsapp: 'WhatsApp', linkedin: 'LinkedIn' }
 
 export function FiltersBar({
   filters,
@@ -18,6 +20,8 @@ export function FiltersBar({
   const tags = tagsData?.tags ?? []
   const { data: rosterData } = useQuery({ queryKey: ['team-roster'], queryFn: teamApi.roster })
   const roster = rosterData?.members ?? []
+  const { data: sequenceData } = useQuery({ queryKey: ['outreach-sequence-stages'], queryFn: outreachSequencesApi.list })
+  const stages = sequenceData?.stages ?? []
 
   function set<K extends keyof LeadFilters>(key: K, value: LeadFilters[K]) {
     onChange({ ...filters, [key]: value })
@@ -29,13 +33,27 @@ export function FiltersBar({
   }
 
   const statusCheck = filters.statusChecks?.[0]
+  // A single combined "Outreach Status" select covers both the fixed
+  // non-sequence toggles (encoded `field:<name>`) and a specific configured
+  // outreach-sequence stage (encoded `stage:<id>`) — only one of
+  // statusChecks/outreachStageId is ever set at a time.
+  const outreachSelectValue = filters.outreachStageId
+    ? `stage:${filters.outreachStageId}`
+    : statusCheck
+      ? `field:${statusCheck.field}`
+      : ''
 
-  function setStatusCheck(field: string) {
-    if (!field) {
-      set('statusChecks', undefined)
+  function setOutreachSelect(value: string) {
+    if (!value) {
+      onChange({ ...filters, statusChecks: undefined, outreachStageId: undefined })
       return
     }
-    set('statusChecks', [{ field, value: true }])
+    const [kind, rest] = value.split(':')
+    if (kind === 'stage') {
+      onChange({ ...filters, statusChecks: undefined, outreachStageId: rest })
+    } else {
+      onChange({ ...filters, outreachStageId: undefined, statusChecks: [{ field: rest, value: true }] })
+    }
   }
 
   const activeCount = [
@@ -43,6 +61,7 @@ export function FiltersBar({
     filters.leadSource,
     filters.tagIds?.length ? true : undefined,
     filters.statusChecks?.length ? true : undefined,
+    filters.outreachStageId,
     filters.dateFrom,
     filters.dateTo,
     filters.hasWebsite,
@@ -107,13 +126,26 @@ export function FiltersBar({
                 <label className="label">Outreach Status</label>
                 <select
                   className="input"
-                  value={statusCheck?.field ?? ''}
-                  onChange={(e) => setStatusCheck(e.target.value)}
+                  value={outreachSelectValue}
+                  onChange={(e) => setOutreachSelect(e.target.value)}
                 >
                   <option value="">Any status</option>
-                  {STATUS_TOGGLE_FIELDS.map((s) => (
-                    <option key={s.field} value={s.field}>{s.label}</option>
-                  ))}
+                  {(['email', 'whatsapp', 'linkedin'] as OutreachChannel[]).map((channel) => {
+                    const channelStages = stages.filter((s) => s.channel === channel).sort((a, b) => a.stage_number - b.stage_number)
+                    if (channelStages.length === 0) return null
+                    return (
+                      <optgroup key={channel} label={CHANNEL_LABEL[channel]}>
+                        {channelStages.map((s) => (
+                          <option key={s.id} value={`stage:${s.id}`}>{s.stage_label}</option>
+                        ))}
+                      </optgroup>
+                    )
+                  })}
+                  <optgroup label="Other">
+                    {STATUS_TOGGLE_FIELDS.map((s) => (
+                      <option key={s.field} value={`field:${s.field}`}>{s.label}</option>
+                    ))}
+                  </optgroup>
                 </select>
               </div>
 

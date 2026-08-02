@@ -13,6 +13,7 @@ export interface UserPermissions {
   canManageTemplates: boolean
   canManageCustomFields: boolean
   canManageStages: boolean
+  canManageOutreachSequences: boolean
   canManageIndustries: boolean
   canViewTeamPerformance: boolean
   canAccessReportBuilder: boolean
@@ -30,6 +31,7 @@ export const DEFAULT_USER_PERMISSIONS: UserPermissions = {
   canManageTemplates: false,
   canManageCustomFields: false,
   canManageStages: false,
+  canManageOutreachSequences: false,
   canManageIndustries: false,
   canViewTeamPerformance: false,
   canAccessReportBuilder: false,
@@ -57,6 +59,7 @@ export const PERMISSION_PRESETS: Array<{ key: string; label: string; description
       canManageTemplates: false,
       canManageCustomFields: false,
       canManageStages: false,
+      canManageOutreachSequences: false,
       canManageIndustries: false,
       canViewTeamPerformance: false,
       canAccessReportBuilder: false,
@@ -77,6 +80,7 @@ export const PERMISSION_PRESETS: Array<{ key: string; label: string; description
       canManageTemplates: false,
       canManageCustomFields: false,
       canManageStages: false,
+      canManageOutreachSequences: false,
       canManageIndustries: false,
       canViewTeamPerformance: false,
       canAccessReportBuilder: false,
