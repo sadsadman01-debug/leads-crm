@@ -6,6 +6,7 @@ import { signupRequestsApi, billingApi, referralClicksApi, pageViewsApi } from '
 import { usePlatformBranding } from '@/hooks/usePlatformBranding'
 import { PreAuthHelpWidget } from '@/components/PreAuthHelpWidget'
 import { PRICING_TIER_LABELS, type BillingCycle } from '@/types/billing'
+import { COUNTRIES } from '@/lib/countries'
 
 export function RequestAccess() {
   usePlatformBranding()
@@ -16,6 +17,9 @@ export function RequestAccess() {
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [message, setMessage] = useState('')
+  const [city, setCity] = useState('')
+  const [country, setCountry] = useState('')
+  const [zipCode, setZipCode] = useState('')
   const [billingCycle, setBillingCycle] = useState<BillingCycle>('monthly')
   const [bannerDismissed, setBannerDismissed] = useState(() => sessionStorage.getItem('early-bird-banner-dismissed') === '1')
 
@@ -52,6 +56,9 @@ export function RequestAccess() {
         email: email.trim(),
         phone: phone.trim() || undefined,
         message: message.trim() || undefined,
+        city: city.trim(),
+        country,
+        zip_code: zipCode.trim(),
         billing_cycle: billingCycle,
         ...(referralCode ? { ref: referralCode } : {}),
       }),
@@ -258,6 +265,47 @@ export function RequestAccess() {
                   onChange={(e) => setMessage(e.target.value)}
                   placeholder="What are you hoping to use this for?"
                 />
+              </div>
+
+              <div className="space-y-3 border-t border-base-700/60 pt-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-base-400">Address</p>
+                <div>
+                  <label className="label" htmlFor="country">Country</label>
+                  <select id="country" required className="input" value={country} onChange={(e) => setCountry(e.target.value)}>
+                    <option value="" disabled>
+                      Select a country…
+                    </option>
+                    {COUNTRIES.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="label" htmlFor="city">City</label>
+                    <input
+                      id="city"
+                      required
+                      className="input"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      placeholder="Dhaka"
+                    />
+                  </div>
+                  <div>
+                    <label className="label" htmlFor="zip-code">ZIP/Postal Code</label>
+                    <input
+                      id="zip-code"
+                      required
+                      className="input"
+                      value={zipCode}
+                      onChange={(e) => setZipCode(e.target.value)}
+                      placeholder="1207"
+                    />
+                  </div>
+                </div>
               </div>
 
               {mutation.isError && (

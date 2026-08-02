@@ -5,6 +5,7 @@ import { Handshake, ArrowLeft, AlertCircle, Loader2, CheckCircle2 } from 'lucide
 import { affiliateApplicationsApi, affiliateSettingsApi, pageViewsApi } from '@/lib/api'
 import { usePlatformBranding } from '@/hooks/usePlatformBranding'
 import { PreAuthHelpWidget } from '@/components/PreAuthHelpWidget'
+import { COUNTRIES } from '@/lib/countries'
 
 export function BecomeAffiliate() {
   usePlatformBranding()
@@ -22,6 +23,9 @@ export function BecomeAffiliate() {
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [howTheyPlanToPromote, setHowTheyPlanToPromote] = useState('')
+  const [city, setCity] = useState('')
+  const [country, setCountry] = useState('')
+  const [zipCode, setZipCode] = useState('')
 
   const { data: programInfo } = useQuery({ queryKey: ['public-affiliate-program-info'], queryFn: affiliateSettingsApi.getPublic })
 
@@ -31,6 +35,9 @@ export function BecomeAffiliate() {
         full_name: fullName.trim(),
         email: email.trim(),
         how_they_plan_to_promote: howTheyPlanToPromote.trim() || undefined,
+        city: city.trim(),
+        country,
+        zip_code: zipCode.trim(),
       }),
   })
 
@@ -129,6 +136,47 @@ export function BecomeAffiliate() {
                   onChange={(e) => setHowTheyPlanToPromote(e.target.value)}
                   placeholder="e.g. Facebook group, YouTube channel, email newsletter…"
                 />
+              </div>
+
+              <div className="space-y-3 border-t border-base-700/60 pt-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-base-400">Address</p>
+                <div>
+                  <label className="label" htmlFor="country">Country</label>
+                  <select id="country" required className="input" value={country} onChange={(e) => setCountry(e.target.value)}>
+                    <option value="" disabled>
+                      Select a country…
+                    </option>
+                    {COUNTRIES.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="label" htmlFor="city">City</label>
+                    <input
+                      id="city"
+                      required
+                      className="input"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      placeholder="Dhaka"
+                    />
+                  </div>
+                  <div>
+                    <label className="label" htmlFor="zip-code">ZIP/Postal Code</label>
+                    <input
+                      id="zip-code"
+                      required
+                      className="input"
+                      value={zipCode}
+                      onChange={(e) => setZipCode(e.target.value)}
+                      placeholder="1207"
+                    />
+                  </div>
+                </div>
               </div>
 
               {mutation.isError && (

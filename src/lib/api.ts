@@ -576,6 +576,9 @@ export const signupRequestsApi = {
     email: string
     phone?: string
     message?: string
+    city: string
+    country: string
+    zip_code: string
     billing_cycle?: BillingCycle
     ref?: string
   }) => requestPublic<SignupRequest>('/signup-requests', { method: 'POST', body: JSON.stringify(payload) }),
@@ -899,7 +902,7 @@ export const attachmentsApi = {
 
 export const affiliateApplicationsApi = {
   /** Public — reachable from the "Become an Affiliate" page before any session exists. */
-  create: (payload: { full_name: string; email: string; how_they_plan_to_promote?: string }) =>
+  create: (payload: { full_name: string; email: string; how_they_plan_to_promote?: string; city: string; country: string; zip_code: string }) =>
     requestPublic<AffiliateApplication>('/affiliate-applications', { method: 'POST', body: JSON.stringify(payload) }),
 
   list: () => request<{ applications: AffiliateApplication[] }>('/affiliate-applications'),

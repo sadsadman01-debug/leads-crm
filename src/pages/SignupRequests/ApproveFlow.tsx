@@ -87,6 +87,9 @@ export function ApproveFlow({ request, onClose }: { request: SignupRequest | nul
         <div className="rounded-lg border border-base-700/60 bg-base-850 p-3 text-xs text-base-400">
           <p><span className="text-base-500">Phone:</span> {request.phone || '—'}</p>
           <p className="mt-1"><span className="text-base-500">Message:</span> {request.message || '—'}</p>
+          <p className="mt-1">
+            <span className="text-base-500">Address:</span> {request.city}, {request.country} {request.zip_code}
+          </p>
         </div>
 
         {request.pricing_tier && (

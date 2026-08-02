@@ -8,7 +8,7 @@ import { notifySuperAdmins } from '../lib/notifications.js'
 import { logAuditEvent, insertAuditLog, getClientIp } from '../lib/auditLog.js'
 import type { AuthedUser } from '../lib/auth.js'
 
-const COLUMNS = 'id, full_name, email, how_they_plan_to_promote, status, applied_at, reviewed_at, reviewed_by, rejection_reason'
+const COLUMNS = 'id, full_name, email, how_they_plan_to_promote, city, country, zip_code, status, applied_at, reviewed_at, reviewed_by, rejection_reason'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -21,14 +21,20 @@ export async function createAffiliateApplication(event: HandlerEvent) {
   const full_name = (body.full_name ?? '').trim()
   const email = (body.email ?? '').trim()
   const how_they_plan_to_promote = (body.how_they_plan_to_promote ?? '').trim() || null
+  const city = (body.city ?? '').trim()
+  const country = (body.country ?? '').trim()
+  const zip_code = (body.zip_code ?? '').trim()
 
   if (!full_name) throw new HttpError(400, 'Full name is required')
   if (!email) throw new HttpError(400, 'Email is required')
   if (!EMAIL_RE.test(email)) throw new HttpError(400, 'Enter a valid email address')
+  if (!city) throw new HttpError(400, 'City is required')
+  if (!country) throw new HttpError(400, 'Country is required')
+  if (!zip_code) throw new HttpError(400, 'ZIP/Postal Code is required')
 
   const { data, error } = await supabase
     .from('affiliate_applications')
-    .insert({ full_name, email, how_they_plan_to_promote, status: 'pending' })
+    .insert({ full_name, email, how_they_plan_to_promote, city, country, zip_code, status: 'pending' })
     .select(COLUMNS)
     .single()
   if (error) throw new HttpError(500, error.message)
@@ -98,8 +104,16 @@ export async function approveAffiliateApplication(id: string, event: HandlerEven
 
   const { data: affiliate, error: affErr } = await supabase
     .from('affiliates')
-    .insert({ profile_id: created.user.id, full_name: application.full_name, email: application.email, referral_code: referralCode })
-    .select('id, full_name, email, referral_code, status, created_at')
+    .insert({
+      profile_id: created.user.id,
+      full_name: application.full_name,
+      email: application.email,
+      referral_code: referralCode,
+      city: application.city,
+      country: application.country,
+      zip_code: application.zip_code,
+    })
+    .select('id, full_name, email, referral_code, city, country, zip_code, status, created_at')
     .single()
   if (affErr) {
     await supabase.auth.admin.deleteUser(created.user.id)

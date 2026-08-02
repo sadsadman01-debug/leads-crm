@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { UserPlus2, Mail, Phone } from 'lucide-react'
+import { UserPlus2, Mail, Phone, MapPin } from 'lucide-react'
 import { signupRequestsApi } from '@/lib/api'
 import { Badge } from '@/components/ui/Badge'
 import { ConversionStatsRow } from '@/components/ConversionStatsRow'
@@ -119,6 +119,14 @@ export function SignupRequestsPage() {
                       <div className="mt-0.5 flex items-center gap-1.5 text-xs text-base-400">
                         <Phone size={12} className="shrink-0" />
                         {r.phone}
+                      </div>
+                    )}
+                    {(r.city || r.country || r.zip_code) && (
+                      <div className="mt-0.5 flex items-center gap-1.5 text-xs text-base-400">
+                        <MapPin size={12} className="shrink-0" />
+                        <span className="truncate">
+                          {[r.city, r.country, r.zip_code].filter(Boolean).join(', ')}
+                        </span>
                       </div>
                     )}
                   </td>

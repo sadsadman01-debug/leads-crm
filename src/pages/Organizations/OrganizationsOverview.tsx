@@ -129,6 +129,9 @@ export function OrganizationsOverview() {
                 <tr key={org.id} className="border-b border-base-800">
                   <td className="py-3 pr-3">
                     <p className="font-medium text-base-100">{org.name}</p>
+                    {(org.city || org.country || org.zip_code) && (
+                      <p className="mt-0.5 text-xs text-base-400">{[org.city, org.country, org.zip_code].filter(Boolean).join(', ')}</p>
+                    )}
                     {org.referred_by_affiliate_name && (
                       <p className="mt-0.5 text-xs text-accent-400">Referred by: {org.referred_by_affiliate_name}</p>
                     )}

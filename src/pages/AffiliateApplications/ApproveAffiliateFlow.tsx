@@ -78,6 +78,9 @@ export function ApproveAffiliateFlow({ application, onClose }: { application: Af
         </ul>
         <div className="rounded-lg border border-base-700/60 bg-base-850 p-3 text-xs text-base-400">
           <p><span className="text-base-500">Promotion plan:</span> {application.how_they_plan_to_promote || '—'}</p>
+          <p className="mt-1">
+            <span className="text-base-500">Address:</span> {application.city}, {application.country} {application.zip_code}
+          </p>
         </div>
       </div>
 

@@ -1,6 +1,9 @@
 export interface Organization {
   id: string
   name: string
+  city: string
+  country: string
+  zip_code: string
   status: 'active' | 'suspended'
   created_at: string
 }

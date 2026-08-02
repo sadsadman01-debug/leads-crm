@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Handshake, Mail } from 'lucide-react'
+import { Handshake, Mail, MapPin } from 'lucide-react'
 import { affiliateApplicationsApi } from '@/lib/api'
 import { Badge } from '@/components/ui/Badge'
 import { ConversionStatsRow } from '@/components/ConversionStatsRow'
@@ -89,6 +89,12 @@ export function AffiliateApplicationsPage() {
                       <Mail size={12} className="shrink-0 text-base-400" />
                       <span className="truncate">{a.email}</span>
                     </div>
+                    {(a.city || a.country || a.zip_code) && (
+                      <div className="mt-0.5 flex items-center gap-1.5 text-xs text-base-400">
+                        <MapPin size={12} className="shrink-0" />
+                        <span className="truncate">{[a.city, a.country, a.zip_code].filter(Boolean).join(', ')}</span>
+                      </div>
+                    )}
                   </td>
                   <td className="max-w-[260px] px-3 py-3 text-xs text-base-400">{a.how_they_plan_to_promote || <span className="text-base-500">—</span>}</td>
                   <td className="px-3 py-3 text-base-400">{new Date(a.applied_at).toLocaleDateString()}</td>

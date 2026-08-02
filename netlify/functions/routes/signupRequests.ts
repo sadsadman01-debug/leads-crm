@@ -9,7 +9,7 @@ import { getOrCreateBillingSettingsRow, computeCurrentPricingTier, computeAnnual
 import type { AuthedUser } from '../lib/auth.js'
 
 const COLUMNS =
-  'id, organization_name, contact_name, email, phone, message, status, requested_at, reviewed_at, reviewed_by, rejection_reason, pricing_tier, monthly_price_usd, payment_status, billing_cycle, annual_total_usd, referred_by_affiliate_id'
+  'id, organization_name, contact_name, email, phone, message, city, country, zip_code, status, requested_at, reviewed_at, reviewed_by, rejection_reason, pricing_tier, monthly_price_usd, payment_status, billing_cycle, annual_total_usd, referred_by_affiliate_id'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -24,11 +24,17 @@ export async function createSignupRequest(event: HandlerEvent) {
   const email = (body.email ?? '').trim()
   const phone = (body.phone ?? '').trim() || null
   const message = (body.message ?? '').trim() || null
+  const city = (body.city ?? '').trim()
+  const country = (body.country ?? '').trim()
+  const zip_code = (body.zip_code ?? '').trim()
 
   if (!organization_name) throw new HttpError(400, 'Organization name is required')
   if (!contact_name) throw new HttpError(400, 'Contact name is required')
   if (!email) throw new HttpError(400, 'Email is required')
   if (!EMAIL_RE.test(email)) throw new HttpError(400, 'Enter a valid email address')
+  if (!city) throw new HttpError(400, 'City is required')
+  if (!country) throw new HttpError(400, 'Country is required')
+  if (!zip_code) throw new HttpError(400, 'ZIP/Postal Code is required')
 
   // Locked in NOW, not at approval time, so a review delay never changes the
   // price a requester was shown when they submitted.
@@ -54,6 +60,9 @@ export async function createSignupRequest(event: HandlerEvent) {
       email,
       phone,
       message,
+      city,
+      country,
+      zip_code,
       status: 'pending',
       pricing_tier,
       monthly_price_usd,
@@ -142,6 +151,9 @@ export async function approveSignupRequest(id: string, event: HandlerEvent, user
       name: request.organization_name,
       created_by: user.id,
       status: 'active',
+      city: request.city,
+      country: request.country,
+      zip_code: request.zip_code,
       pricing_tier: request.pricing_tier,
       monthly_price_usd: request.monthly_price_usd,
       billing_cycle: request.billing_cycle,
@@ -151,7 +163,9 @@ export async function approveSignupRequest(id: string, event: HandlerEvent, user
       subscription_end_date: subscriptionEndDate,
       referred_by_affiliate_id: request.referred_by_affiliate_id,
     })
-    .select('id, name, pricing_tier, monthly_price_usd, billing_cycle, annual_total_usd, payment_status, subscription_end_date, referred_by_affiliate_id')
+    .select(
+      'id, name, city, country, zip_code, pricing_tier, monthly_price_usd, billing_cycle, annual_total_usd, payment_status, subscription_end_date, referred_by_affiliate_id'
+    )
     .single()
   if (orgErr) throw new HttpError(500, orgErr.message)
 

@@ -6,7 +6,7 @@ import { getAffiliateBalances, getAffiliateFunnel, getAffiliateTrend } from '../
 import { getOrCreateAffiliateSettingsRow } from '../lib/affiliateSettings.js'
 import type { AuthedUser } from '../lib/auth.js'
 
-const AFFILIATE_COLUMNS = 'id, profile_id, full_name, email, referral_code, status, created_at'
+const AFFILIATE_COLUMNS = 'id, profile_id, full_name, email, referral_code, city, country, zip_code, status, created_at'
 
 export async function getAffiliateForUser(user: AuthedUser) {
   if (user.role !== 'affiliate') throw new HttpError(403, 'Affiliate access required')

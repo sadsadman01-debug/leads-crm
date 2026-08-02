@@ -137,6 +137,18 @@ function AffiliateDetailModal({ affiliate, onClose }: { affiliate: AffiliateWith
             <p className="text-xs text-base-500">Joined</p>
             <p className="text-base-200">{new Date(affiliate.created_at).toLocaleDateString()}</p>
           </div>
+          <div className="rounded-lg bg-base-850 p-3">
+            <p className="text-xs text-base-500">City</p>
+            <p className="truncate text-base-200">{affiliate.city || '—'}</p>
+          </div>
+          <div className="rounded-lg bg-base-850 p-3">
+            <p className="text-xs text-base-500">Country</p>
+            <p className="truncate text-base-200">{affiliate.country || '—'}</p>
+          </div>
+          <div className="rounded-lg bg-base-850 p-3">
+            <p className="text-xs text-base-500">ZIP/Postal Code</p>
+            <p className="truncate text-base-200">{affiliate.zip_code || '—'}</p>
+          </div>
         </div>
 
         {funnelData.length > 0 && (

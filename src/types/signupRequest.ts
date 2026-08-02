@@ -9,6 +9,9 @@ export interface SignupRequest {
   email: string
   phone: string | null
   message: string | null
+  city: string
+  country: string
+  zip_code: string
   status: SignupRequestStatus
   requested_at: string
   reviewed_at: string | null
@@ -28,6 +31,9 @@ export interface ApproveSignupRequestResult {
   organization: {
     id: string
     name: string
+    city: string
+    country: string
+    zip_code: string
     pricing_tier: PricingTier | null
     monthly_price_usd: number | null
     billing_cycle: BillingCycle | null

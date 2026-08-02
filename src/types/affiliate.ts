@@ -9,6 +9,9 @@ export interface AffiliateApplication {
   full_name: string
   email: string
   how_they_plan_to_promote: string | null
+  city: string
+  country: string
+  zip_code: string
   status: AffiliateApplicationStatus
   applied_at: string
   reviewed_at: string | null
@@ -28,6 +31,9 @@ export interface Affiliate {
   full_name: string
   email: string
   referral_code: string
+  city: string
+  country: string
+  zip_code: string
   status: AffiliateStatus
   created_at: string
 }

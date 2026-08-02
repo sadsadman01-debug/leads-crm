@@ -14,7 +14,7 @@ export async function listOrganizations(user: AuthedUser) {
 
   const { data: orgs, error } = await supabase
     .from('organizations')
-    .select('id, name, status, created_at, pricing_tier, monthly_price_usd, payment_status, subscription_end_date, referred_by_affiliate_id')
+    .select('id, name, city, country, zip_code, status, created_at, pricing_tier, monthly_price_usd, payment_status, subscription_end_date, referred_by_affiliate_id')
     .order('created_at', { ascending: true })
   if (error) throw new HttpError(500, error.message)
 
@@ -59,6 +59,9 @@ export async function listOrganizations(user: AuthedUser) {
     organizations: (orgs ?? []).map((org) => ({
       id: org.id,
       name: org.name,
+      city: org.city,
+      country: org.country,
+      zip_code: org.zip_code,
       status: org.status,
       created_at: org.created_at,
       pricing_tier: org.pricing_tier,
@@ -81,7 +84,7 @@ export async function getOrganization(id: string, user: AuthedUser) {
   const supabase = getSupabaseAdmin()
   const { data, error } = await supabase
     .from('organizations')
-    .select('id, name, status, created_at, pricing_tier, monthly_price_usd, payment_status, subscription_end_date, referred_by_affiliate_id')
+    .select('id, name, city, country, zip_code, status, created_at, pricing_tier, monthly_price_usd, payment_status, subscription_end_date, referred_by_affiliate_id')
     .eq('id', id)
     .maybeSingle()
   if (error) throw new HttpError(500, error.message)
@@ -110,7 +113,7 @@ export async function createOrganizationWithAdmin(event: HandlerEvent, user: Aut
   const { data: org, error: orgErr } = await supabase
     .from('organizations')
     .insert({ name: organizationName, created_by: user.id, status: 'active' })
-    .select('id, name, status, created_at')
+    .select('id, name, city, country, zip_code, status, created_at')
     .single()
   if (orgErr) throw new HttpError(500, orgErr.message)
 
@@ -167,7 +170,7 @@ export async function updateOrganizationStatus(id: string, event: HandlerEvent, 
     .from('organizations')
     .update({ status })
     .eq('id', id)
-    .select('id, name, status, created_at')
+    .select('id, name, city, country, zip_code, status, created_at')
     .single()
   if (error) throw new HttpError(500, error.message)
 
