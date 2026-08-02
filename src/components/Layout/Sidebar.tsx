@@ -202,9 +202,11 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
                   className="h-8 w-8 shrink-0 rounded-lg object-cover"
                 />
               ) : (
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-500 shadow-glow">
-                  <Target size={18} className="text-white" />
-                </div>
+                <img
+                  src="/branding/logo-transparent-1024.png"
+                  alt={workspaceLabel ?? appName}
+                  className="h-8 w-8 shrink-0 rounded-lg object-cover"
+                />
               )}
               <span className={clsx('text-base font-semibold tracking-tight text-base-100', labelClass)}>{appName}</span>
             </div>

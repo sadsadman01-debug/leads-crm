@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate, useLocation, Link } from 'react-router-dom'
-import { Target, AlertCircle, Eye, EyeOff, Loader2 } from 'lucide-react'
+import { AlertCircle, Eye, EyeOff, Loader2 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePlatformBranding } from '@/hooks/usePlatformBranding'
 import { PreAuthHelpWidget } from '@/components/PreAuthHelpWidget'
@@ -55,9 +55,11 @@ export function Login() {
               className="mb-4 h-12 w-12 rounded-xl object-cover"
             />
           ) : (
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-accent-500 shadow-glow">
-              <Target size={24} className="text-white" />
-            </div>
+            <img
+              src="/branding/logo-transparent-1024.png"
+              alt={platformBranding?.platform_name || 'Leadify'}
+              className="mb-4 h-12 w-12 rounded-xl object-cover"
+            />
           )}
           <h1 className="text-xl font-semibold text-base-100">{platformBranding?.platform_name || 'Leadify'}</h1>
           <p className="mt-1 text-sm text-base-400">Sign in to manage your sales pipeline</p>
