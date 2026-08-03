@@ -29,7 +29,7 @@ export function PromoCodesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-base-100">Promo Codes</h1>
           <p className="mt-1 text-sm text-base-400">Configure discount codes applicable at signup.</p>
@@ -216,7 +216,7 @@ function PromoCodeFormModal({ promoCode, onClose }: { promoCode: PromoCode | nul
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-3 border-t border-base-700/60 pt-4">
+        <div className="grid grid-cols-1 gap-3 border-t border-base-700/60 pt-4 sm:grid-cols-2">
           <div>
             <label className="label" htmlFor="max-uses">Maximum Uses</label>
             <input

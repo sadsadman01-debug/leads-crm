@@ -226,13 +226,15 @@ export function EarningsPage() {
         <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-base-300">Revenue by Pricing Tier / Billing Cycle</h2>
         <div className="space-y-3">
           {(byTier?.breakdown ?? []).map((row) => (
-            <div key={row.tier} className="flex items-center gap-3">
-              <span className="w-32 shrink-0 text-sm text-base-300">{row.label}</span>
+            <div key={row.tier} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+              <span className="shrink-0 text-sm text-base-300 sm:w-32">{row.label}</span>
               <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-base-800">
                 <div className="h-full rounded-full bg-accent-500" style={{ width: `${Math.round((row.revenue / maxTierRevenue) * 100)}%` }} />
               </div>
-              <span className="w-28 shrink-0 text-right tabular-nums text-base-200">{fmtTaka(row.revenue)}</span>
-              <span className="w-20 shrink-0 text-right tabular-nums text-base-500">{row.count} txns</span>
+              <div className="flex justify-between gap-3 sm:contents">
+                <span className="shrink-0 text-right tabular-nums text-base-200 sm:w-28">{fmtTaka(row.revenue)}</span>
+                <span className="shrink-0 text-right tabular-nums text-base-500 sm:w-20">{row.count} txns</span>
+              </div>
             </div>
           ))}
         </div>

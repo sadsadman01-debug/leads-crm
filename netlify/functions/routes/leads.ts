@@ -600,11 +600,15 @@ export async function updateLeadStage(id: string, event: HandlerEvent, user: Aut
   const { existing, orgId } = await fetchLeadInScope(id, user, event)
   requireCanModifyRecord(user, existing, 'lead')
 
+  let stageQuery = supabase.from('pipeline_stages').select('name').eq('id', stageId)
+  stageQuery = scopeToOrg(stageQuery as any, orgId) as any
+  const { data: stage } = await stageQuery.maybeSingle()
+  if (!stage) throw new HttpError(404, 'Pipeline stage not found')
+
   const { error } = await supabase.from('leads').update({ stage_id: stageId }).eq('id', id)
   if (error) throw new HttpError(500, error.message)
 
-  const { data: stage } = await supabase.from('pipeline_stages').select('name').eq('id', stageId).maybeSingle()
-  await logActivity(id, 'stage', `Stage changed to ${stage?.name ?? 'unknown'}`, user.id)
+  await logActivity(id, 'stage', `Stage changed to ${stage.name}`, user.id)
 
   return getLead(id, orgId, user)
 }
@@ -986,8 +990,17 @@ export async function mergeLeads(event: HandlerEvent, user: AuthedUser) {
   }
 
   // --- Outreach sequence progress: true-if-either, unless explicitly overridden ---
-  const survivorProgress: any[] = survivor.outreach_progress ?? []
-  const loserProgress: any[] = loser.outreach_progress ?? []
+  // Queried raw here (not survivor/loser.outreach_progress, which normalizeLead
+  // already filtered down to only currently-active stages for the UI checklist)
+  // so a completion on a since-deactivated stage is still unioned onto the
+  // survivor instead of silently vanishing when the loser is hard-deleted.
+  const { data: rawProgressRows, error: rawProgressErr } = await supabase
+    .from('lead_outreach_progress')
+    .select('lead_id, outreach_sequence_stage_id, completed_at, due_date')
+    .in('lead_id', [survivorId, loserId])
+  if (rawProgressErr) throw new HttpError(500, rawProgressErr.message)
+  const survivorProgress: any[] = (rawProgressRows ?? []).filter((r: any) => r.lead_id === survivorId)
+  const loserProgress: any[] = (rawProgressRows ?? []).filter((r: any) => r.lead_id === loserId)
   const stageOverrides = body.stageOverrides ?? {}
   const survivorProgressByStage = new Map(survivorProgress.map((p: any) => [p.outreach_sequence_stage_id, p]))
   const loserProgressByStage = new Map(loserProgress.map((p: any) => [p.outreach_sequence_stage_id, p]))
@@ -1102,7 +1115,10 @@ export async function mergeLeads(event: HandlerEvent, user: AuthedUser) {
       organization_id: orgId,
       survivor_id: survivorId,
       loser_id: loserId,
-      loser_snapshot: loser,
+      // Overrides normalizeLead's active-stage-only outreach_progress with the
+      // raw rows fetched above, so undo can recreate completions on stages
+      // that have since been deactivated too — same reasoning as the union above.
+      loser_snapshot: { ...loser, outreach_progress: loserProgress },
       survivor_backup: { fields: survivorFieldBackup, customFields: customFieldsBackup, status: statusBackup, outreachProgress: progressBackup },
       moved_activity_ids: (movedActivities ?? []).map((a) => a.id),
       moved_deal_ids: (movedDeals ?? []).map((d) => d.id),

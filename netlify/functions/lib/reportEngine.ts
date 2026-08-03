@@ -209,7 +209,9 @@ export async function runDealsReport(
     return convertAmount(Number(r.value), r.currency, displayCurrency, rates)
   }
 
-  const dealStageById = new Map((await supabase.from('deal_stages').select('id, is_won, is_closed').then((r) => r.data ?? [])).map((s: any) => [s.id, s]))
+  let dealStagesForWonQuery = supabase.from('deal_stages').select('id, is_won, is_closed')
+  dealStagesForWonQuery = scopeToOrg(dealStagesForWonQuery as any, orgId) as any
+  const dealStageById = new Map((await dealStagesForWonQuery.then((r) => r.data ?? [])).map((s: any) => [s.id, s]))
 
   if (!groupBy) {
     return {

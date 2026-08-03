@@ -55,6 +55,7 @@ export async function createOutreachStage(event: HandlerEvent, user: AuthedUser)
 
   const stageLabel = (body.stage_label ?? '').trim() || `Follow-up ${stageNumber}`
   const intervalDays = stageNumber === 0 ? null : Number(body.interval_days) > 0 ? Number(body.interval_days) : 3
+  if (body.default_template_id) await requireRowInOrgScope('templates', body.default_template_id, orgId)
 
   const { data, error } = await supabase
     .from('outreach_sequence_stages')
@@ -101,7 +102,10 @@ export async function updateOutreachStage(id: string, event: HandlerEvent, user:
     if (!Number.isInteger(days) || days <= 0) throw new HttpError(400, 'interval_days must be a positive integer')
     update.interval_days = days
   }
-  if ('default_template_id' in body) update.default_template_id = body.default_template_id || null
+  if ('default_template_id' in body) {
+    if (body.default_template_id) await requireRowInOrgScope('templates', body.default_template_id, orgId)
+    update.default_template_id = body.default_template_id || null
+  }
 
   if (Object.keys(update).length === 0) throw new HttpError(400, 'Nothing to update')
 

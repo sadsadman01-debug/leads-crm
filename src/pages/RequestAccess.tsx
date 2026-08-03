@@ -236,7 +236,7 @@ export function RequestAccess() {
                   <div className="flex gap-2">
                     <input
                       id="promo-code"
-                      className="input"
+                      className="input min-w-0 flex-1"
                       value={promoCode}
                       disabled={Boolean(appliedPromo)}
                       onChange={(e) => {
@@ -376,7 +376,7 @@ export function RequestAccess() {
                     ))}
                   </select>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <label className="label" htmlFor="city">City</label>
                     <input

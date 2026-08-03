@@ -2,10 +2,10 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import type { HandlerEvent } from '@netlify/functions'
 import { handler as netlifyHandler } from '../netlify/functions/api.js'
 
-// Raised from Vercel's 10s default specifically for the Lead Generation
-// search endpoint, which fetches several candidate businesses' own websites
-// in turn — Vercel silently caps this to whatever the current plan allows,
-// so it's harmless for every other (fast) route through this same function.
+// Raised from Vercel's 10s default for the data-export ZIP endpoint, which
+// can take a while for larger organizations — Vercel silently caps this to
+// whatever the current plan allows, so it's harmless for every other (fast)
+// route through this same function.
 export const config = { maxDuration: 60 }
 
 /**

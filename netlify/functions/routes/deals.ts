@@ -298,12 +298,10 @@ export async function updateDealStage(id: string, event: HandlerEvent, user: Aut
   )
   requireCanModifyRecord(user, deal, 'deal')
 
-  const { data: stage, error: stageErr } = await supabase
-    .from('deal_stages')
-    .select('id, name, default_probability, is_closed, is_won')
-    .eq('id', stageId)
-    .single()
-  if (stageErr) throw new HttpError(404, 'Deal stage not found')
+  let stageQuery = supabase.from('deal_stages').select('id, name, default_probability, is_closed, is_won').eq('id', stageId)
+  stageQuery = scopeToOrg(stageQuery as any, orgId) as any
+  const { data: stage, error: stageErr } = await stageQuery.single()
+  if (stageErr || !stage) throw new HttpError(404, 'Deal stage not found')
 
   if (stage.is_closed && !body.outcome_reason?.trim()) {
     throw new HttpError(400, 'outcome_reason is required when closing a deal')
