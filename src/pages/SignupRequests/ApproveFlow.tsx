@@ -35,7 +35,9 @@ export function ApproveFlow({ request, onClose }: { request: SignupRequest | nul
     if (request) {
       setResult(null)
       setDraft('')
-      setPaymentMethod('')
+      // Pre-filled by the applicant via the public /pay page, if they used
+      // it — the Super Admin can still change this before approving.
+      setPaymentMethod(request.payment_method ?? '')
     }
   }, [request])
 
@@ -129,6 +131,11 @@ export function ApproveFlow({ request, onClose }: { request: SignupRequest | nul
               <option key={m} value={m}>{PAYMENT_METHOD_LABELS[m]}</option>
             ))}
           </select>
+          {request.payment_method && (
+            <p className="mt-1 text-xs text-accent-400">
+              {PAYMENT_METHOD_LABELS[request.payment_method]} (auto-submitted by applicant) — change it above if needed.
+            </p>
+          )}
         </div>
       </div>
 

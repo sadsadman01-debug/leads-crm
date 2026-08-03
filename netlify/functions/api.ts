@@ -82,7 +82,17 @@ import {
   approveSignupRequest,
   rejectSignupRequest,
   updateSignupRequestPaymentStatus,
+  getPublicSignupRequestForPayment,
+  submitPaymentMethodSelection,
 } from './routes/signupRequests.js'
+import {
+  listPaymentAccounts,
+  getPublicPaymentAccounts,
+  createPaymentAccount,
+  updatePaymentAccount,
+  deletePaymentAccount,
+  reorderPaymentAccounts,
+} from './routes/receivingPaymentAccounts.js'
 import {
   listPromoCodes,
   createPromoCode,
@@ -242,8 +252,15 @@ export const handler: Handler = async (event) => {
       // Access" submission never creates an Auth account or an Organization,
       // so it needs no session. Every other action on this resource (viewing,
       // approving, rejecting) is Super-Admin-only, enforced inside each function.
+      // The /pay page also needs two unauthenticated calls: reading its own
+      // request's amount (id + sub 'public') and submitting a payment method
+      // pre-fill (id + sub 'payment-method') — both public, same reasoning.
       if (!id && method === 'POST') {
         response = await createSignupRequest(event)
+      } else if (id && sub === 'public' && method === 'GET') {
+        response = await getPublicSignupRequestForPayment(id)
+      } else if (id && sub === 'payment-method' && method === 'POST') {
+        response = await submitPaymentMethodSelection(id, event)
       } else {
         const user = await requireUser(event)
         if (!id && method === 'GET') response = await listSignupRequests(user)
@@ -709,6 +726,20 @@ export const handler: Handler = async (event) => {
         else if (!id && method === 'POST') response = await createPromoCode(event, user)
         else if (id && method === 'PUT') response = await updatePromoCode(id, event, user)
         else if (id && method === 'DELETE') response = await deletePromoCode(id, event, user)
+        else throw new HttpError(404, 'Not found')
+      }
+    } else if (resource === 'payment-accounts') {
+      // Same shape again: the public /pay page's account list needs no
+      // session; everything else (managing the accounts) is Super-Admin-only.
+      if (id === 'public' && method === 'GET') {
+        response = await getPublicPaymentAccounts()
+      } else {
+        const user = await requireUser(event)
+        if (!id && method === 'GET') response = await listPaymentAccounts(user)
+        else if (!id && method === 'POST') response = await createPaymentAccount(event, user)
+        else if (id === 'reorder' && method === 'POST') response = await reorderPaymentAccounts(event, user)
+        else if (id && method === 'PUT') response = await updatePaymentAccount(id, event, user)
+        else if (id && method === 'DELETE') response = await deletePaymentAccount(id, user)
         else throw new HttpError(404, 'Not found')
       }
     } else if (resource === 'referral-clicks') {

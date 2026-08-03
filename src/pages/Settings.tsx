@@ -15,6 +15,7 @@ import { QuotaSettings } from '@/components/QuotaSettings'
 import { BrandingSettings } from '@/components/BrandingSettings'
 import { PlatformBrandingSettings } from '@/components/PlatformBrandingSettings'
 import { BillingSettings } from '@/components/BillingSettings'
+import { PaymentAccountsSettings } from '@/components/PaymentAccountsSettings'
 import { OrgBillingNotice } from '@/components/OrgBillingNotice'
 import { SupportContactSettings } from '@/components/SupportContactSettings'
 import { SecuritySettings } from '@/components/SecuritySettings'
@@ -80,6 +81,11 @@ export function Settings() {
         {isSuperAdmin && (
           <Section canWrite>
             <BillingSettings />
+          </Section>
+        )}
+        {isSuperAdmin && (
+          <Section canWrite>
+            <PaymentAccountsSettings />
           </Section>
         )}
         {isSuperAdmin && (

@@ -362,3 +362,68 @@ export async function updateSignupRequestPaymentStatus(id: string, event: Handle
 
   return json(200, data)
 }
+
+/** Public — reachable from the /pay page before any session exists. Returns
+ * only what's needed to show payment instructions (never email/phone/message,
+ * even though this is the requester's own data — no auth exists here to
+ * prove that, so this endpoint is treated as fully public-readable). */
+export async function getPublicSignupRequestForPayment(id: string) {
+  const supabase = getSupabaseAdmin()
+  const { data, error } = await supabase
+    .from('signup_requests')
+    .select('id, organization_name, status, final_price_bdt, billing_cycle, payment_method')
+    .eq('id', id)
+    .maybeSingle()
+  if (error) throw new HttpError(500, error.message)
+  if (!data) throw new HttpError(404, 'Signup request not found')
+  return json(200, data)
+}
+
+/** Maps a Receiving Payment Account's method_type (+ MFS provider) onto the
+ * signup_requests.payment_method enum — 'mfs' isn't itself a valid value
+ * there (it needs the specific provider: bkash/nagad/rocket), and any MFS
+ * provider outside that trio (Upay, a freeform "Other") falls back to 'other'. */
+function paymentMethodFromAccount(account: { method_type: string; details: any }): (typeof PAYMENT_METHODS)[number] {
+  if (account.method_type === 'bank_account') return 'bank_transfer'
+  if (account.method_type === 'crypto') return 'crypto'
+  const provider = (account.details?.provider ?? '').toLowerCase()
+  if (provider === 'bkash') return 'bkash'
+  if (provider === 'nagad') return 'nagad'
+  if (provider === 'rocket') return 'rocket'
+  return 'other'
+}
+
+/** Public — the /pay page's "I've Completed My Payment" action. Body:
+ * { payment_account_id }. Only pre-fills payment_method on a genuinely
+ * pending request — never on one already approved/rejected, so this can
+ * never tamper with a resolved request's record. Never marks the request as
+ * paid/approved itself; that still requires the Super Admin's manual review. */
+export async function submitPaymentMethodSelection(id: string, event: HandlerEvent) {
+  const supabase = getSupabaseAdmin()
+  const body = JSON.parse(event.body || '{}')
+  const paymentAccountId = (body.payment_account_id ?? '').trim()
+  if (!paymentAccountId) throw new HttpError(400, 'payment_account_id is required')
+
+  const request = await getRequestOrThrow(id)
+  if (request.status !== 'pending') throw new HttpError(400, 'This request has already been reviewed and can no longer be updated')
+
+  const { data: account, error: accountErr } = await supabase
+    .from('receiving_payment_accounts')
+    .select('method_type, details, is_active')
+    .eq('id', paymentAccountId)
+    .maybeSingle()
+  if (accountErr) throw new HttpError(500, accountErr.message)
+  if (!account || !account.is_active) throw new HttpError(400, 'That payment method is no longer available — please pick another.')
+
+  const payment_method = paymentMethodFromAccount(account)
+
+  const { data, error } = await supabase
+    .from('signup_requests')
+    .update({ payment_method })
+    .eq('id', id)
+    .select('id, payment_method')
+    .single()
+  if (error) throw new HttpError(500, error.message)
+
+  return json(200, data)
+}

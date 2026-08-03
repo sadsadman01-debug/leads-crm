@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Building2, ArrowLeft, AlertCircle, Loader2, CheckCircle2, Sparkles, PartyPopper, X, Tag } from 'lucide-react'
+import { Building2, ArrowLeft, AlertCircle, Loader2, CheckCircle2, Sparkles, PartyPopper, X, Tag, Wallet } from 'lucide-react'
 import { signupRequestsApi, billingApi, promoCodesApi, referralClicksApi, pageViewsApi } from '@/lib/api'
 import { usePlatformBranding } from '@/hooks/usePlatformBranding'
 import { PreAuthHelpWidget } from '@/components/PreAuthHelpWidget'
@@ -139,7 +139,13 @@ export function RequestAccess() {
                 <p className="mt-2 text-xs text-base-500">Our team will review your request and confirm payment details with you.</p>
               </div>
             )}
-            <Link to="/login" className="btn-secondary mt-6">
+            {mutation.data && (
+              <Link to={`/pay?request=${mutation.data.id}`} className="btn-primary mt-4 w-full">
+                <Wallet size={16} />
+                Continue to Payment Instructions
+              </Link>
+            )}
+            <Link to="/login" className="btn-secondary mt-3 w-full">
               <ArrowLeft size={16} />
               Back to Sign In
             </Link>

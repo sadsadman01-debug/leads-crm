@@ -31,6 +31,7 @@ import type { CustomFieldDefinition, AppliesTo, FieldType } from '@/types/custom
 import type { SavedReport, ReportRunResult, ReportType, ChartType, ReportFilters } from '@/types/report'
 import type { SignupRequest, ApproveSignupRequestResult } from '@/types/signupRequest'
 import type { PromoCode } from '@/types/promoCode'
+import type { ReceivingPaymentAccount, PublicPaymentAccount, PaymentAccountMethodType } from '@/types/paymentAccount'
 import type { PasswordResetRequest, PasswordResetResult } from '@/types/passwordResetRequest'
 import type { MfaResetRequest, MfaResetResult } from '@/types/mfaResetRequest'
 import type { AppNotification, NotificationListResponse } from '@/types/notification'
@@ -684,6 +685,26 @@ export const signupRequestsApi = {
 
   updatePaymentStatus: (id: string, payment_status: PaymentStatus) =>
     request<SignupRequest>(`/signup-requests/${id}/payment-status`, { method: 'PATCH', body: JSON.stringify({ payment_status }) }),
+
+  /** Public — reachable from the /pay page before any session exists. */
+  getPublicForPayment: (id: string) =>
+    requestPublic<{
+      id: string
+      organization_name: string
+      status: 'pending' | 'approved' | 'rejected'
+      final_price_bdt: number | null
+      billing_cycle: BillingCycle
+      payment_method: PaymentMethod | null
+    }>(`/signup-requests/${id}/public`),
+
+  /** Public — the /pay page's "I've Completed My Payment" action. Never marks
+   * the request paid/approved; only pre-fills payment_method for the Super
+   * Admin's Approval step. */
+  submitPaymentMethod: (id: string, payment_account_id: string) =>
+    requestPublic<{ id: string; payment_method: PaymentMethod }>(`/signup-requests/${id}/payment-method`, {
+      method: 'POST',
+      body: JSON.stringify({ payment_account_id }),
+    }),
 }
 
 export const billingApi = {
@@ -747,6 +768,26 @@ export const promoCodesApi = {
       method: 'POST',
       body: JSON.stringify({ code }),
     }),
+}
+
+/** Accounts the Super Admin personally receives customer payments into — the
+ * reverse direction of payoutMethodsApi (which pays Affiliates OUT). */
+export const paymentAccountsApi = {
+  list: () => request<{ accounts: ReceivingPaymentAccount[] }>('/payment-accounts'),
+
+  create: (payload: { method_type: PaymentAccountMethodType; label: string; details: Record<string, any>; is_active?: boolean }) =>
+    request<ReceivingPaymentAccount>('/payment-accounts', { method: 'POST', body: JSON.stringify(payload) }),
+
+  update: (id: string, payload: Partial<{ label: string; details: Record<string, any>; is_active: boolean }>) =>
+    request<ReceivingPaymentAccount>(`/payment-accounts/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+
+  remove: (id: string) => request<{ success: true }>(`/payment-accounts/${id}`, { method: 'DELETE' }),
+
+  reorder: (orderedIds: string[]) =>
+    request<{ success: true }>('/payment-accounts/reorder', { method: 'POST', body: JSON.stringify({ orderedIds }) }),
+
+  /** Public — reachable from the /pay page before any session exists. */
+  getPublicList: () => requestPublic<{ accounts: PublicPaymentAccount[] }>('/payment-accounts/public'),
 }
 
 export const passwordResetRequestsApi = {

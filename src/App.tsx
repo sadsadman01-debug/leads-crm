@@ -13,6 +13,7 @@ import {
 import { AppLayout } from '@/components/Layout/AppLayout'
 import { Login } from '@/pages/Login'
 import { RequestAccess } from '@/pages/RequestAccess'
+import { Pay } from '@/pages/Pay'
 import { BecomeAffiliate } from '@/pages/BecomeAffiliate'
 import { ForgotPassword } from '@/pages/ForgotPassword'
 import { MfaChallenge } from '@/pages/MfaChallenge'
@@ -75,6 +76,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/request-access" element={<RequestAccess />} />
+        <Route path="/pay" element={<Pay />} />
         <Route path="/become-affiliate" element={<BecomeAffiliate />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/mfa-locked-out" element={<MfaLockedOut />} />

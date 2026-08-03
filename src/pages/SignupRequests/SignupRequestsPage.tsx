@@ -159,16 +159,23 @@ export function SignupRequestsPage() {
                   </td>
                   <td className="px-3 py-3">
                     {r.status === 'pending' ? (
-                      <select
-                        className="input w-auto py-1 text-xs"
-                        value={r.payment_status}
-                        disabled={paymentStatusMutation.isPending}
-                        onChange={(e) => paymentStatusMutation.mutate({ id: r.id, payment_status: e.target.value as PaymentStatus })}
-                      >
-                        <option value="pending">Pending</option>
-                        <option value="received">Received</option>
-                        <option value="waived">Waived</option>
-                      </select>
+                      <div>
+                        <select
+                          className="input w-auto py-1 text-xs"
+                          value={r.payment_status}
+                          disabled={paymentStatusMutation.isPending}
+                          onChange={(e) => paymentStatusMutation.mutate({ id: r.id, payment_status: e.target.value as PaymentStatus })}
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="received">Received</option>
+                          <option value="waived">Waived</option>
+                        </select>
+                        {r.payment_method && (
+                          <p className="mt-1 text-xs text-accent-400">
+                            {PAYMENT_METHOD_LABELS[r.payment_method]} (auto-submitted by applicant)
+                          </p>
+                        )}
+                      </div>
                     ) : (
                       <div>
                         <Badge tone={PAYMENT_STATUS_TONE[r.payment_status]}>{r.payment_status}</Badge>
