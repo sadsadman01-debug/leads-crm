@@ -1,4 +1,5 @@
 import type { HandlerEvent } from '@netlify/functions'
+import crypto from 'crypto'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
 import { requireSuperAdmin, requireAal2IfEnrolled } from '../lib/permissions.js'
@@ -124,6 +125,11 @@ export async function createSignupRequest(event: HandlerEvent) {
       original_price_bdt,
       discount_amount_bdt,
       final_price_bdt,
+      // Generated explicitly here (not left to the column default) so the
+      // /pay page's identifying parameter is always a cryptographically
+      // secure, application-generated value — never sequential, never
+      // derivable from the request's own internal id/email/timestamp.
+      payment_token: crypto.randomUUID(),
     })
     .select(COLUMNS)
     .single()
@@ -405,6 +411,14 @@ function paymentMethodFromAccount(account: { method_type: string; details: any }
   return 'other'
 }
 
+// Unauthenticated endpoint throttle — the token itself is already
+// effectively unguessable (crypto.randomUUID(), 122 bits of randomness), but
+// this still caps automated abuse/guessing attempts against the token space,
+// same DB-backed per-IP-and-window pattern used for support_contacts'
+// pre-auth submissions and password-reset-requests.
+const PAYMENT_METHOD_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000
+const PAYMENT_METHOD_RATE_LIMIT_MAX = 10
+
 /** Public — the /pay page's "I've Completed My Payment" action. Looked up by
  * payment_token (never id). Body: { payment_account_id }. Only pre-fills
  * payment_method on a genuinely pending request — never on one already
@@ -413,6 +427,21 @@ function paymentMethodFromAccount(account: { method_type: string; details: any }
  * requires the Super Admin's manual review. */
 export async function submitPaymentMethodSelection(token: string, event: HandlerEvent) {
   const supabase = getSupabaseAdmin()
+  const ip = getClientIp(event)
+
+  if (ip) {
+    const since = new Date(Date.now() - PAYMENT_METHOD_RATE_LIMIT_WINDOW_MS).toISOString()
+    const { count } = await supabase
+      .from('payment_method_submission_attempts')
+      .select('id', { count: 'exact', head: true })
+      .eq('ip', ip)
+      .gte('created_at', since)
+    if ((count ?? 0) >= PAYMENT_METHOD_RATE_LIMIT_MAX) {
+      throw new HttpError(429, 'Too many requests — please try again later.')
+    }
+    await supabase.from('payment_method_submission_attempts').insert({ ip })
+  }
+
   const body = JSON.parse(event.body || '{}')
   const paymentAccountId = (body.payment_account_id ?? '').trim()
   if (!paymentAccountId) throw new HttpError(400, 'payment_account_id is required')

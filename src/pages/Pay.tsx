@@ -101,9 +101,9 @@ function PaymentAccountCard({
 export function Pay() {
   usePlatformBranding()
   const [searchParams] = useSearchParams()
-  // The ?request= value is a dedicated non-guessable payment_token, never the
-  // signup request's real database id — see migration 045.
-  const paymentToken = searchParams.get('request')?.trim() || null
+  // The ?token= value is a dedicated non-guessable payment_token, never the
+  // signup request's real database id — see migrations 045/046.
+  const paymentToken = searchParams.get('token')?.trim() || null
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
 
   const { data: accountsData, isLoading: accountsLoading } = useQuery({
@@ -112,10 +112,15 @@ export function Pay() {
   })
   const accounts = accountsData?.accounts ?? []
 
-  const { data: request, isLoading: requestLoading } = useQuery({
+  const {
+    data: request,
+    isLoading: requestLoading,
+    isError: requestIsError,
+  } = useQuery({
     queryKey: ['public-signup-request', paymentToken],
     queryFn: () => signupRequestsApi.getPublicForPayment(paymentToken!),
     enabled: Boolean(paymentToken),
+    retry: false,
   })
 
   const mutation = useMutation({
@@ -126,6 +131,11 @@ export function Pay() {
     .map((type) => ({ type, accounts: accounts.filter((a) => a.method_type === type) }))
     .filter((g) => g.accounts.length > 0)
 
+  // A token that doesn't resolve to any request, or resolves to one that's
+  // already been approved/rejected, must never reveal an amount or payment
+  // details — only a generic "no longer valid" message. Browsing with no
+  // token at all is a different case (informational only) and is unaffected.
+  const tokenInvalidOrResolved = Boolean(paymentToken) && !requestLoading && (requestIsError || (request && request.status !== 'pending'))
   const canSubmitSelection = Boolean(paymentToken) && request?.status === 'pending'
 
   return (
@@ -154,7 +164,7 @@ export function Pay() {
 
         {paymentToken && requestLoading && <p className="text-center text-sm text-base-400">Loading your request…</p>}
 
-        {paymentToken && !requestLoading && request && (
+        {paymentToken && !requestLoading && request && request.status === 'pending' && (
           <div className="mb-6 rounded-xl border border-accent-500/40 bg-gradient-to-br from-accent-500/15 to-accent-500/5 p-4 text-center">
             <p className="text-xs uppercase tracking-wide text-base-400">Amount to Pay</p>
             <p className="mt-1 text-2xl font-semibold text-base-100">
@@ -163,17 +173,15 @@ export function Pay() {
               {request.billing_cycle === 'monthly' && <span className="ml-1 text-sm font-normal text-base-400">/month</span>}
             </p>
             <p className="mt-1 text-xs text-base-500">For {request.organization_name}</p>
-            {request.status !== 'pending' && (
-              <p className="mt-2 text-xs text-warn">
-                {request.status === 'approved'
-                  ? 'This request has already been approved — no further action needed here.'
-                  : 'This request was not approved. Please contact us if you believe this is a mistake.'}
-              </p>
-            )}
           </div>
         )}
 
-        {accountsLoading ? (
+        {tokenInvalidOrResolved ? (
+          <div className="flex flex-col items-center gap-2 rounded-xl border border-base-700/60 bg-base-850 p-8 text-center">
+            <AlertCircle size={24} className="text-base-500" />
+            <p className="text-sm text-base-300">This payment link is no longer valid or has already been processed.</p>
+          </div>
+        ) : accountsLoading ? (
           <p className="text-center text-sm text-base-400">Loading payment methods…</p>
         ) : grouped.length === 0 ? (
           <div className="flex flex-col items-center gap-2 rounded-xl border border-base-700/60 bg-base-850 p-8 text-center">
