@@ -122,6 +122,8 @@ import {
   createOrganizationWithAdmin,
   updateOrganizationStatus,
   deleteOrganization,
+  setOrganizationCancelled,
+  reactivateOrganizationSubscription,
 } from './routes/organizations.js'
 import {
   listCustomFields,
@@ -166,7 +168,14 @@ import {
   listBilling,
   recordPayment,
   getMyOrgBilling,
+  getOrganizationBillingHistory,
 } from './routes/billing.js'
+import { recordRefund } from './routes/refunds.js'
+import {
+  createCancellationRequest,
+  listCancellationRequests,
+  acknowledgeCancellationRequest,
+} from './routes/cancellationRequests.js'
 import {
   getEarningsSummary,
   getEarningsTrend,
@@ -642,8 +651,18 @@ export const handler: Handler = async (event) => {
         else if (id === 'my-organization' && method === 'GET') response = await getMyOrgBilling(event, user)
         else if (!id && method === 'GET') response = await listBilling(event, user)
         else if (id && sub === 'record-payment' && method === 'POST') response = await recordPayment(id, event, user)
+        else if (id && sub === 'record-refund' && method === 'POST') response = await recordRefund(id, event, user)
+        else if (id && sub === 'history' && method === 'GET') response = await getOrganizationBillingHistory(id, user)
+        else if (id && sub === 'cancel-subscription' && method === 'POST') response = await setOrganizationCancelled(id, event, user)
+        else if (id && sub === 'reactivate-subscription' && method === 'POST') response = await reactivateOrganizationSubscription(id, event, user)
         else throw new HttpError(404, 'Not found')
       }
+    } else if (resource === 'cancellation-requests') {
+      const user = await requireUser(event)
+      if (!id && method === 'GET') response = await listCancellationRequests(user)
+      else if (!id && method === 'POST') response = await createCancellationRequest(event, user)
+      else if (id && sub === 'acknowledge' && method === 'POST') response = await acknowledgeCancellationRequest(id, event, user)
+      else throw new HttpError(404, 'Not found')
     } else if (resource === 'earnings') {
       // The Super Admin's own subscription-sales earnings — entirely
       // Super-Admin-only, never reachable by an Organization's own users.

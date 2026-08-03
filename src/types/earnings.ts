@@ -7,6 +7,7 @@ export interface EarningsSummary {
   gross_all_time: number
   net_all_time: number
   affiliate_commissions_all_time: number
+  total_refunds_all_time: number
   this_month: { gross: number; net: number }
   this_week: { gross: number; net: number }
   today: { gross: number; net: number }
@@ -20,6 +21,7 @@ export interface EarningsTrendPoint {
   date: string
   gross: number
   net: number
+  refunds: number
 }
 
 export interface EarningsTrendResponse {
@@ -50,6 +52,7 @@ export interface PromoCodePerformanceRow {
 }
 
 export interface EarningsTransaction {
+  type: 'payment' | 'refund'
   id: string
   paid_at: string
   organization_id: string
@@ -60,6 +63,7 @@ export interface EarningsTransaction {
   billing_cycle: 'monthly' | 'annual' | null
   promo_code_text: string | null
   discount_amount: number
+  reason: string | null
 }
 
 export interface EarningsTransactionFilters {

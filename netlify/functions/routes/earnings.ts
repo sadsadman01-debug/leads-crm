@@ -94,6 +94,33 @@ async function fetchAllCommissions(dateFrom?: string, dateTo?: string): Promise<
   return rows
 }
 
+interface RefundRow {
+  id: string
+  organization_id: string
+  billing_history_id: string | null
+  amount_bdt: number
+  refund_date: string
+  reason: string | null
+}
+
+/** A second cost deduction alongside affiliate_commissions when computing
+ * Net Revenue — money the Super Admin has actually sent back, manually,
+ * outside the app. */
+async function fetchAllRefunds(dateFrom?: string, dateTo?: string): Promise<RefundRow[]> {
+  const supabase = getSupabaseAdmin()
+  const rows: RefundRow[] = []
+  for (let offset = 0; offset < MAX_ROWS; offset += CHUNK_SIZE) {
+    let query = supabase.from('refunds').select('id, organization_id, billing_history_id, amount_bdt, refund_date, reason')
+    if (dateFrom) query = query.gte('refund_date', dateFrom)
+    if (dateTo) query = query.lte('refund_date', dateTo)
+    const { data, error } = await query.order('refund_date', { ascending: true }).range(offset, offset + CHUNK_SIZE - 1)
+    if (error) throw new HttpError(500, error.message)
+    rows.push(...((data ?? []) as RefundRow[]))
+    if (!data || data.length < CHUNK_SIZE) break
+  }
+  return rows
+}
+
 async function fetchOrgsByIds(ids: string[]): Promise<Map<string, OrgLite>> {
   if (ids.length === 0) return new Map()
   const supabase = getSupabaseAdmin()
@@ -115,11 +142,12 @@ export async function getEarningsSummary(event: HandlerEvent, user: AuthedUser) 
   requireSuperAdmin(user)
   const supabase = getSupabaseAdmin()
 
-  const [billing, commissions] = await Promise.all([fetchAllBillingHistory(), fetchAllCommissions()])
+  const [billing, commissions, refunds] = await Promise.all([fetchAllBillingHistory(), fetchAllCommissions(), fetchAllRefunds()])
 
   const grossAllTime = billing.reduce((sum, r) => sum + Number(r.amount_usd), 0)
   const commissionsAllTime = commissions.reduce((sum, c) => sum + Number(c.commission_amount_usd), 0)
-  const netAllTime = grossAllTime - commissionsAllTime
+  const refundsAllTime = refunds.reduce((sum, r) => sum + Number(r.amount_bdt), 0)
+  const netAllTime = grossAllTime - commissionsAllTime - refundsAllTime
 
   const now = new Date()
   const monthStart = startOfMonthStr(now)
@@ -132,13 +160,16 @@ export async function getEarningsSummary(event: HandlerEvent, user: AuthedUser) 
   function commissionsSince(startIso: string): number {
     return commissions.filter((c) => c.created_at >= startIso).reduce((sum, c) => sum + Number(c.commission_amount_usd), 0)
   }
+  function refundsSince(start: string): number {
+    return refunds.filter((r) => r.refund_date >= start).reduce((sum, r) => sum + Number(r.amount_bdt), 0)
+  }
 
   const monthGross = grossSince(monthStart)
   const weekGross = grossSince(weekStart)
   const todayGross = grossSince(today)
-  const monthNet = monthGross - commissionsSince(`${monthStart}T00:00:00.000Z`)
-  const weekNet = weekGross - commissionsSince(`${weekStart}T00:00:00.000Z`)
-  const todayNet = todayGross - commissionsSince(`${today}T00:00:00.000Z`)
+  const monthNet = monthGross - commissionsSince(`${monthStart}T00:00:00.000Z`) - refundsSince(monthStart)
+  const weekNet = weekGross - commissionsSince(`${weekStart}T00:00:00.000Z`) - refundsSince(weekStart)
+  const todayNet = todayGross - commissionsSince(`${today}T00:00:00.000Z`) - refundsSince(today)
 
   const payingOrgIds = [...new Set(billing.map((r) => r.organization_id))]
 
@@ -160,6 +191,7 @@ export async function getEarningsSummary(event: HandlerEvent, user: AuthedUser) 
     gross_all_time: grossAllTime,
     net_all_time: netAllTime,
     affiliate_commissions_all_time: commissionsAllTime,
+    total_refunds_all_time: refundsAllTime,
     this_month: { gross: monthGross, net: monthNet },
     this_week: { gross: weekGross, net: weekNet },
     today: { gross: todayGross, net: todayNet },
@@ -223,11 +255,16 @@ export async function getEarningsTrend(event: HandlerEvent, user: AuthedUser) {
     return [...new Set(keys)]
   }
 
-  const [billing, commissions] = await Promise.all([fetchAllBillingHistory(dateFrom, dateTo), fetchAllCommissions(dateFrom, `${dateTo}`)])
+  const [billing, commissions, refunds] = await Promise.all([
+    fetchAllBillingHistory(dateFrom, dateTo),
+    fetchAllCommissions(dateFrom, `${dateTo}`),
+    fetchAllRefunds(dateFrom, dateTo),
+  ])
 
   const bucketKeys = buildBucketKeys()
   const grossByBucket = new Map<string, number>(bucketKeys.map((k) => [k, 0]))
   const commissionsByBucket = new Map<string, number>(bucketKeys.map((k) => [k, 0]))
+  const refundsByBucket = new Map<string, number>(bucketKeys.map((k) => [k, 0]))
 
   for (const row of billing) {
     const key = bucketKeyOf(row.paid_at)
@@ -237,11 +274,16 @@ export async function getEarningsTrend(event: HandlerEvent, user: AuthedUser) {
     const key = bucketKeyOf(c.created_at.slice(0, 10))
     if (commissionsByBucket.has(key)) commissionsByBucket.set(key, (commissionsByBucket.get(key) ?? 0) + Number(c.commission_amount_usd))
   }
+  for (const r of refunds) {
+    const key = bucketKeyOf(r.refund_date)
+    if (refundsByBucket.has(key)) refundsByBucket.set(key, (refundsByBucket.get(key) ?? 0) + Number(r.amount_bdt))
+  }
 
   const points = bucketKeys.map((key) => {
     const gross = grossByBucket.get(key) ?? 0
-    const net = gross - (commissionsByBucket.get(key) ?? 0)
-    return { date: key, gross, net }
+    const refundAmount = refundsByBucket.get(key) ?? 0
+    const net = gross - (commissionsByBucket.get(key) ?? 0) - refundAmount
+    return { date: key, gross, net, refunds: refundAmount }
   })
 
   return json(200, { granularity, dateFrom, dateTo, points })
@@ -394,28 +436,54 @@ async function resolveFilteredTransactions(filters: TransactionFilters) {
     billing = billing.filter((r) => idSet.has(r.organization_id))
   }
 
-  const orgById = await fetchOrgsByIds(billing.map((r) => r.organization_id))
+  // Refunds have no payment_method of their own, so a payment-method filter
+  // simply excludes them from the log rather than trying to match one.
+  let refunds = filters.paymentMethod ? [] : await fetchAllRefunds(filters.dateFrom, filters.dateTo)
+  if (orgIdFilter) {
+    const idSet = new Set(orgIdFilter)
+    refunds = refunds.filter((r) => idSet.has(r.organization_id))
+  }
 
-  const rows = billing
-    .map((row) => {
-      const org = orgById.get(row.organization_id)
-      const isFirstPayment = Boolean(org?.first_payment_confirmed_at) && org!.first_payment_confirmed_at!.slice(0, 10) === row.paid_at
-      return {
-        id: row.id,
-        paid_at: row.paid_at,
-        organization_id: row.organization_id,
-        organization_name: org?.name ?? 'Unknown Organization',
-        amount: Number(row.amount_usd),
-        payment_method: row.payment_method,
-        pricing_tier: org?.pricing_tier ?? null,
-        billing_cycle: org?.billing_cycle ?? null,
-        promo_code_text: isFirstPayment ? org?.promo_code_text ?? null : null,
-        discount_amount: isFirstPayment ? Number(org?.discount_amount_bdt ?? 0) : 0,
-      }
-    })
-    .sort((a, b) => (a.paid_at < b.paid_at ? 1 : a.paid_at > b.paid_at ? -1 : 0))
+  const orgById = await fetchOrgsByIds([...billing.map((r) => r.organization_id), ...refunds.map((r) => r.organization_id)])
 
-  return rows
+  const paymentRows = billing.map((row) => {
+    const org = orgById.get(row.organization_id)
+    const isFirstPayment = Boolean(org?.first_payment_confirmed_at) && org!.first_payment_confirmed_at!.slice(0, 10) === row.paid_at
+    return {
+      type: 'payment' as const,
+      id: row.id,
+      paid_at: row.paid_at,
+      organization_id: row.organization_id,
+      organization_name: org?.name ?? 'Unknown Organization',
+      amount: Number(row.amount_usd),
+      payment_method: row.payment_method,
+      pricing_tier: org?.pricing_tier ?? null,
+      billing_cycle: org?.billing_cycle ?? null,
+      promo_code_text: isFirstPayment ? org?.promo_code_text ?? null : null,
+      discount_amount: isFirstPayment ? Number(org?.discount_amount_bdt ?? 0) : 0,
+      reason: null as string | null,
+    }
+  })
+
+  const refundRows = refunds.map((row) => {
+    const org = orgById.get(row.organization_id)
+    return {
+      type: 'refund' as const,
+      id: row.id,
+      paid_at: row.refund_date,
+      organization_id: row.organization_id,
+      organization_name: org?.name ?? 'Unknown Organization',
+      amount: -Number(row.amount_bdt),
+      payment_method: null,
+      pricing_tier: org?.pricing_tier ?? null,
+      billing_cycle: org?.billing_cycle ?? null,
+      promo_code_text: null,
+      discount_amount: 0,
+      reason: row.reason,
+    }
+  })
+
+  return [...paymentRows, ...refundRows].sort((a, b) => (a.paid_at < b.paid_at ? 1 : a.paid_at > b.paid_at ? -1 : 0))
 }
 
 /** GET /earnings/transactions?dateFrom=&dateTo=&paymentMethod=&pricingTier=&search=&page=&pageSize= */
@@ -445,6 +513,7 @@ export async function exportEarningsTransactionsCsv(event: HandlerEvent, user: A
   const rows = await resolveFilteredTransactions(filters)
 
   const csvRows = rows.map((r) => ({
+    type: r.type,
     date: r.paid_at,
     organization: r.organization_name,
     amount_bdt: r.amount,
@@ -453,6 +522,7 @@ export async function exportEarningsTransactionsCsv(event: HandlerEvent, user: A
     discount_amount_bdt: r.discount_amount,
     pricing_tier: r.pricing_tier ?? '',
     billing_cycle: r.billing_cycle ?? '',
+    reason: r.reason ?? '',
   }))
 
   const dateStr = todayStr()

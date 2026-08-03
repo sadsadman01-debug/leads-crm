@@ -13,6 +13,7 @@ export type NotificationType =
   | 'affiliate_application'
   | 'withdrawal_request'
   | 'product_review_reply'
+  | 'cancellation_request'
 
 interface NotificationInput {
   recipient_profile_id: string

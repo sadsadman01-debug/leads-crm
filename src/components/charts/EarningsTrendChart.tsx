@@ -73,6 +73,15 @@ export function EarningsTrendChart({ points, granularity }: { points: EarningsTr
           dot={false}
           activeDot={{ r: 4, strokeWidth: 2, stroke: '#111114' }}
         />
+        <Line
+          type="monotone"
+          dataKey="refunds"
+          name="Refunds"
+          stroke={REVENUE_TREND_COLORS.refunds}
+          strokeWidth={2}
+          dot={false}
+          activeDot={{ r: 4, strokeWidth: 2, stroke: '#111114' }}
+        />
       </LineChart>
     </ResponsiveContainer>
   )

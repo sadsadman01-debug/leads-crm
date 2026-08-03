@@ -31,6 +31,7 @@ import { MfaResetRequestsPage } from '@/pages/MfaResetRequests/MfaResetRequestsP
 import { SupportContactsPage } from '@/pages/SupportContacts/SupportContactsPage'
 import { AuditLogPage } from '@/pages/AuditLog/AuditLogPage'
 import { BillingPage } from '@/pages/Billing/BillingPage'
+import { CancellationRequestsPage } from '@/pages/CancellationRequests/CancellationRequestsPage'
 import { PromoCodesPage } from '@/pages/PromoCodes/PromoCodesPage'
 import { EarningsPage } from '@/pages/Earnings/EarningsPage'
 import { AffiliateApplicationsPage } from '@/pages/AffiliateApplications/AffiliateApplicationsPage'
@@ -108,6 +109,7 @@ export default function App() {
                     <Route path="/support-contacts" element={<SupportContactsPage />} />
                     <Route path="/audit-log" element={<AuditLogPage />} />
                     <Route path="/billing" element={<BillingPage />} />
+                    <Route path="/cancellation-requests" element={<CancellationRequestsPage />} />
                     <Route path="/promo-codes" element={<PromoCodesPage />} />
                     <Route path="/earnings" element={<EarningsPage />} />
                     <Route path="/affiliate-applications" element={<AffiliateApplicationsPage />} />

@@ -15,7 +15,7 @@ export async function listOrganizations(user: AuthedUser) {
   const { data: orgs, error } = await supabase
     .from('organizations')
     .select(
-      'id, name, city, country, zip_code, status, created_at, pricing_tier, monthly_price_usd, payment_status, subscription_end_date, referred_by_affiliate_id, promo_code_id, promo_code_text, original_price_bdt, discount_amount_bdt, final_price_bdt, payment_method'
+      'id, name, city, country, zip_code, status, created_at, pricing_tier, monthly_price_usd, payment_status, subscription_end_date, referred_by_affiliate_id, promo_code_id, promo_code_text, original_price_bdt, discount_amount_bdt, final_price_bdt, payment_method, subscription_cancelled_at'
     )
     .order('created_at', { ascending: true })
   if (error) throw new HttpError(500, error.message)
@@ -70,6 +70,7 @@ export async function listOrganizations(user: AuthedUser) {
       monthly_price_usd: org.monthly_price_usd,
       payment_status: org.payment_status,
       subscription_end_date: org.subscription_end_date,
+      subscription_cancelled_at: org.subscription_cancelled_at,
       referred_by_affiliate_id: org.referred_by_affiliate_id,
       referred_by_affiliate_name: org.referred_by_affiliate_id ? affiliateNameById.get(org.referred_by_affiliate_id) ?? null : null,
       admin: adminByOrg.get(org.id) ?? null,
@@ -87,7 +88,7 @@ export async function getOrganization(id: string, user: AuthedUser) {
   const { data, error } = await supabase
     .from('organizations')
     .select(
-      'id, name, city, country, zip_code, status, created_at, pricing_tier, monthly_price_usd, payment_status, subscription_end_date, referred_by_affiliate_id, promo_code_id, promo_code_text, original_price_bdt, discount_amount_bdt, final_price_bdt, payment_method'
+      'id, name, city, country, zip_code, status, created_at, pricing_tier, monthly_price_usd, payment_status, subscription_end_date, referred_by_affiliate_id, promo_code_id, promo_code_text, original_price_bdt, discount_amount_bdt, final_price_bdt, payment_method, subscription_cancelled_at'
     )
     .eq('id', id)
     .maybeSingle()
@@ -233,4 +234,63 @@ export async function deleteOrganization(id: string, event: HandlerEvent, user: 
   if (error) throw new HttpError(500, error.message)
 
   return json(200, { success: true })
+}
+
+/** Marks an Organization as having cancelled — set manually by the Super
+ * Admin once they've processed a cancellation (whether or not a
+ * cancellation_requests row exists for it). Deliberately never touches
+ * subscription_end_date: access continues exactly as already enforced until
+ * whatever period they already paid for naturally expires; this only means
+ * "do not extend this Organization's subscription further going forward." */
+export async function setOrganizationCancelled(id: string, event: HandlerEvent, user: AuthedUser) {
+  requireSuperAdmin(user)
+  const supabase = getSupabaseAdmin()
+
+  const { data: org, error: fetchErr } = await supabase.from('organizations').select('id, name, subscription_cancelled_at').eq('id', id).maybeSingle()
+  if (fetchErr) throw new HttpError(500, fetchErr.message)
+  if (!org) throw new HttpError(404, 'Organization not found')
+  if (org.subscription_cancelled_at) throw new HttpError(400, 'This organization is already marked cancelled')
+
+  const { data, error } = await supabase
+    .from('organizations')
+    .update({ subscription_cancelled_at: new Date().toISOString() })
+    .eq('id', id)
+    .select('id, name, subscription_cancelled_at')
+    .single()
+  if (error) throw new HttpError(500, error.message)
+
+  await logAuditEvent('organization_subscription_cancelled', user, event, {
+    organizationId: id,
+    metadata: { organizationName: org.name },
+  })
+
+  return json(200, data)
+}
+
+/** Reverses setOrganizationCancelled (e.g. the customer changed their mind
+ * and paid again) — simply clears the flag; the next Record Payment Received
+ * extends subscription_end_date going forward exactly as it always has. */
+export async function reactivateOrganizationSubscription(id: string, event: HandlerEvent, user: AuthedUser) {
+  requireSuperAdmin(user)
+  const supabase = getSupabaseAdmin()
+
+  const { data: org, error: fetchErr } = await supabase.from('organizations').select('id, name, subscription_cancelled_at').eq('id', id).maybeSingle()
+  if (fetchErr) throw new HttpError(500, fetchErr.message)
+  if (!org) throw new HttpError(404, 'Organization not found')
+  if (!org.subscription_cancelled_at) throw new HttpError(400, 'This organization is not marked cancelled')
+
+  const { data, error } = await supabase
+    .from('organizations')
+    .update({ subscription_cancelled_at: null })
+    .eq('id', id)
+    .select('id, name, subscription_cancelled_at')
+    .single()
+  if (error) throw new HttpError(500, error.message)
+
+  await logAuditEvent('organization_subscription_reactivated', user, event, {
+    organizationId: id,
+    metadata: { organizationName: org.name },
+  })
+
+  return json(200, data)
 }

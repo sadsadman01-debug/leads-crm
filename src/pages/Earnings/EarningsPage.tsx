@@ -11,8 +11,10 @@ import {
   Download,
   ChevronLeft,
   ChevronRight,
+  Undo2,
 } from 'lucide-react'
 import { earningsApi } from '@/lib/api'
+import { Badge } from '@/components/ui/Badge'
 import { StatTile } from '@/components/charts/StatTile'
 import { EarningsTrendChart } from '@/components/charts/EarningsTrendChart'
 import { DonutChart } from '@/components/charts/DonutChart'
@@ -162,6 +164,7 @@ export function EarningsPage() {
           <StatTile label="Active Paying Organizations" value={summary.active_paying_organizations} icon={Building2} tone="accent" />
           <StatTile label="Avg Revenue / Organization" value={fmtTaka(summary.avg_revenue_per_organization)} icon={Wallet} tone="neutral" />
           <StatTile label="Total Discounts Given" value={fmtTaka(summary.total_discounts_given)} subvalue="via promo codes" icon={Percent} tone="warn" />
+          <StatTile label="Total Refunds" value={fmtTaka(summary.total_refunds_all_time)} subvalue="all-time" icon={Undo2} tone="danger" />
         </div>
       )}
 
@@ -351,6 +354,7 @@ export function EarningsPage() {
               <thead>
                 <tr className="border-b border-base-700/60 text-xs uppercase tracking-wide text-base-400">
                   <th className="py-2 pr-3 font-medium">Date</th>
+                  <th className="px-3 py-2 font-medium">Type</th>
                   <th className="px-3 py-2 font-medium">Organization</th>
                   <th className="px-3 py-2 font-medium">Amount</th>
                   <th className="px-3 py-2 font-medium">Payment Method</th>
@@ -362,11 +366,20 @@ export function EarningsPage() {
               </thead>
               <tbody>
                 {transactions.map((tx) => (
-                  <tr key={tx.id} className="border-b border-base-800">
+                  <tr key={`${tx.type}-${tx.id}`} className="border-b border-base-800">
                     <td className="py-3 pr-3 text-base-400">{new Date(tx.paid_at).toLocaleDateString()}</td>
+                    <td className="px-3 py-3">
+                      {tx.type === 'refund' ? (
+                        <Badge tone="danger">Refund</Badge>
+                      ) : (
+                        <Badge tone="success">Payment</Badge>
+                      )}
+                    </td>
                     <td className="px-3 py-3 font-medium text-base-100">{tx.organization_name}</td>
-                    <td className="px-3 py-3 tabular-nums text-base-200">{fmtTaka(tx.amount)}</td>
-                    <td className="px-3 py-3 text-base-300">{tx.payment_method ? PAYMENT_METHOD_LABELS[tx.payment_method] : '—'}</td>
+                    <td className={`px-3 py-3 tabular-nums ${tx.type === 'refund' ? 'text-danger' : 'text-base-200'}`}>
+                      {tx.type === 'refund' ? `−${fmtTaka(Math.abs(tx.amount))}` : fmtTaka(tx.amount)}
+                    </td>
+                    <td className="px-3 py-3 text-base-300">{tx.payment_method ? PAYMENT_METHOD_LABELS[tx.payment_method] : tx.type === 'refund' ? (tx.reason ?? '—') : '—'}</td>
                     <td className="px-3 py-3 font-mono text-base-300">{tx.promo_code_text ?? '—'}</td>
                     <td className="px-3 py-3 tabular-nums text-base-400">{tx.discount_amount > 0 ? `−${fmtTaka(tx.discount_amount)}` : '—'}</td>
                     <td className="px-3 py-3 text-base-300 capitalize">{tx.pricing_tier?.replace('_', ' ') ?? '—'}</td>

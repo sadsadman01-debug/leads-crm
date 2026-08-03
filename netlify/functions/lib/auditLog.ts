@@ -46,6 +46,11 @@ export type AuditEventType =
   | 'promo_code_created'
   | 'promo_code_updated'
   | 'promo_code_deleted'
+  | 'cancellation_request_submitted'
+  | 'cancellation_request_acknowledged'
+  | 'organization_subscription_cancelled'
+  | 'organization_subscription_reactivated'
+  | 'refund_recorded'
 
 interface InsertAuditLogParams {
   eventType: AuditEventType

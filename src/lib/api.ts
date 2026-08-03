@@ -50,6 +50,8 @@ import type {
   MergeSnapshotSummary,
 } from '@/types/duplicateMerge'
 import type { PublicPricing, BillingSettings, OrganizationBillingRow, MyOrgBilling, PaymentStatus, BillingCycle, PaymentMethod } from '@/types/billing'
+import type { Refund, OrganizationBillingHistory } from '@/types/refund'
+import type { CancellationRequest } from '@/types/cancellationRequest'
 import type {
   EarningsSummary,
   EarningsTrendResponse,
@@ -737,6 +739,31 @@ export const billingApi = {
   ) => request<OrganizationBillingRow>(`/billing/${organizationId}/record-payment`, { method: 'POST', body: JSON.stringify(payload) }),
 
   getMyOrganization: () => request<MyOrgBilling>('/billing/my-organization'),
+
+  recordRefund: (
+    organizationId: string,
+    payload: { amount_bdt: number; refund_date: string; reason?: string; billing_history_id?: string; new_subscription_end_date?: string }
+  ) => request<Refund & { subscription_end_date: string | null }>(`/billing/${organizationId}/record-refund`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }),
+
+  getHistory: (organizationId: string) => request<OrganizationBillingHistory>(`/billing/${organizationId}/history`),
+
+  cancelSubscription: (organizationId: string) =>
+    request<{ id: string; name: string; subscription_cancelled_at: string }>(`/billing/${organizationId}/cancel-subscription`, { method: 'POST' }),
+
+  reactivateSubscription: (organizationId: string) =>
+    request<{ id: string; name: string; subscription_cancelled_at: null }>(`/billing/${organizationId}/reactivate-subscription`, { method: 'POST' }),
+}
+
+export const cancellationRequestsApi = {
+  list: () => request<{ requests: CancellationRequest[] }>('/cancellation-requests'),
+
+  create: (payload: { reason: string; additional_comments?: string }) =>
+    request<CancellationRequest>('/cancellation-requests', { method: 'POST', body: JSON.stringify(payload) }),
+
+  acknowledge: (id: string) => request<CancellationRequest>(`/cancellation-requests/${id}/acknowledge`, { method: 'POST' }),
 }
 
 export const promoCodesApi = {

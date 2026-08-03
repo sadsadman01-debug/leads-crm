@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CircleDollarSign, Receipt } from 'lucide-react'
+import { CircleDollarSign, Receipt, Undo2, History, XCircle, RotateCcw } from 'lucide-react'
 import { billingApi } from '@/lib/api'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
@@ -14,11 +14,12 @@ import {
   type PaymentMethod,
 } from '@/types/billing'
 
-const STATUS_TONE: Record<BillingStatus, 'success' | 'warn' | 'danger' | 'neutral'> = {
+const STATUS_TONE: Record<BillingStatus, 'success' | 'warn' | 'danger' | 'neutral' | 'accent'> = {
   paid: 'success',
   due_soon: 'warn',
   overdue: 'danger',
   pending: 'neutral',
+  cancelled: 'accent',
 }
 
 const STATUS_LABELS: Record<BillingStatus, string> = {
@@ -26,12 +27,29 @@ const STATUS_LABELS: Record<BillingStatus, string> = {
   due_soon: 'Due Soon',
   overdue: 'Overdue',
   pending: 'No payment yet',
+  cancelled: 'Cancelled',
 }
 
 export function BillingPage() {
+  const queryClient = useQueryClient()
   const { data, isLoading } = useQuery({ queryKey: ['billing'], queryFn: billingApi.list })
   const organizations = data?.organizations ?? []
   const [recording, setRecording] = useState<OrganizationBillingRow | null>(null)
+  const [refunding, setRefunding] = useState<OrganizationBillingRow | null>(null)
+  const [viewingHistory, setViewingHistory] = useState<OrganizationBillingRow | null>(null)
+
+  function invalidate() {
+    queryClient.invalidateQueries({ queryKey: ['billing'] })
+  }
+
+  const cancelMutation = useMutation({
+    mutationFn: (id: string) => billingApi.cancelSubscription(id),
+    onSuccess: invalidate,
+  })
+  const reactivateMutation = useMutation({
+    mutationFn: (id: string) => billingApi.reactivateSubscription(id),
+    onSuccess: invalidate,
+  })
 
   return (
     <div className="space-y-6">
@@ -51,7 +69,7 @@ export function BillingPage() {
         </div>
       ) : (
         <div className="card overflow-x-auto p-6">
-          <table className="w-full min-w-[860px] text-left text-sm">
+          <table className="w-full min-w-[960px] text-left text-sm">
             <thead>
               <tr className="border-b border-base-700/60 text-xs uppercase tracking-wide text-base-400">
                 <th className="py-2 pr-3 font-medium">Organization</th>
@@ -65,7 +83,7 @@ export function BillingPage() {
             </thead>
             <tbody>
               {organizations.map((org) => (
-                <tr key={org.id} className="border-b border-base-800">
+                <tr key={org.id} className="border-b border-base-800 align-top">
                   <td className="py-3 pr-3 font-medium text-base-100">{org.name}</td>
                   <td className="px-3 py-3 text-base-300">{org.pricing_tier ? PRICING_TIER_LABELS[org.pricing_tier] : '—'}</td>
                   <td className="px-3 py-3 tabular-nums text-base-300">
@@ -79,12 +97,46 @@ export function BillingPage() {
                   </td>
                   <td className="px-3 py-3">
                     <Badge tone={STATUS_TONE[org.billing_status]}>{STATUS_LABELS[org.billing_status]}</Badge>
+                    {org.subscription_cancelled_at && (
+                      <p className="mt-1 text-xs text-base-500">
+                        Access continues until expiry — not renewing.
+                      </p>
+                    )}
                   </td>
                   <td className="px-3 py-3">
-                    <button className="btn-ghost px-2 text-accent-400" onClick={() => setRecording(org)}>
-                      <Receipt size={14} />
-                      Record Payment Received
-                    </button>
+                    <div className="flex flex-col items-start gap-1.5">
+                      <button className="btn-ghost px-2 text-xs text-accent-400" onClick={() => setRecording(org)}>
+                        <Receipt size={13} />
+                        Record Payment Received
+                      </button>
+                      <button className="btn-ghost px-2 text-xs text-warn" onClick={() => setRefunding(org)}>
+                        <Undo2 size={13} />
+                        Record Refund
+                      </button>
+                      <button className="btn-ghost px-2 text-xs text-base-300" onClick={() => setViewingHistory(org)}>
+                        <History size={13} />
+                        View History
+                      </button>
+                      {org.subscription_cancelled_at ? (
+                        <button
+                          className="btn-ghost px-2 text-xs text-success"
+                          disabled={reactivateMutation.isPending}
+                          onClick={() => reactivateMutation.mutate(org.id)}
+                        >
+                          <RotateCcw size={13} />
+                          Reactivate
+                        </button>
+                      ) : (
+                        <button
+                          className="btn-ghost px-2 text-xs text-danger"
+                          disabled={cancelMutation.isPending}
+                          onClick={() => cancelMutation.mutate(org.id)}
+                        >
+                          <XCircle size={13} />
+                          Mark Cancelled
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -94,6 +146,8 @@ export function BillingPage() {
       )}
 
       <RecordPaymentModal org={recording} onClose={() => setRecording(null)} />
+      <RecordRefundModal org={refunding} onClose={() => setRefunding(null)} />
+      <BillingHistoryModal org={viewingHistory} onClose={() => setViewingHistory(null)} />
     </div>
   )
 }
@@ -218,6 +272,165 @@ function RecordPaymentModal({ org, onClose }: { org: OrganizationBillingRow | nu
           </button>
         </div>
       </form>
+    </Modal>
+  )
+}
+
+function RecordRefundModal({ org, onClose }: { org: OrganizationBillingRow | null; onClose: () => void }) {
+  const queryClient = useQueryClient()
+  const [amount, setAmount] = useState('')
+  const [refundDate, setRefundDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [reason, setReason] = useState('')
+  const [billingHistoryId, setBillingHistoryId] = useState('')
+  const [adjustExpiry, setAdjustExpiry] = useState(false)
+  const [newExpiryDate, setNewExpiryDate] = useState('')
+
+  const { data: history } = useQuery({
+    queryKey: ['billing-history', org?.id],
+    queryFn: () => billingApi.getHistory(org!.id),
+    enabled: Boolean(org),
+  })
+
+  function reset() {
+    setAmount('')
+    setRefundDate(new Date().toISOString().slice(0, 10))
+    setReason('')
+    setBillingHistoryId('')
+    setAdjustExpiry(false)
+    setNewExpiryDate('')
+  }
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      billingApi.recordRefund(org!.id, {
+        amount_bdt: Number(amount),
+        refund_date: refundDate,
+        reason: reason.trim() || undefined,
+        billing_history_id: billingHistoryId || undefined,
+        new_subscription_end_date: adjustExpiry && newExpiryDate ? newExpiryDate : undefined,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['billing'] })
+      queryClient.invalidateQueries({ queryKey: ['billing-history', org?.id] })
+      onClose()
+      reset()
+    },
+  })
+
+  if (!org) return null
+
+  return (
+    <Modal open onClose={onClose} title={`Record Refund — ${org.name}`}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          mutation.mutate()
+        }}
+        className="space-y-4"
+      >
+        <div>
+          <label className="label">Amount Refunded (৳)</label>
+          <input type="number" min={0} step={0.01} required className="input" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        </div>
+        <div>
+          <label className="label">Refund Date</label>
+          <input type="date" required className="input" value={refundDate} onChange={(e) => setRefundDate(e.target.value)} />
+        </div>
+        <div>
+          <label className="label">Related Payment</label>
+          <select className="input" value={billingHistoryId} onChange={(e) => setBillingHistoryId(e.target.value)}>
+            <option value="">Other / Not tied to a specific payment</option>
+            {(history?.payments ?? []).map((p) => (
+              <option key={p.id} value={p.id}>
+                ৳{p.amount_usd} on {new Date(p.paid_at).toLocaleDateString()}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="label">Reason (optional)</label>
+          <input className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Customer dissatisfaction" />
+        </div>
+        <div className="rounded-lg border border-base-700/60 bg-base-850 p-3">
+          <label className="flex items-center gap-2 text-sm text-base-200">
+            <input type="checkbox" className="h-4 w-4 rounded border-base-600 bg-base-800" checked={adjustExpiry} onChange={(e) => setAdjustExpiry(e.target.checked)} />
+            Should this refund also reduce their subscription expiry?
+          </label>
+          {adjustExpiry && (
+            <div className="mt-3">
+              <label className="label">New Subscription End Date</label>
+              <input type="date" className="input" value={newExpiryDate} onChange={(e) => setNewExpiryDate(e.target.value)} />
+              <p className="mt-1 text-xs text-base-500">
+                Current expiry: {org.subscription_end_date ? new Date(org.subscription_end_date).toLocaleDateString() : '—'}. Leave blank to make no change.
+              </p>
+            </div>
+          )}
+        </div>
+        {mutation.isError && <p className="text-sm text-danger">{(mutation.error as Error).message}</p>}
+        <div className="flex justify-end gap-3 border-t border-base-700/60 pt-4">
+          <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
+          <button type="submit" className="btn-primary" disabled={mutation.isPending}>
+            {mutation.isPending ? 'Saving…' : 'Save Refund'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+function BillingHistoryModal({ org, onClose }: { org: OrganizationBillingRow | null; onClose: () => void }) {
+  const { data } = useQuery({
+    queryKey: ['billing-history', org?.id],
+    queryFn: () => billingApi.getHistory(org!.id),
+    enabled: Boolean(org),
+  })
+
+  if (!org) return null
+
+  return (
+    <Modal open onClose={onClose} title={`Billing & Cancellation History — ${org.name}`} size="lg">
+      {!data ? (
+        <p className="text-sm text-base-400">Loading…</p>
+      ) : data.timeline.length === 0 ? (
+        <p className="text-sm text-base-400">No payments, refunds, or cancellation requests yet.</p>
+      ) : (
+        <div className="max-h-[60vh] space-y-3 overflow-y-auto">
+          {data.timeline.map((entry) => (
+            <div key={`${entry.type}-${entry.id}`} className="rounded-lg border border-base-700/60 bg-base-850 p-3 text-sm">
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-medium text-base-100">
+                  {entry.type === 'payment' && 'Payment Received'}
+                  {entry.type === 'refund' && 'Refund'}
+                  {entry.type === 'cancellation_request' && 'Cancellation Request'}
+                </span>
+                <span className="text-xs text-base-500">{new Date(entry.date).toLocaleDateString()}</span>
+              </div>
+              {entry.type === 'payment' && (
+                <p className="mt-1 text-xs text-base-400">
+                  ৳{entry.amount_bdt} {entry.payment_method && `via ${PAYMENT_METHOD_LABELS[entry.payment_method as PaymentMethod] ?? entry.payment_method}`}
+                  {entry.notes && ` — ${entry.notes}`}
+                </p>
+              )}
+              {entry.type === 'refund' && (
+                <p className="mt-1 text-xs text-warn">
+                  −৳{Math.abs(entry.amount_bdt)}{entry.reason && ` — ${entry.reason}`}
+                </p>
+              )}
+              {entry.type === 'cancellation_request' && (
+                <p className="mt-1 text-xs text-base-400">
+                  {entry.reason}
+                  {entry.additional_comments && ` — ${entry.additional_comments}`}
+                  {' — '}
+                  <span className={entry.status === 'acknowledged' ? 'text-success' : 'text-warn'}>{entry.status}</span>
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="mt-4 flex justify-end border-t border-base-700/60 pt-4">
+        <button className="btn-secondary" onClick={onClose}>Close</button>
+      </div>
     </Modal>
   )
 }

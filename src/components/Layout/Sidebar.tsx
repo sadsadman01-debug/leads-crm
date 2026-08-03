@@ -26,6 +26,7 @@ import {
   MessageSquareText,
   Tag,
   TrendingUp,
+  CalendarOff,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useAuth } from '@/contexts/AuthContext'
@@ -41,6 +42,7 @@ import {
   affiliateApplicationsApi,
   withdrawalsApi,
   productReviewsApi,
+  cancellationRequestsApi,
 } from '@/lib/api'
 
 const NAV_ITEMS = [
@@ -97,6 +99,14 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
     refetchInterval: 60_000,
   })
   const overdueBillingCount = (billingData?.organizations ?? []).filter((o) => o.billing_status === 'overdue').length
+
+  const { data: cancellationRequestsData } = useQuery({
+    queryKey: ['cancellation-requests'],
+    queryFn: cancellationRequestsApi.list,
+    enabled: isSuperAdmin,
+    refetchInterval: 60_000,
+  })
+  const pendingCancellationCount = (cancellationRequestsData?.requests ?? []).filter((r) => r.status === 'pending').length
 
   const { data: affiliateApplicationsData } = useQuery({
     queryKey: ['affiliate-applications'],
@@ -288,6 +298,11 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           {isSuperAdmin && (
             <NavItem to="/billing" icon={CircleDollarSign} badge={overdueBillingCount}>
               Billing
+            </NavItem>
+          )}
+          {isSuperAdmin && (
+            <NavItem to="/cancellation-requests" icon={CalendarOff} badge={pendingCancellationCount}>
+              Cancellation Requests
             </NavItem>
           )}
           {isSuperAdmin && (

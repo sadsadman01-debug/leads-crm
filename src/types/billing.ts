@@ -1,6 +1,6 @@
 export type PricingTier = 'early_bird' | 'standard'
 export type PaymentStatus = 'pending' | 'received' | 'waived'
-export type BillingStatus = 'pending' | 'overdue' | 'due_soon' | 'paid'
+export type BillingStatus = 'pending' | 'overdue' | 'due_soon' | 'paid' | 'cancelled'
 export type BillingCycle = 'monthly' | 'annual'
 export type PaymentMethod = 'bkash' | 'nagad' | 'rocket' | 'bank_transfer' | 'payoneer' | 'crypto' | 'other'
 
@@ -52,6 +52,7 @@ export interface OrganizationBillingRow {
   subscription_end_date: string | null
   billing_status: BillingStatus
   payment_method: PaymentMethod | null
+  subscription_cancelled_at: string | null
 }
 
 export interface MyOrgBilling {

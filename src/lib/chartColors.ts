@@ -53,6 +53,7 @@ export const TREND_COLORS = {
 export const REVENUE_TREND_COLORS = {
   gross: CATEGORICAL_PALETTE[0],
   net: CATEGORICAL_PALETTE[1],
+  refunds: CATEGORICAL_PALETTE[2],
 }
 
 // 7 fixed payment channels (a closed enum, not an open-ended "top N" series,

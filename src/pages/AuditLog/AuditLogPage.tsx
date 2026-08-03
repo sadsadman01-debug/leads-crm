@@ -32,6 +32,8 @@ import {
   Wallet,
   MessageSquareText,
   Tag,
+  CalendarOff,
+  Undo2,
   type LucideIcon,
 } from 'lucide-react'
 import { auditLogApi, organizationsApi } from '@/lib/api'
@@ -90,6 +92,11 @@ const EVENT_ICONS: Record<AuditEventType, LucideIcon> = {
   promo_code_created: Tag,
   promo_code_updated: Tag,
   promo_code_deleted: Tag,
+  cancellation_request_submitted: CalendarOff,
+  cancellation_request_acknowledged: CalendarOff,
+  organization_subscription_cancelled: CalendarOff,
+  organization_subscription_reactivated: Building2,
+  refund_recorded: Undo2,
 }
 
 const ALL_EVENT_TYPES = Object.keys(AUDIT_EVENT_LABELS) as AuditEventType[]

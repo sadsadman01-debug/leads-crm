@@ -98,6 +98,11 @@ export async function updateBillingSettings(event: HandlerEvent, user: AuthedUse
   return json(200, data)
 }
 
+/** 'cancelled' is decided by the caller (whenever subscription_cancelled_at is
+ * set) and always wins over the date-based computation below — a cancelled
+ * Organization is never shown as Overdue/Due Soon (they're not expected to
+ * renew), even though its subscription_end_date keeps enforcing access
+ * exactly as before until it naturally passes. */
 function computeBillingStatus(subscriptionEndDate: string | null): 'pending' | 'overdue' | 'due_soon' | 'paid' {
   if (!subscriptionEndDate) return 'pending'
   const today = new Date()
@@ -109,24 +114,25 @@ function computeBillingStatus(subscriptionEndDate: string | null): 'pending' | '
   return 'paid'
 }
 
-const STATUS_RANK: Record<string, number> = { overdue: 0, due_soon: 1, pending: 2, paid: 3 }
+const STATUS_RANK: Record<string, number> = { overdue: 0, due_soon: 1, pending: 2, paid: 3, cancelled: 4 }
 
 /** Every Organization with its billing status — Overdue and Due Soon
- * surfaced first, each group then soonest-due first. */
+ * surfaced first, each group then soonest-due first. Cancelled Organizations
+ * sort last, since there's nothing actionable left to chase. */
 export async function listBilling(event: HandlerEvent, user: AuthedUser) {
   requireSuperAdmin(user)
   const supabase = getSupabaseAdmin()
   const { data, error } = await supabase
     .from('organizations')
     .select(
-      'id, name, status, pricing_tier, monthly_price_usd, billing_cycle, annual_total_usd, payment_status, subscription_end_date, payment_method'
+      'id, name, status, pricing_tier, monthly_price_usd, billing_cycle, annual_total_usd, payment_status, subscription_end_date, payment_method, subscription_cancelled_at'
     )
     .order('created_at', { ascending: true })
   if (error) throw new HttpError(500, error.message)
 
   const rows = (data ?? []).map((org) => ({
     ...org,
-    billing_status: computeBillingStatus(org.subscription_end_date),
+    billing_status: org.subscription_cancelled_at ? ('cancelled' as const) : computeBillingStatus(org.subscription_end_date),
   }))
 
   rows.sort((a, b) => {
@@ -311,4 +317,76 @@ export async function getMyOrgBilling(event: HandlerEvent, user: AuthedUser) {
 
   const settings = await getOrCreateBillingSettingsRow()
   return json(200, { ...data, payment_instructions: settings.payment_instructions })
+}
+
+/** Super Admin only — a single Organization's complete financial relationship
+ * at a glance: every payment, every refund, and its cancellation request (if
+ * any), merged into one chronological timeline. */
+export async function getOrganizationBillingHistory(organizationId: string, user: AuthedUser) {
+  requireSuperAdmin(user)
+  const supabase = getSupabaseAdmin()
+
+  const { data: org, error: orgErr } = await supabase
+    .from('organizations')
+    .select('id, name, subscription_cancelled_at')
+    .eq('id', organizationId)
+    .maybeSingle()
+  if (orgErr) throw new HttpError(500, orgErr.message)
+  if (!org) throw new HttpError(404, 'Organization not found')
+
+  const [{ data: payments, error: paymentsErr }, { data: refunds, error: refundsErr }, { data: cancellationRequests, error: crErr }] =
+    await Promise.all([
+      supabase
+        .from('billing_history')
+        .select('id, amount_usd, paid_at, payment_method, notes')
+        .eq('organization_id', organizationId)
+        .order('paid_at', { ascending: false }),
+      supabase
+        .from('refunds')
+        .select('id, billing_history_id, amount_bdt, refund_date, reason')
+        .eq('organization_id', organizationId)
+        .order('refund_date', { ascending: false }),
+      supabase
+        .from('cancellation_requests')
+        .select('id, reason, additional_comments, requested_at, status, resolved_at')
+        .eq('organization_id', organizationId)
+        .order('requested_at', { ascending: false }),
+    ])
+  if (paymentsErr) throw new HttpError(500, paymentsErr.message)
+  if (refundsErr) throw new HttpError(500, refundsErr.message)
+  if (crErr) throw new HttpError(500, crErr.message)
+
+  const timeline = [
+    ...(payments ?? []).map((p) => ({
+      type: 'payment' as const,
+      date: p.paid_at,
+      amount_bdt: Number(p.amount_usd),
+      payment_method: p.payment_method,
+      notes: p.notes,
+      id: p.id,
+    })),
+    ...(refunds ?? []).map((r) => ({
+      type: 'refund' as const,
+      date: r.refund_date,
+      amount_bdt: -Number(r.amount_bdt),
+      billing_history_id: r.billing_history_id,
+      reason: r.reason,
+      id: r.id,
+    })),
+    ...(cancellationRequests ?? []).map((c) => ({
+      type: 'cancellation_request' as const,
+      date: c.requested_at,
+      reason: c.reason,
+      additional_comments: c.additional_comments,
+      status: c.status,
+      resolved_at: c.resolved_at,
+      id: c.id,
+    })),
+  ].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+
+  return json(200, {
+    organization: { id: org.id, name: org.name, subscription_cancelled_at: org.subscription_cancelled_at },
+    payments: payments ?? [],
+    timeline,
+  })
 }

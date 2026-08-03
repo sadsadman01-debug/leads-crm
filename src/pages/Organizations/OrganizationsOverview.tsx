@@ -8,7 +8,21 @@ import { StatTile } from '@/components/charts/StatTile'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import { useOrg } from '@/contexts/OrgContext'
-import type { OrganizationSummary } from '@/types/organization'
+import { computeSubscriptionStatus, type OrganizationSummary, type SubscriptionStatus } from '@/types/organization'
+
+const SUBSCRIPTION_STATUS_TONE: Record<SubscriptionStatus, 'success' | 'accent' | 'danger' | 'neutral'> = {
+  active: 'success',
+  cancelled: 'accent',
+  expired: 'danger',
+  no_subscription: 'neutral',
+}
+
+const SUBSCRIPTION_STATUS_LABELS: Record<SubscriptionStatus, string> = {
+  active: 'Active',
+  cancelled: 'Cancelled',
+  expired: 'Expired',
+  no_subscription: '—',
+}
 
 export function OrganizationsOverview() {
   const navigate = useNavigate()
@@ -119,6 +133,7 @@ export function OrganizationsOverview() {
                 <th className="px-3 py-2 font-medium">Leads</th>
                 <th className="px-3 py-2 font-medium">Deals</th>
                 <th className="px-3 py-2 font-medium">Open Pipeline</th>
+                <th className="px-3 py-2 font-medium">Subscription</th>
                 <th className="px-3 py-2 font-medium">Status</th>
                 <th className="px-3 py-2 font-medium">Created</th>
                 <th className="px-3 py-2 font-medium">Actions</th>
@@ -149,6 +164,12 @@ export function OrganizationsOverview() {
                   <td className="px-3 py-3 tabular-nums text-base-300">{org.leadCount}</td>
                   <td className="px-3 py-3 tabular-nums text-base-300">{org.dealCount}</td>
                   <td className="px-3 py-3 tabular-nums text-base-300">{formatCurrency(org.openPipelineValue, 'USD')}</td>
+                  <td className="px-3 py-3">
+                    {(() => {
+                      const subStatus = computeSubscriptionStatus(org.subscription_end_date, org.subscription_cancelled_at)
+                      return <Badge tone={SUBSCRIPTION_STATUS_TONE[subStatus]}>{SUBSCRIPTION_STATUS_LABELS[subStatus]}</Badge>
+                    })()}
+                  </td>
                   <td className="px-3 py-3">
                     <Badge tone={org.status === 'active' ? 'success' : 'neutral'}>{org.status}</Badge>
                   </td>

@@ -42,6 +42,11 @@ export type AuditEventType =
   | 'promo_code_created'
   | 'promo_code_updated'
   | 'promo_code_deleted'
+  | 'cancellation_request_submitted'
+  | 'cancellation_request_acknowledged'
+  | 'organization_subscription_cancelled'
+  | 'organization_subscription_reactivated'
+  | 'refund_recorded'
 
 export interface AuditLogEntry {
   id: string
@@ -116,6 +121,11 @@ export const AUDIT_EVENT_LABELS: Record<AuditEventType, string> = {
   promo_code_created: 'Promo code created',
   promo_code_updated: 'Promo code updated',
   promo_code_deleted: 'Promo code deleted',
+  cancellation_request_submitted: 'Cancellation request submitted',
+  cancellation_request_acknowledged: 'Cancellation request acknowledged',
+  organization_subscription_cancelled: 'Organization subscription cancelled',
+  organization_subscription_reactivated: 'Organization subscription reactivated',
+  refund_recorded: 'Refund recorded',
 }
 
 /** Security-relevant events get one color family in the UI; every other
