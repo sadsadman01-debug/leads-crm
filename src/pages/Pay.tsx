@@ -13,85 +13,127 @@ const METHOD_ICON: Record<PaymentAccountMethodType, typeof Smartphone> = {
   crypto: Bitcoin,
 }
 
-function detailLines(methodType: PaymentAccountMethodType, details: Record<string, any>): Array<[string, string]> {
-  if (methodType === 'mfs') {
-    const d = details as MfsDetails
-    const lines: Array<[string, string]> = [['Provider', d.provider], ['Account/Phone Number', d.account_number]]
-    if (d.account_holder_name) lines.push(['Account Holder Name', d.account_holder_name])
-    return lines
-  }
-  if (methodType === 'bank_account') {
-    const d = details as BankAccountDetails
-    return [
-      ['Account Holder Name', d.account_holder_name],
-      ['Bank Name', d.bank_name],
-      ['Branch Name', d.branch_name],
-      ['Account Number', d.account_number],
-      ['Routing Number', d.routing_number],
-    ]
-  }
-  const d = details as CryptoDetails
-  return [['Network', d.network], ['Wallet Address', d.wallet_address]]
-}
-
-function PaymentAccountCard({
+/** A compact, selectable row — full details are shown separately by
+ * SelectedAccountDetails once picked, not dumped inline here. */
+function PaymentAccountOption({
   account,
   selected,
   onSelect,
 }: {
   account: PublicPaymentAccount
   selected: boolean
-  onSelect: (() => void) | null
+  onSelect: () => void
 }) {
-  const [copied, setCopied] = useState(false)
   const Icon = METHOD_ICON[account.method_type]
-  const lines = detailLines(account.method_type, account.details)
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`flex w-full items-center gap-3 rounded-xl border p-3.5 text-left transition-colors ${
+        selected ? 'border-accent-500 bg-accent-500/10' : 'border-base-700/60 bg-base-850 hover:bg-base-800'
+      }`}
+    >
+      <input type="radio" name="payment-account" className="h-4 w-4 shrink-0 accent-accent-500" checked={selected} readOnly />
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-500/15 text-accent-400">
+        <Icon size={16} />
+      </span>
+      <span className="text-sm font-medium text-base-100">{account.label}</span>
+    </button>
+  )
+}
 
-  async function handleCopy() {
-    const text = lines.map(([label, value]) => `${label}: ${value}`).join('\n')
+/** A single small "Copy" icon-button next to one field value. */
+function CopyIconButton({ label, active, onCopy }: { label: string; active: boolean; onCopy: () => void }) {
+  return (
+    <button type="button" className="btn-ghost shrink-0 px-2 text-xs" onClick={onCopy} aria-label={`Copy ${label}`}>
+      {active ? <Check size={13} className="text-success" /> : <Copy size={13} />}
+    </button>
+  )
+}
+
+/** Type-specific formatting for whichever account is currently selected —
+ * MFS gets a large, easy-to-dial number; Bank gets per-field copy plus a
+ * "copy all" block; Crypto gets a monospace address, a copy button, and a
+ * scannable QR code (via the free, keyless api.qrserver.com image endpoint —
+ * no npm dependency needed for a one-off image). */
+function SelectedAccountDetails({ account }: { account: PublicPaymentAccount }) {
+  const [copiedField, setCopiedField] = useState<string | null>(null)
+
+  async function copy(field: string, text: string) {
     try {
       await navigator.clipboard.writeText(text)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1800)
+      setCopiedField(field)
+      setTimeout(() => setCopiedField((f) => (f === field ? null : f)), 1800)
     } catch {
       // Clipboard access can be denied by the browser — the details are
       // already visible on-screen either way, so this is a soft failure.
     }
   }
 
+  if (account.method_type === 'mfs') {
+    const d = account.details as MfsDetails
+    return (
+      <div className="rounded-xl border border-accent-500/40 bg-base-850 p-5 text-center">
+        <p className="text-xs uppercase tracking-wide text-base-400">Provider</p>
+        <p className="text-lg font-semibold text-base-100">{d.provider}</p>
+        <p className="mt-4 text-xs uppercase tracking-wide text-base-400">Number</p>
+        <p className="text-3xl font-bold tracking-wide text-base-100">{d.account_number}</p>
+        {d.account_holder_name && <p className="mt-2 text-xs text-base-500">Account Holder: {d.account_holder_name}</p>}
+        <button type="button" className="btn-secondary mt-4" onClick={() => copy('number', d.account_number)}>
+          {copiedField === 'number' ? <Check size={14} className="text-success" /> : <Copy size={14} />}
+          {copiedField === 'number' ? 'Copied' : 'Copy Number'}
+        </button>
+      </div>
+    )
+  }
+
+  if (account.method_type === 'bank_account') {
+    const d = account.details as BankAccountDetails
+    const fields: Array<[string, string]> = [
+      ['Account Holder Name', d.account_holder_name],
+      ['Bank Name', d.bank_name],
+      ['Branch Name', d.branch_name],
+      ['Account Number', d.account_number],
+      ['Routing Number', d.routing_number],
+    ]
+    const allText = fields.map(([label, value]) => `${label}: ${value}`).join('\n')
+    return (
+      <div className="rounded-xl border border-accent-500/40 bg-base-850 p-5">
+        <div className="space-y-3">
+          {fields.map(([label, value]) => (
+            <div key={label} className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs text-base-500">{label}</p>
+                <p className="truncate font-mono text-sm text-base-100">{value}</p>
+              </div>
+              <CopyIconButton label={label} active={copiedField === label} onCopy={() => copy(label, value)} />
+            </div>
+          ))}
+        </div>
+        <button type="button" className="btn-secondary mt-4 w-full" onClick={() => copy('all', allText)}>
+          {copiedField === 'all' ? <Check size={14} className="text-success" /> : <Copy size={14} />}
+          {copiedField === 'all' ? 'Copied' : 'Copy All Bank Details'}
+        </button>
+      </div>
+    )
+  }
+
+  const d = account.details as CryptoDetails
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(d.wallet_address)}`
   return (
-    <div
-      className={`rounded-xl border p-4 transition-colors ${
-        selected ? 'border-accent-500 bg-accent-500/10' : 'border-base-700/60 bg-base-850'
-      }`}
-    >
-      <div className="flex items-start gap-3">
-        {onSelect && (
-          <input
-            type="radio"
-            name="payment-account"
-            className="mt-1 h-4 w-4 accent-accent-500"
-            checked={selected}
-            onChange={onSelect}
-          />
-        )}
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-500/15 text-accent-400">
-          <Icon size={16} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-base-100">{account.label}</p>
-          <div className="mt-2 space-y-1 text-sm">
-            {lines.map(([label, value]) => (
-              <p key={label}>
-                <span className="text-base-500">{label}:</span>{' '}
-                <span className="break-all font-mono text-base-200">{value}</span>
-              </p>
-            ))}
-          </div>
-          <button type="button" className="btn-ghost mt-3 px-2 text-xs" onClick={handleCopy}>
-            {copied ? <Check size={13} className="text-success" /> : <Copy size={13} />}
-            {copied ? 'Copied' : 'Copy Details'}
+    <div className="rounded-xl border border-accent-500/40 bg-base-850 p-5">
+      <p className="text-xs uppercase tracking-wide text-base-400">Network</p>
+      <p className="text-lg font-semibold text-base-100">{d.network}</p>
+      <p className="mb-1 mt-4 text-xs uppercase tracking-wide text-base-400">Wallet Address</p>
+      <p className="break-all font-mono text-sm text-base-100">{d.wallet_address}</p>
+      <div className="mt-4 flex flex-col items-center gap-4 sm:flex-row sm:items-start">
+        <img src={qrUrl} alt="Wallet address QR code" width={160} height={160} className="h-[160px] w-[160px] shrink-0 rounded-lg bg-white p-2" />
+        <div className="flex flex-col items-center gap-2 sm:items-start">
+          <button type="button" className="btn-secondary" onClick={() => copy('wallet', d.wallet_address)}>
+            {copiedField === 'wallet' ? <Check size={14} className="text-success" /> : <Copy size={14} />}
+            {copiedField === 'wallet' ? 'Copied' : 'Copy Wallet Address'}
           </button>
+          <p className="text-xs text-warn">Double-check the network before sending — the wrong network can lose funds.</p>
         </div>
       </div>
     </div>
@@ -111,6 +153,7 @@ export function Pay() {
     queryFn: paymentAccountsApi.getPublicList,
   })
   const accounts = accountsData?.accounts ?? []
+  const selectedAccount = accounts.find((a) => a.id === selectedAccountId) ?? null
 
   const {
     data: request,
@@ -131,12 +174,18 @@ export function Pay() {
     .map((type) => ({ type, accounts: accounts.filter((a) => a.method_type === type) }))
     .filter((g) => g.accounts.length > 0)
 
-  // A token that doesn't resolve to any request, or resolves to one that's
-  // already been approved/rejected, must never reveal an amount or payment
-  // details — only a generic "no longer valid" message. Browsing with no
-  // token at all is a different case (informational only) and is unaffected.
-  const tokenInvalidOrResolved = Boolean(paymentToken) && !requestLoading && (requestIsError || (request && request.status !== 'pending'))
-  const canSubmitSelection = Boolean(paymentToken) && request?.status === 'pending'
+  // Two legitimate, distinct in-progress states now that requests start as
+  // "awaiting_payment" and only become "pending" once a method is confirmed
+  // — a fresh token is awaiting_payment (the confirm flow below applies),
+  // while pending means they already confirmed once (nothing left to do here
+  // but reassure them). Only a missing/invalid token or a truly final
+  // approved/rejected status shows the generic "no longer valid" message.
+  const isAwaitingPayment = request?.status === 'awaiting_payment'
+  const isAlreadyConfirmed = request?.status === 'pending'
+  const isResolvedOrInvalid =
+    Boolean(paymentToken) && !requestLoading && (requestIsError || (request && (request.status === 'approved' || request.status === 'rejected')))
+  const showAmount = Boolean(request) && (isAwaitingPayment || isAlreadyConfirmed)
+  const canSubmitSelection = Boolean(paymentToken) && isAwaitingPayment
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-base-950 px-4 py-8 animate-fadeIn">
@@ -164,7 +213,7 @@ export function Pay() {
 
         {paymentToken && requestLoading && <p className="text-center text-sm text-base-400">Loading your request…</p>}
 
-        {paymentToken && !requestLoading && request && request.status === 'pending' && (
+        {showAmount && request && (
           <div className="mb-6 rounded-xl border border-accent-500/40 bg-gradient-to-br from-accent-500/15 to-accent-500/5 p-4 text-center">
             <p className="text-xs uppercase tracking-wide text-base-400">Amount to Pay</p>
             <p className="mt-1 text-2xl font-semibold text-base-100">
@@ -176,10 +225,17 @@ export function Pay() {
           </div>
         )}
 
-        {tokenInvalidOrResolved ? (
+        {isResolvedOrInvalid ? (
           <div className="flex flex-col items-center gap-2 rounded-xl border border-base-700/60 bg-base-850 p-8 text-center">
             <AlertCircle size={24} className="text-base-500" />
             <p className="text-sm text-base-300">This payment link is no longer valid or has already been processed.</p>
+          </div>
+        ) : isAlreadyConfirmed ? (
+          <div className="flex flex-col items-center gap-3 rounded-xl border border-success/40 bg-success-bg p-6 text-center">
+            <CheckCircle2 size={28} className="text-success" />
+            <p className="text-sm text-base-100">
+              You've already confirmed your payment method for this request. Our team will verify and activate your account shortly.
+            </p>
           </div>
         ) : accountsLoading ? (
           <p className="text-center text-sm text-base-400">Loading payment methods…</p>
@@ -202,18 +258,20 @@ export function Pay() {
                 <h2 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-base-400">
                   {PAYOUT_METHOD_LABELS[group.type]}
                 </h2>
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {group.accounts.map((account) => (
-                    <PaymentAccountCard
+                    <PaymentAccountOption
                       key={account.id}
                       account={account}
                       selected={selectedAccountId === account.id}
-                      onSelect={canSubmitSelection ? () => setSelectedAccountId(account.id) : null}
+                      onSelect={() => setSelectedAccountId(account.id)}
                     />
                   ))}
                 </div>
               </div>
             ))}
+
+            {selectedAccount && <SelectedAccountDetails account={selectedAccount} />}
 
             {canSubmitSelection && (
               <div className="border-t border-base-700/60 pt-5">

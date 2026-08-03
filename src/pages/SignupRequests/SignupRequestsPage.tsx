@@ -15,12 +15,41 @@ const PAYMENT_STATUS_TONE: Record<PaymentStatus, 'warn' | 'success' | 'neutral'>
   waived: 'neutral',
 }
 
-type Tab = 'pending' | 'approved' | 'rejected' | 'all'
+type Tab = 'awaiting_payment' | 'pending' | 'approved' | 'rejected' | 'all'
 
-const STATUS_TONE: Record<SignupRequestStatus, 'warn' | 'success' | 'danger'> = {
+const TABS: Tab[] = ['awaiting_payment', 'pending', 'approved', 'rejected', 'all']
+
+const TAB_LABELS: Record<Tab, string> = {
+  awaiting_payment: 'Awaiting Payment',
+  pending: 'Pending',
+  approved: 'Approved',
+  rejected: 'Rejected',
+  all: 'All',
+}
+
+const STATUS_LABELS: Record<SignupRequestStatus, string> = {
+  awaiting_payment: 'Awaiting Payment',
+  pending: 'Pending',
+  approved: 'Approved',
+  rejected: 'Rejected',
+}
+
+const STATUS_TONE: Record<SignupRequestStatus, 'warn' | 'success' | 'danger' | 'neutral'> = {
+  awaiting_payment: 'neutral',
   pending: 'warn',
   approved: 'success',
   rejected: 'danger',
+}
+
+// A request left "awaiting_payment" this long with no payment confirmation
+// is almost certainly abandoned — purely a visual cue for the Super Admin,
+// never auto-deleted or auto-transitioned.
+const STALE_AWAITING_PAYMENT_DAYS = 7
+
+function isStaleAwaitingPayment(r: SignupRequest): boolean {
+  if (r.status !== 'awaiting_payment') return false
+  const ageMs = Date.now() - new Date(r.requested_at).getTime()
+  return ageMs >= STALE_AWAITING_PAYMENT_DAYS * 24 * 60 * 60 * 1000
 }
 
 export function SignupRequestsPage() {
@@ -39,6 +68,7 @@ export function SignupRequestsPage() {
   })
 
   const pendingCount = useMemo(() => requests.filter((r) => r.status === 'pending').length, [requests])
+  const awaitingPaymentCount = useMemo(() => requests.filter((r) => r.status === 'awaiting_payment').length, [requests])
 
   const filtered = useMemo(() => {
     if (tab === 'all') return requests
@@ -56,34 +86,48 @@ export function SignupRequestsPage() {
 
       <ConversionStatsRow
         pageType="request_access"
-        records={requests.map((r) => ({ date: r.requested_at, approved: r.status === 'approved' }))}
+        records={requests
+          .filter((r) => r.status !== 'awaiting_payment')
+          .map((r) => ({ date: r.requested_at, approved: r.status === 'approved' }))}
       />
 
-      <div className="flex gap-1 rounded-lg bg-base-850 p-1 w-fit">
-        {(['pending', 'approved', 'rejected', 'all'] as Tab[]).map((t) => (
+      <div className="flex flex-wrap gap-1 rounded-lg bg-base-850 p-1 w-fit">
+        {TABS.map((t) => (
           <button
             key={t}
-            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium capitalize transition-colors ${
+            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
               tab === t ? 'bg-accent-500 text-white' : 'text-base-300 hover:text-base-100'
             }`}
             onClick={() => setTab(t)}
           >
-            {t}
+            {TAB_LABELS[t]}
             {t === 'pending' && pendingCount > 0 && (
               <span className={`rounded-full px-1.5 text-xs ${tab === t ? 'bg-white/20' : 'bg-warn-bg text-warn'}`}>
                 {pendingCount}
+              </span>
+            )}
+            {t === 'awaiting_payment' && awaitingPaymentCount > 0 && (
+              <span className={`rounded-full px-1.5 text-xs ${tab === t ? 'bg-white/20' : 'bg-base-700 text-base-300'}`}>
+                {awaitingPaymentCount}
               </span>
             )}
           </button>
         ))}
       </div>
 
+      {tab === 'awaiting_payment' && (
+        <p className="text-xs text-base-500">
+          Informational only — these applicants haven't confirmed a payment method yet, so there's nothing to
+          approve or reject here. They'll move to the Pending tab automatically once they do.
+        </p>
+      )}
+
       {isLoading ? (
         <div className="card p-12 text-center text-base-400">Loading requests…</div>
       ) : filtered.length === 0 ? (
         <div className="card flex flex-col items-center gap-3 p-16 text-center">
           <UserPlus2 size={32} className="text-base-500" />
-          <p className="text-base-300">No {tab === 'all' ? '' : tab} requests.</p>
+          <p className="text-base-300">No {tab === 'all' ? '' : TAB_LABELS[tab].toLowerCase()} requests.</p>
         </div>
       ) : (
         <div className="card overflow-x-auto p-6">
@@ -187,7 +231,10 @@ export function SignupRequestsPage() {
                   </td>
                   <td className="px-3 py-3 text-base-400">{new Date(r.requested_at).toLocaleDateString()}</td>
                   <td className="px-3 py-3">
-                    <Badge tone={STATUS_TONE[r.status]}>{r.status}</Badge>
+                    <Badge tone={STATUS_TONE[r.status]}>{STATUS_LABELS[r.status]}</Badge>
+                    {isStaleAwaitingPayment(r) && (
+                      <p className="mt-1 text-xs text-warn">Stale — no payment confirmation after {STALE_AWAITING_PAYMENT_DAYS}+ days</p>
+                    )}
                     {r.status === 'rejected' && r.rejection_reason && (
                       <p className="mt-1 max-w-[160px] text-xs text-base-500">{r.rejection_reason}</p>
                     )}

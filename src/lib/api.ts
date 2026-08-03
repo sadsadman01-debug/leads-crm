@@ -691,7 +691,7 @@ export const signupRequestsApi = {
   getPublicForPayment: (token: string) =>
     requestPublic<{
       organization_name: string
-      status: 'pending' | 'approved' | 'rejected'
+      status: 'awaiting_payment' | 'pending' | 'approved' | 'rejected'
       final_price_bdt: number | null
       billing_cycle: BillingCycle
       payment_method: PaymentMethod | null

@@ -39,8 +39,16 @@ async function resolvePromoDiscount(codeInput: string, originalPrice: number, se
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-/** POST /signup-requests — public, unauthenticated. Only ever inserts a
- * pending row; never creates an Auth account or an Organization. */
+/** POST /signup-requests — public, unauthenticated. Only ever inserts an
+ * "awaiting_payment" row; never creates an Auth account or an Organization.
+ * Pricing/promo/payment_token are all computed and locked in right now
+ * (unchanged from before) — only the initial status differs: the request
+ * isn't a genuine reviewable application yet, isn't shown in the Super
+ * Admin's Pending tab, and doesn't count as an "Application Submitted" for
+ * stats until the applicant actually confirms a payment method (see
+ * submitPaymentMethodSelection, which performs the awaiting_payment ->
+ * pending transition and fires the notification/audit log this used to
+ * fire immediately on submission). */
 export async function createSignupRequest(event: HandlerEvent) {
   const supabase = getSupabaseAdmin()
   const body = JSON.parse(event.body || '{}')
@@ -114,7 +122,7 @@ export async function createSignupRequest(event: HandlerEvent) {
       city,
       country,
       zip_code,
-      status: 'pending',
+      status: 'awaiting_payment',
       pricing_tier,
       monthly_price_usd,
       billing_cycle,
@@ -135,21 +143,6 @@ export async function createSignupRequest(event: HandlerEvent) {
     .single()
 
   if (error) throw new HttpError(500, error.message)
-
-  await notifySuperAdmins({
-    type: 'signup_request',
-    title: 'New signup request',
-    message: `${organization_name} (${contact_name}) requested access.`,
-    link_route: '/signup-requests',
-    related_entity_id: data.id,
-    related_entity_type: 'signup_request',
-  })
-
-  await insertAuditLog({
-    eventType: 'signup_request_submitted',
-    metadata: { organization_name, contact_name, email },
-    ipAddress: getClientIp(event),
-  })
 
   return json(201, data)
 }
@@ -420,11 +413,16 @@ const PAYMENT_METHOD_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000
 const PAYMENT_METHOD_RATE_LIMIT_MAX = 10
 
 /** Public — the /pay page's "I've Completed My Payment" action. Looked up by
- * payment_token (never id). Body: { payment_account_id }. Only pre-fills
- * payment_method on a genuinely pending request — never on one already
- * approved/rejected, so this can never tamper with a resolved request's
- * record. Never marks the request as paid/approved itself; that still
- * requires the Super Admin's manual review. */
+ * payment_token (never id). Body: { payment_account_id }. This is what
+ * performs the awaiting_payment -> pending transition — only now does the
+ * request become a genuine reviewable application (visible in the Super
+ * Admin's Pending tab, counted as an "Application Submitted"), which is why
+ * the new-signup-request notification/audit log fire here instead of at
+ * initial submission. Only valid from "awaiting_payment" — never on a
+ * request already pending/approved/rejected, so this can never re-fire the
+ * notification or tamper with an already-progressed request's record. Never
+ * marks the request as paid/approved itself; that still requires the Super
+ * Admin's manual review. */
 export async function submitPaymentMethodSelection(token: string, event: HandlerEvent) {
   const supabase = getSupabaseAdmin()
   const ip = getClientIp(event)
@@ -447,7 +445,9 @@ export async function submitPaymentMethodSelection(token: string, event: Handler
   if (!paymentAccountId) throw new HttpError(400, 'payment_account_id is required')
 
   const request = await getRequestByPaymentTokenOrThrow(token)
-  if (request.status !== 'pending') throw new HttpError(400, 'This request has already been reviewed and can no longer be updated')
+  if (request.status !== 'awaiting_payment') {
+    throw new HttpError(400, 'This request is no longer awaiting payment confirmation.')
+  }
 
   const { data: account, error: accountErr } = await supabase
     .from('receiving_payment_accounts')
@@ -461,11 +461,26 @@ export async function submitPaymentMethodSelection(token: string, event: Handler
 
   const { data, error } = await supabase
     .from('signup_requests')
-    .update({ payment_method })
+    .update({ payment_method, status: 'pending' })
     .eq('id', request.id)
-    .select('payment_method')
+    .select('payment_method, status')
     .single()
   if (error) throw new HttpError(500, error.message)
+
+  await notifySuperAdmins({
+    type: 'signup_request',
+    title: 'New signup request',
+    message: `${request.organization_name} (${request.contact_name}) requested access.`,
+    link_route: '/signup-requests',
+    related_entity_id: request.id,
+    related_entity_type: 'signup_request',
+  })
+
+  await insertAuditLog({
+    eventType: 'signup_request_submitted',
+    metadata: { organization_name: request.organization_name, contact_name: request.contact_name, email: request.email },
+    ipAddress: ip,
+  })
 
   return json(200, data)
 }

@@ -1,6 +1,6 @@
 import type { PricingTier, PaymentStatus, BillingCycle, PaymentMethod } from './billing'
 
-export type SignupRequestStatus = 'pending' | 'approved' | 'rejected'
+export type SignupRequestStatus = 'awaiting_payment' | 'pending' | 'approved' | 'rejected'
 
 export interface SignupRequest {
   id: string
