@@ -5,36 +5,35 @@ import { requireSuperAdmin, requireAal2IfEnrolled } from '../lib/permissions.js'
 import { generateTempPassword } from '../lib/passwordGen.js'
 import { notifySuperAdmins } from '../lib/notifications.js'
 import { insertAuditLog, logAuditEvent, getClientIp } from '../lib/auditLog.js'
-import { getOrCreateBillingSettingsRow, computeCurrentPricingTier, computeAnnualTotal, addBillingPeriod } from '../lib/billingSettings.js'
+import { getOrCreateBillingSettingsRow, computeCurrentPricingTier, computeAnnualTotal, addBillingPeriod, type BillingSettingsRow } from '../lib/billingSettings.js'
 import { ALLOWED_SIGNUP_COUNTRIES } from '../lib/allowedSignupCountries.js'
 import { PAYMENT_METHODS } from '../lib/paymentMethods.js'
+import { checkPromoCode } from '../lib/promoCodes.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const COLUMNS =
   'id, organization_name, contact_name, email, phone, message, city, country, zip_code, status, requested_at, reviewed_at, reviewed_by, rejection_reason, pricing_tier, monthly_price_usd, payment_status, billing_cycle, annual_total_usd, referred_by_affiliate_id, promo_code_id, promo_code_text, original_price_bdt, discount_amount_bdt, final_price_bdt, payment_method'
 
-/** Looks up an active promo code and computes the discount against
- * `originalPrice`. Never throws for an unknown/inactive code — the caller
- * decides whether that should block submission (it doesn't; a bad code is
- * simply not applied). Percent discounts round to the nearest Taka; the
- * final price is floored at 0. */
-async function resolvePromoDiscount(codeInput: string, originalPrice: number) {
-  const supabase = getSupabaseAdmin()
-  const code = codeInput.trim().toUpperCase()
+/** Re-runs the exact same eligibility check the "Apply" button used (active /
+ * usage limit / expiry / Early Bird) and computes the discount against
+ * `originalPrice`. Never throws for an ineligible code — if it became invalid
+ * between Apply and submission (expired, hit its limit, code changed, tier
+ * flipped), the caller decides whether that should block submission (it
+ * doesn't; it's simply not applied). Percent discounts round to the nearest
+ * Taka; the final price is floored at 0. */
+async function resolvePromoDiscount(codeInput: string, originalPrice: number, settings: BillingSettingsRow, isEarlyBird: boolean) {
+  const code = codeInput.trim()
   if (!code) return null
 
-  const { data } = await supabase
-    .from('promo_codes')
-    .select('id, code, discount_type, discount_value, is_active')
-    .eq('code', code)
-    .maybeSingle()
-  if (!data || !data.is_active) return null
+  const result = await checkPromoCode(code, settings, isEarlyBird)
+  if (!result.ok) return null
+  const { promo } = result
 
-  const rawDiscount = data.discount_type === 'percent' ? originalPrice * (Number(data.discount_value) / 100) : Number(data.discount_value)
+  const rawDiscount = promo.discount_type === 'percent' ? originalPrice * (promo.discount_value / 100) : promo.discount_value
   const discount_amount_bdt = Math.min(Math.round(rawDiscount), originalPrice)
   const final_price_bdt = Math.max(originalPrice - discount_amount_bdt, 0)
 
-  return { promo_code_id: data.id as string, promo_code_text: data.code as string, discount_amount_bdt, final_price_bdt }
+  return { promo_code_id: promo.id, promo_code_text: promo.code, discount_amount_bdt, final_price_bdt }
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -85,7 +84,7 @@ export async function createSignupRequest(event: HandlerEvent) {
   let final_price_bdt = original_price_bdt
   const promoCodeInput = (body.promo_code ?? '').trim()
   if (promoCodeInput) {
-    const resolved = await resolvePromoDiscount(promoCodeInput, original_price_bdt)
+    const resolved = await resolvePromoDiscount(promoCodeInput, original_price_bdt, billingSettings, pricing_tier === 'early_bird')
     if (resolved) {
       promo_code_id = resolved.promo_code_id
       promo_code_text = resolved.promo_code_text

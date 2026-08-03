@@ -648,11 +648,24 @@ export const billingApi = {
 export const promoCodesApi = {
   list: () => request<{ promo_codes: PromoCode[] }>('/promo-codes'),
 
-  create: (payload: { code: string; discount_type: 'flat' | 'percent'; discount_value: number }) =>
-    request<PromoCode>('/promo-codes', { method: 'POST', body: JSON.stringify(payload) }),
+  create: (payload: {
+    code: string
+    discount_type: 'flat' | 'percent'
+    discount_value: number
+    max_uses?: number | null
+    expires_at?: string | null
+  }) => request<PromoCode>('/promo-codes', { method: 'POST', body: JSON.stringify(payload) }),
 
-  update: (id: string, payload: Partial<{ discount_type: 'flat' | 'percent'; discount_value: number; is_active: boolean }>) =>
-    request<PromoCode>(`/promo-codes/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  update: (
+    id: string,
+    payload: Partial<{
+      discount_type: 'flat' | 'percent'
+      discount_value: number
+      is_active: boolean
+      max_uses: number | null
+      expires_at: string | null
+    }>
+  ) => request<PromoCode>(`/promo-codes/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
 
   remove: (id: string) => request<{ success: true }>(`/promo-codes/${id}`, { method: 'DELETE' }),
 
