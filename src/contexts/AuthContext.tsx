@@ -59,7 +59,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const me = await teamApi.me()
       setProfile(me)
       return me
-    } catch {
+    } catch (err) {
+      // Logged so a genuine recurrence of the "couldn't load account" screen
+      // (ProtectedRoute.tsx) shows its real cause in the console — a stale
+      // service-worker-cached bundle calling a since-changed API shape, an
+      // actual expired/invalid session, a deactivated account, etc. — instead
+      // of only ever surfacing the generic user-facing message.
+      console.error('Failed to load profile:', err)
       setProfile(null)
       return null
     }
