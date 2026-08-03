@@ -180,19 +180,20 @@ export function SignupRequestsPage() {
                   <td className="px-3 py-3 text-base-300">
                     {r.pricing_tier ? (
                       <div>
-                        {r.promo_code_text ? (
+                        {/* final_price_bdt is always the correct amount due for this
+                            request's own billing_cycle (see createSignupRequest) — the
+                            same single figure the Payment Instructions page and Approve
+                            flow read, so it's shown directly rather than falling back to
+                            the generic tier price for the no-discount case. */}
+                        {r.discount_amount_bdt > 0 && (
                           <>
                             <p className="text-xs text-base-500 line-through">৳{r.original_price_bdt}</p>
                             <p className="text-xs text-accent-400">{r.promo_code_text}: −৳{r.discount_amount_bdt}</p>
-                            <p className="font-medium text-base-100">
-                              ৳{r.final_price_bdt}{r.billing_cycle === 'annual' ? '/yr' : '/mo'}
-                            </p>
                           </>
-                        ) : (
-                          <p className="font-medium text-base-100">
-                            {r.billing_cycle === 'annual' ? `৳${Math.round(r.annual_total_usd ?? 0)}/yr` : `৳${r.monthly_price_usd}/mo`}
-                          </p>
                         )}
+                        <p className="font-medium text-base-100">
+                          ৳{r.final_price_bdt}{r.billing_cycle === 'annual' ? '/yr' : '/mo'}
+                        </p>
                         <p className="text-xs text-base-500">
                           {PRICING_TIER_LABELS[r.pricing_tier]} · {r.billing_cycle === 'annual' ? 'Annual' : 'Monthly'}
                         </p>

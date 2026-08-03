@@ -86,22 +86,33 @@ export async function createSignupRequest(event: HandlerEvent) {
   const billing_cycle = body.billing_cycle === 'annual' ? 'annual' : 'monthly'
   const annual_total_usd = billing_cycle === 'annual' ? computeAnnualTotal(monthly_price_usd) : null
 
-  // Discount is always computed against the monthly rate, matching the
-  // literal wording of the spec — an annual signup's annual_total_usd is
-  // unaffected by the promo code.
-  const original_price_bdt = monthly_price_usd
+  // original_price_bdt/final_price_bdt are the single correct "amount due for
+  // THIS request" figure that every other screen (Payment Instructions, the
+  // Approve flow, Earnings) reads directly rather than re-deriving per
+  // cycle — so they must be in the scale of whichever cycle was actually
+  // selected: the annual total (which already bundles its own 20% discount
+  // via computeAnnualTotal) for annual, the monthly rate for monthly. A promo
+  // code only ever discounts the monthly rate — annual's bundled discount
+  // doesn't stack with it, matching the Request Access form's own "discount
+  // applies to the monthly rate only" messaging — so promo_code_id/text are
+  // still recorded for an annual signup (it still counts toward the code's
+  // usage limit), but discount_amount_bdt/final_price_bdt are only ever
+  // adjusted away from the sticker price when billing_cycle is monthly.
+  const original_price_bdt = billing_cycle === 'annual' ? (annual_total_usd as number) : monthly_price_usd
   let promo_code_id: string | null = null
   let promo_code_text: string | null = null
   let discount_amount_bdt = 0
   let final_price_bdt = original_price_bdt
   const promoCodeInput = (body.promo_code ?? '').trim()
   if (promoCodeInput) {
-    const resolved = await resolvePromoDiscount(promoCodeInput, original_price_bdt, billingSettings, pricing_tier === 'early_bird')
+    const resolved = await resolvePromoDiscount(promoCodeInput, monthly_price_usd, billingSettings, pricing_tier === 'early_bird')
     if (resolved) {
       promo_code_id = resolved.promo_code_id
       promo_code_text = resolved.promo_code_text
-      discount_amount_bdt = resolved.discount_amount_bdt
-      final_price_bdt = resolved.final_price_bdt
+      if (billing_cycle === 'monthly') {
+        discount_amount_bdt = resolved.discount_amount_bdt
+        final_price_bdt = resolved.final_price_bdt
+      }
     }
   }
 
@@ -414,9 +425,12 @@ export async function approveSignupRequest(id: string, event: HandlerEvent, user
     .single()
   if (reqErr) throw new HttpError(500, reqErr.message)
 
-  // First billing_history record — the promo discount only ever applies to
-  // the monthly rate, same reasoning as annual_total_usd being unaffected above.
-  const firstPaymentAmount = request.billing_cycle === 'annual' ? request.annual_total_usd : request.final_price_bdt ?? request.monthly_price_usd
+  // First billing_history record — final_price_bdt is already the correct
+  // amount due for this request's own billing_cycle (see createSignupRequest),
+  // so it's used directly rather than re-deriving per cycle here. The
+  // fallback only matters for rows that somehow predate that field being set.
+  const firstPaymentAmount =
+    request.final_price_bdt ?? (request.billing_cycle === 'annual' ? request.annual_total_usd : request.monthly_price_usd)
   await supabase.from('billing_history').insert({
     organization_id: org.id,
     amount_usd: firstPaymentAmount,

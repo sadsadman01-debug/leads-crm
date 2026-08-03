@@ -149,18 +149,29 @@ export function RequestAccess() {
                 </p>
               </div>
             )}
-            {pricing && (
+            {mutation.data?.pricing_tier && (
               <div className="mt-4 w-full rounded-lg bg-base-850 p-3 text-left text-sm">
                 <p className="text-base-200">
                   Your locked-in rate:{' '}
                   <strong className="text-base-100">
-                    {billingCycle === 'annual' ? `৳${Math.round(pricing.annual_total_usd)}/year` : `৳${pricing.monthly_price_usd}/month`}
+                    {/* Sourced from the actual created request's own stored amount — the
+                        single correct figure the Payment Instructions page and Approve
+                        flow also read — never re-derived from the generic current tier
+                        pricing, which wouldn't reflect a promo code applied at monthly. */}
+                    {mutation.data.billing_cycle === 'annual'
+                      ? `৳${Math.round(mutation.data.final_price_bdt ?? mutation.data.annual_total_usd ?? 0)}/year`
+                      : `৳${mutation.data.final_price_bdt ?? mutation.data.monthly_price_usd}/month`}
                   </strong>{' '}
                   <span className="text-base-500">
-                    ({PRICING_TIER_LABELS[pricing.pricing_tier]}, {billingCycle === 'annual' ? 'billed annually' : 'billed monthly'})
+                    ({PRICING_TIER_LABELS[mutation.data.pricing_tier]}, {mutation.data.billing_cycle === 'annual' ? 'billed annually' : 'billed monthly'})
                   </span>
                 </p>
-                {pricing.payment_instructions && (
+                {mutation.data.promo_code_text && mutation.data.discount_amount_bdt > 0 && (
+                  <p className="mt-1 text-xs text-success">
+                    Promo <strong>{mutation.data.promo_code_text}</strong> applied (−৳{mutation.data.discount_amount_bdt}).
+                  </p>
+                )}
+                {pricing?.payment_instructions && (
                   <p className="mt-2 whitespace-pre-wrap text-xs text-base-400">{pricing.payment_instructions}</p>
                 )}
                 <p className="mt-2 text-xs text-base-500">Our team will review your request and confirm payment details with you.</p>
