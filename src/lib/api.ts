@@ -50,6 +50,16 @@ import type {
 } from '@/types/duplicateMerge'
 import type { PublicPricing, BillingSettings, OrganizationBillingRow, MyOrgBilling, PaymentStatus, BillingCycle, PaymentMethod } from '@/types/billing'
 import type {
+  EarningsSummary,
+  EarningsTrendResponse,
+  EarningsGranularity,
+  PaymentMethodBreakdownRow,
+  TierBreakdownRow,
+  PromoCodePerformanceRow,
+  EarningsTransaction,
+  EarningsTransactionFilters,
+} from '@/types/earnings'
+import type {
   AffiliateApplication,
   ApproveAffiliateApplicationResult,
   Affiliate,
@@ -548,6 +558,68 @@ export const auditLogApi = {
     const a = document.createElement('a')
     a.href = url
     a.download = `Audit_Log_${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  },
+}
+
+function buildEarningsTransactionQuery(filters: EarningsTransactionFilters, extra: Record<string, string | number> = {}): URLSearchParams {
+  const qs = new URLSearchParams()
+  if (filters.dateFrom) qs.set('dateFrom', filters.dateFrom)
+  if (filters.dateTo) qs.set('dateTo', filters.dateTo)
+  if (filters.paymentMethod) qs.set('paymentMethod', filters.paymentMethod)
+  if (filters.pricingTier) qs.set('pricingTier', filters.pricingTier)
+  if (filters.search) qs.set('search', filters.search)
+  for (const [key, value] of Object.entries(extra)) qs.set(key, String(value))
+  return qs
+}
+
+/** The Super Admin's own subscription-sales earnings — entirely separate from
+ * any Organization's own Dashboard/Revenue (their leads/deals/pipeline). */
+export const earningsApi = {
+  getSummary: () => request<EarningsSummary>('/earnings/summary'),
+
+  getTrend: (granularity: EarningsGranularity, dateFrom?: string, dateTo?: string) => {
+    const qs = new URLSearchParams({ granularity })
+    if (dateFrom) qs.set('dateFrom', dateFrom)
+    if (dateTo) qs.set('dateTo', dateTo)
+    return request<EarningsTrendResponse>(`/earnings/trend?${qs.toString()}`)
+  },
+
+  getByPaymentMethod: (dateFrom?: string, dateTo?: string) => {
+    const qs = new URLSearchParams()
+    if (dateFrom) qs.set('dateFrom', dateFrom)
+    if (dateTo) qs.set('dateTo', dateTo)
+    return request<{ breakdown: PaymentMethodBreakdownRow[] }>(`/earnings/by-payment-method?${qs.toString()}`)
+  },
+
+  getByTier: (dateFrom?: string, dateTo?: string) => {
+    const qs = new URLSearchParams()
+    if (dateFrom) qs.set('dateFrom', dateFrom)
+    if (dateTo) qs.set('dateTo', dateTo)
+    return request<{ breakdown: TierBreakdownRow[] }>(`/earnings/by-tier?${qs.toString()}`)
+  },
+
+  getPromoPerformance: () => request<{ promo_codes: PromoCodePerformanceRow[] }>('/earnings/promo-performance'),
+
+  listTransactions: (filters: EarningsTransactionFilters, page: number, pageSize: number) =>
+    request<{ transactions: EarningsTransaction[]; total: number }>(
+      `/earnings/transactions?${buildEarningsTransactionQuery(filters, { page, pageSize }).toString()}`
+    ),
+
+  async downloadTransactionsCsv(filters: EarningsTransactionFilters) {
+    const res = await fetch(`/api${withOrgScope(`/earnings/transactions/export?${buildEarningsTransactionQuery(filters).toString()}`)}`, {
+      headers: await authHeader(),
+    })
+    if (!res.ok) throw new ApiError(res.status, 'Failed to export earnings transactions')
+
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `Earnings_Transactions_${new Date().toISOString().slice(0, 10)}.csv`
     document.body.appendChild(a)
     a.click()
     a.remove()

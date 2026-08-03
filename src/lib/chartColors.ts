@@ -47,6 +47,28 @@ export const TREND_COLORS = {
   emailsSent: CATEGORICAL_PALETTE[1],
 }
 
+// Gross vs Net revenue — two series of the same unit (currency) on one axis,
+// so they reuse the first two categorical hues in fixed order (already
+// validated above), same convention as TREND_COLORS.
+export const REVENUE_TREND_COLORS = {
+  gross: CATEGORICAL_PALETTE[0],
+  net: CATEGORICAL_PALETTE[1],
+}
+
+// 7 fixed payment channels (a closed enum, not an open-ended "top N" series,
+// so each gets its own color rather than folding into "Other") — validated
+// as a full 7-color categorical set via the dataviz skill's validator
+// (dark mode, surface #111114): all pass lightness/chroma/CVD/contrast.
+export const PAYMENT_METHOD_COLORS: Record<string, string> = {
+  bkash: CATEGORICAL_PALETTE[0],
+  nagad: CATEGORICAL_PALETTE[1],
+  rocket: CATEGORICAL_PALETTE[2],
+  bank_transfer: CATEGORICAL_PALETTE[3],
+  payoneer: CATEGORICAL_PALETTE[4],
+  crypto: '#a855f7',
+  other: '#65a30d',
+}
+
 export const CHART_SURFACE = '#111114'
 export const CHART_GRID = '#26272e'
 export const CHART_TEXT_MUTED = '#9a9ca8'

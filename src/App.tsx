@@ -31,6 +31,7 @@ import { SupportContactsPage } from '@/pages/SupportContacts/SupportContactsPage
 import { AuditLogPage } from '@/pages/AuditLog/AuditLogPage'
 import { BillingPage } from '@/pages/Billing/BillingPage'
 import { PromoCodesPage } from '@/pages/PromoCodes/PromoCodesPage'
+import { EarningsPage } from '@/pages/Earnings/EarningsPage'
 import { AffiliateApplicationsPage } from '@/pages/AffiliateApplications/AffiliateApplicationsPage'
 import { NotificationsPage } from '@/pages/NotificationsPage'
 import { SubscriptionExpired } from '@/pages/SubscriptionExpired'
@@ -106,6 +107,7 @@ export default function App() {
                     <Route path="/audit-log" element={<AuditLogPage />} />
                     <Route path="/billing" element={<BillingPage />} />
                     <Route path="/promo-codes" element={<PromoCodesPage />} />
+                    <Route path="/earnings" element={<EarningsPage />} />
                     <Route path="/affiliate-applications" element={<AffiliateApplicationsPage />} />
                     <Route
                       path="/affiliates"

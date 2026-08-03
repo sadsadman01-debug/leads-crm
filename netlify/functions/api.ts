@@ -158,6 +158,15 @@ import {
   getMyOrgBilling,
 } from './routes/billing.js'
 import {
+  getEarningsSummary,
+  getEarningsTrend,
+  getEarningsByPaymentMethod,
+  getEarningsByTier,
+  getPromoCodePerformance,
+  listEarningsTransactions,
+  exportEarningsTransactionsCsv,
+} from './routes/earnings.js'
+import {
   createAffiliateApplication,
   listAffiliateApplications,
   approveAffiliateApplication,
@@ -618,6 +627,18 @@ export const handler: Handler = async (event) => {
         else if (id && sub === 'record-payment' && method === 'POST') response = await recordPayment(id, event, user)
         else throw new HttpError(404, 'Not found')
       }
+    } else if (resource === 'earnings') {
+      // The Super Admin's own subscription-sales earnings — entirely
+      // Super-Admin-only, never reachable by an Organization's own users.
+      const user = await requireUser(event)
+      if (id === 'summary') response = await getEarningsSummary(event, user)
+      else if (id === 'trend') response = await getEarningsTrend(event, user)
+      else if (id === 'by-payment-method') response = await getEarningsByPaymentMethod(event, user)
+      else if (id === 'by-tier') response = await getEarningsByTier(event, user)
+      else if (id === 'promo-performance') response = await getPromoCodePerformance(event, user)
+      else if (id === 'transactions' && sub === 'export') response = await exportEarningsTransactionsCsv(event, user)
+      else if (id === 'transactions') response = await listEarningsTransactions(event, user)
+      else throw new HttpError(404, 'Not found')
     } else if (resource === 'auth-events') {
       // Public — reached from the Login page right after
       // supabase.auth.signInWithPassword() resolves, success or failure alike;
