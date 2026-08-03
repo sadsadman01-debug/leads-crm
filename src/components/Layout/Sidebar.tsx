@@ -27,6 +27,7 @@ import {
   Tag,
   TrendingUp,
   CalendarOff,
+  Megaphone,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useAuth } from '@/contexts/AuthContext'
@@ -333,6 +334,11 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           {isSuperAdmin && (
             <NavItem to="/earnings" icon={TrendingUp}>
               Earnings
+            </NavItem>
+          )}
+          {isSuperAdmin && (
+            <NavItem to="/announcements" icon={Megaphone}>
+              Announcements
             </NavItem>
           )}
           {navItems.map(({ to, label, icon: Icon }) => (

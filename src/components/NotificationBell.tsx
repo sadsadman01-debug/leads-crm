@@ -5,6 +5,7 @@ import {
   Bell,
   UserPlus2,
   KeyRound,
+  ShieldQuestion,
   Users,
   Handshake,
   Clock,
@@ -13,8 +14,14 @@ import {
   XCircle,
   CheckCheck,
   MessageSquareText,
+  UserCheck,
+  Wallet,
+  CalendarOff,
+  Gift,
+  Megaphone,
 } from 'lucide-react'
 import { notificationsApi } from '@/lib/api'
+import { Modal } from '@/components/ui/Modal'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import { formatRelativeTime } from '@/lib/relativeTime'
@@ -23,13 +30,19 @@ import type { AppNotification, NotificationType } from '@/types/notification'
 const TYPE_ICON: Record<NotificationType, typeof Bell> = {
   signup_request: UserPlus2,
   password_reset_request: KeyRound,
+  mfa_reset_request: ShieldQuestion,
   lead_assigned: Users,
   deal_assigned: Handshake,
   follow_up_overdue: Clock,
   deal_closing_soon: CalendarClock,
   deal_closed_won: Trophy,
   deal_closed_lost: XCircle,
+  affiliate_application: UserCheck,
+  withdrawal_request: Wallet,
   product_review_reply: MessageSquareText,
+  cancellation_request: CalendarOff,
+  org_referral_reward: Gift,
+  announcement: Megaphone,
 }
 
 export function NotificationBell() {
@@ -37,6 +50,7 @@ export function NotificationBell() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
+  const [announcementDetail, setAnnouncementDetail] = useState<AppNotification | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
   // Standard click-outside-to-close: a document-level listener (rather than a
@@ -115,7 +129,13 @@ export function NotificationBell() {
   function handleItemClick(n: AppNotification) {
     if (!n.is_read) markReadMutation.mutate(n.id)
     setOpen(false)
-    if (n.link_route) navigate(n.link_route)
+    // Announcements may run longer than the dropdown's compact preview —
+    // show the full title/message in a modal instead of navigating away.
+    if (n.type === 'announcement') {
+      setAnnouncementDetail(n)
+    } else if (n.link_route) {
+      navigate(n.link_route)
+    }
   }
 
   const badgeLabel = unreadCount > 9 ? '9+' : String(unreadCount)
@@ -199,6 +219,11 @@ export function NotificationBell() {
             </button>
           </div>
       )}
+
+      <Modal open={Boolean(announcementDetail)} onClose={() => setAnnouncementDetail(null)} title={announcementDetail?.title ?? 'Announcement'}>
+        <p className="whitespace-pre-wrap text-sm text-base-200">{announcementDetail?.message}</p>
+        {announcementDetail && <p className="mt-4 text-xs text-base-500">{formatRelativeTime(announcementDetail.created_at)}</p>}
+      </Modal>
     </div>
   )
 }

@@ -31,6 +31,7 @@ import type { CustomFieldDefinition, AppliesTo, FieldType } from '@/types/custom
 import type { SavedReport, ReportRunResult, ReportType, ChartType, ReportFilters } from '@/types/report'
 import type { SignupRequest, ApproveSignupRequestResult } from '@/types/signupRequest'
 import type { PromoCode } from '@/types/promoCode'
+import type { Announcement, AnnouncementAudience } from '@/types/announcement'
 import type { ReceivingPaymentAccount, PublicPaymentAccount, PaymentAccountMethodType } from '@/types/paymentAccount'
 import type { PasswordResetRequest, PasswordResetResult } from '@/types/passwordResetRequest'
 import type { MfaResetRequest, MfaResetResult } from '@/types/mfaResetRequest'
@@ -798,6 +799,15 @@ export const promoCodesApi = {
       method: 'POST',
       body: JSON.stringify({ code }),
     }),
+}
+
+export const announcementsApi = {
+  list: () => request<{ announcements: Announcement[] }>('/announcements'),
+
+  create: (payload: { title: string; message: string; audience: AnnouncementAudience; target_organization_ids?: string[] }) =>
+    request<Announcement>('/announcements', { method: 'POST', body: JSON.stringify(payload) }),
+
+  deactivate: (id: string) => request<Announcement>(`/announcements/${id}`, { method: 'PATCH', body: JSON.stringify({ is_active: false }) }),
 }
 
 /** Accounts the Super Admin personally receives customer payments into — the

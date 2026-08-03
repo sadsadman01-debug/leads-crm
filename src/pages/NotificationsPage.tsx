@@ -5,6 +5,7 @@ import {
   Bell,
   UserPlus2,
   KeyRound,
+  ShieldQuestion,
   Users,
   Handshake,
   Clock,
@@ -15,33 +16,52 @@ import {
   ChevronLeft,
   ChevronRight,
   MessageSquareText,
+  UserCheck,
+  Wallet,
+  CalendarOff,
+  Gift,
+  Megaphone,
 } from 'lucide-react'
 import { notificationsApi } from '@/lib/api'
 import { formatRelativeTime } from '@/lib/relativeTime'
+import { Modal } from '@/components/ui/Modal'
 import type { AppNotification, NotificationType } from '@/types/notification'
 
 const TYPE_ICON: Record<NotificationType, typeof Bell> = {
   signup_request: UserPlus2,
   password_reset_request: KeyRound,
+  mfa_reset_request: ShieldQuestion,
   lead_assigned: Users,
   deal_assigned: Handshake,
   follow_up_overdue: Clock,
   deal_closing_soon: CalendarClock,
   deal_closed_won: Trophy,
   deal_closed_lost: XCircle,
+  affiliate_application: UserCheck,
+  withdrawal_request: Wallet,
   product_review_reply: MessageSquareText,
+  cancellation_request: CalendarOff,
+  org_referral_reward: Gift,
+  announcement: Megaphone,
 }
 
 const TYPE_LABELS: Array<{ value: NotificationType | ''; label: string }> = [
   { value: '', label: 'All Types' },
   { value: 'signup_request', label: 'Signup Requests' },
   { value: 'password_reset_request', label: 'Password Resets' },
+  { value: 'mfa_reset_request', label: 'MFA Resets' },
   { value: 'lead_assigned', label: 'Lead Assigned' },
   { value: 'deal_assigned', label: 'Deal Assigned' },
   { value: 'follow_up_overdue', label: 'Follow-up Overdue' },
   { value: 'deal_closing_soon', label: 'Deal Closing Soon' },
   { value: 'deal_closed_won', label: 'Deal Closed Won' },
   { value: 'deal_closed_lost', label: 'Deal Closed Lost' },
+  { value: 'affiliate_application', label: 'Affiliate Applications' },
+  { value: 'withdrawal_request', label: 'Withdrawal Requests' },
+  { value: 'product_review_reply', label: 'Product Review Replies' },
+  { value: 'cancellation_request', label: 'Cancellation Requests' },
+  { value: 'org_referral_reward', label: 'Referral Rewards' },
+  { value: 'announcement', label: 'Announcements' },
 ]
 
 type StatusFilter = 'all' | 'unread' | 'read'
@@ -53,6 +73,7 @@ export function NotificationsPage() {
   const [status, setStatus] = useState<StatusFilter>('all')
   const [type, setType] = useState<NotificationType | ''>('')
   const [page, setPage] = useState(1)
+  const [announcementDetail, setAnnouncementDetail] = useState<AppNotification | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['notifications-list', status, type, page],
@@ -81,7 +102,11 @@ export function NotificationsPage() {
 
   function handleItemClick(n: AppNotification) {
     if (!n.is_read) markReadMutation.mutate(n.id)
-    if (n.link_route) navigate(n.link_route)
+    if (n.type === 'announcement') {
+      setAnnouncementDetail(n)
+    } else if (n.link_route) {
+      navigate(n.link_route)
+    }
   }
 
   function updateStatus(next: StatusFilter) {
@@ -183,6 +208,11 @@ export function NotificationsPage() {
           </div>
         </div>
       )}
+
+      <Modal open={Boolean(announcementDetail)} onClose={() => setAnnouncementDetail(null)} title={announcementDetail?.title ?? 'Announcement'}>
+        <p className="whitespace-pre-wrap text-sm text-base-200">{announcementDetail?.message}</p>
+        {announcementDetail && <p className="mt-4 text-xs text-base-500">{formatRelativeTime(announcementDetail.created_at)}</p>}
+      </Modal>
     </div>
   )
 }

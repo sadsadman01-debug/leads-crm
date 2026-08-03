@@ -100,6 +100,7 @@ import {
   deletePromoCode,
   validatePromoCode,
 } from './routes/promoCodes.js'
+import { listAnnouncements, createAnnouncement, deactivateAnnouncement } from './routes/announcements.js'
 import {
   createPasswordResetRequest,
   listPasswordResetRequests,
@@ -753,6 +754,12 @@ export const handler: Handler = async (event) => {
         else if (id && method === 'DELETE') response = await deletePromoCode(id, event, user)
         else throw new HttpError(404, 'Not found')
       }
+    } else if (resource === 'announcements') {
+      const user = await requireUser(event)
+      if (!id && method === 'GET') response = await listAnnouncements(user)
+      else if (!id && method === 'POST') response = await createAnnouncement(event, user)
+      else if (id && method === 'PATCH') response = await deactivateAnnouncement(id, event, user)
+      else throw new HttpError(404, 'Not found')
     } else if (resource === 'payment-accounts') {
       // Same shape again: the public /pay page's account list needs no
       // session; everything else (managing the accounts) is Super-Admin-only.

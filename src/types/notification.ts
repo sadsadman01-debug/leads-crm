@@ -1,13 +1,19 @@
 export type NotificationType =
   | 'signup_request'
   | 'password_reset_request'
+  | 'mfa_reset_request'
   | 'lead_assigned'
   | 'deal_assigned'
   | 'follow_up_overdue'
   | 'deal_closing_soon'
   | 'deal_closed_won'
   | 'deal_closed_lost'
+  | 'affiliate_application'
+  | 'withdrawal_request'
   | 'product_review_reply'
+  | 'cancellation_request'
+  | 'org_referral_reward'
+  | 'announcement'
 
 export interface AppNotification {
   id: string

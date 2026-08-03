@@ -33,6 +33,7 @@ import { AuditLogPage } from '@/pages/AuditLog/AuditLogPage'
 import { BillingPage } from '@/pages/Billing/BillingPage'
 import { CancellationRequestsPage } from '@/pages/CancellationRequests/CancellationRequestsPage'
 import { PromoCodesPage } from '@/pages/PromoCodes/PromoCodesPage'
+import { AnnouncementsPage } from '@/pages/Announcements/AnnouncementsPage'
 import { EarningsPage } from '@/pages/Earnings/EarningsPage'
 import { AffiliateApplicationsPage } from '@/pages/AffiliateApplications/AffiliateApplicationsPage'
 import { NotificationsPage } from '@/pages/NotificationsPage'
@@ -112,6 +113,7 @@ export default function App() {
                     <Route path="/cancellation-requests" element={<CancellationRequestsPage />} />
                     <Route path="/promo-codes" element={<PromoCodesPage />} />
                     <Route path="/earnings" element={<EarningsPage />} />
+                    <Route path="/announcements" element={<AnnouncementsPage />} />
                     <Route path="/affiliate-applications" element={<AffiliateApplicationsPage />} />
                     <Route
                       path="/affiliates"

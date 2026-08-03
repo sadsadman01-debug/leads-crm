@@ -15,6 +15,7 @@ export type NotificationType =
   | 'product_review_reply'
   | 'cancellation_request'
   | 'org_referral_reward'
+  | 'announcement'
 
 interface NotificationInput {
   recipient_profile_id: string
@@ -44,7 +45,10 @@ export async function createNotification(input: NotificationInput) {
   if (error) console.error('Failed to create notification:', error.message)
 }
 
-async function createNotifications(inputs: NotificationInput[]) {
+/** Exported for broadcast-style fan-out (e.g. In-App Announcements) where the
+ * caller has already resolved its own recipient list + per-recipient
+ * organization_id and just needs the efficient single bulk insert. */
+export async function createNotifications(inputs: NotificationInput[]) {
   if (inputs.length === 0) return
   const supabase = getSupabaseAdmin()
   const { error } = await supabase.from('notifications').insert(
