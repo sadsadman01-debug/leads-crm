@@ -12,7 +12,7 @@ import { checkPromoCode } from '../lib/promoCodes.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const COLUMNS =
-  'id, organization_name, contact_name, email, phone, message, city, country, zip_code, status, requested_at, reviewed_at, reviewed_by, rejection_reason, pricing_tier, monthly_price_usd, payment_status, billing_cycle, annual_total_usd, referred_by_affiliate_id, promo_code_id, promo_code_text, original_price_bdt, discount_amount_bdt, final_price_bdt, payment_method'
+  'id, organization_name, contact_name, email, phone, message, city, country, zip_code, status, requested_at, reviewed_at, reviewed_by, rejection_reason, pricing_tier, monthly_price_usd, payment_status, billing_cycle, annual_total_usd, referred_by_affiliate_id, promo_code_id, promo_code_text, original_price_bdt, discount_amount_bdt, final_price_bdt, payment_method, payment_token'
 
 /** Re-runs the exact same eligibility check the "Apply" button used (active /
  * usage limit / expiry / Early Bird) and computes the discount against
@@ -170,6 +170,17 @@ export async function listSignupRequests(user: AuthedUser) {
 async function getRequestOrThrow(id: string) {
   const supabase = getSupabaseAdmin()
   const { data, error } = await supabase.from('signup_requests').select(COLUMNS).eq('id', id).maybeSingle()
+  if (error) throw new HttpError(500, error.message)
+  if (!data) throw new HttpError(404, 'Signup request not found')
+  return data
+}
+
+/** Looked up by the dedicated public `payment_token` — never the internal
+ * `id` — so the /pay page's URL parameter can never be used to enumerate or
+ * target an arbitrary request by guessing/incrementing a database key. */
+async function getRequestByPaymentTokenOrThrow(token: string) {
+  const supabase = getSupabaseAdmin()
+  const { data, error } = await supabase.from('signup_requests').select(COLUMNS).eq('payment_token', token).maybeSingle()
   if (error) throw new HttpError(500, error.message)
   if (!data) throw new HttpError(404, 'Signup request not found')
   return data
@@ -363,16 +374,17 @@ export async function updateSignupRequestPaymentStatus(id: string, event: Handle
   return json(200, data)
 }
 
-/** Public — reachable from the /pay page before any session exists. Returns
+/** Public — reachable from the /pay page before any session exists. Looked up
+ * by payment_token (never id — see getRequestByPaymentTokenOrThrow). Returns
  * only what's needed to show payment instructions (never email/phone/message,
  * even though this is the requester's own data — no auth exists here to
  * prove that, so this endpoint is treated as fully public-readable). */
-export async function getPublicSignupRequestForPayment(id: string) {
+export async function getPublicSignupRequestForPayment(token: string) {
   const supabase = getSupabaseAdmin()
   const { data, error } = await supabase
     .from('signup_requests')
-    .select('id, organization_name, status, final_price_bdt, billing_cycle, payment_method')
-    .eq('id', id)
+    .select('organization_name, status, final_price_bdt, billing_cycle, payment_method')
+    .eq('payment_token', token)
     .maybeSingle()
   if (error) throw new HttpError(500, error.message)
   if (!data) throw new HttpError(404, 'Signup request not found')
@@ -393,18 +405,19 @@ function paymentMethodFromAccount(account: { method_type: string; details: any }
   return 'other'
 }
 
-/** Public — the /pay page's "I've Completed My Payment" action. Body:
- * { payment_account_id }. Only pre-fills payment_method on a genuinely
- * pending request — never on one already approved/rejected, so this can
- * never tamper with a resolved request's record. Never marks the request as
- * paid/approved itself; that still requires the Super Admin's manual review. */
-export async function submitPaymentMethodSelection(id: string, event: HandlerEvent) {
+/** Public — the /pay page's "I've Completed My Payment" action. Looked up by
+ * payment_token (never id). Body: { payment_account_id }. Only pre-fills
+ * payment_method on a genuinely pending request — never on one already
+ * approved/rejected, so this can never tamper with a resolved request's
+ * record. Never marks the request as paid/approved itself; that still
+ * requires the Super Admin's manual review. */
+export async function submitPaymentMethodSelection(token: string, event: HandlerEvent) {
   const supabase = getSupabaseAdmin()
   const body = JSON.parse(event.body || '{}')
   const paymentAccountId = (body.payment_account_id ?? '').trim()
   if (!paymentAccountId) throw new HttpError(400, 'payment_account_id is required')
 
-  const request = await getRequestOrThrow(id)
+  const request = await getRequestByPaymentTokenOrThrow(token)
   if (request.status !== 'pending') throw new HttpError(400, 'This request has already been reviewed and can no longer be updated')
 
   const { data: account, error: accountErr } = await supabase
@@ -420,8 +433,8 @@ export async function submitPaymentMethodSelection(id: string, event: HandlerEve
   const { data, error } = await supabase
     .from('signup_requests')
     .update({ payment_method })
-    .eq('id', id)
-    .select('id, payment_method')
+    .eq('id', request.id)
+    .select('payment_method')
     .single()
   if (error) throw new HttpError(500, error.message)
 

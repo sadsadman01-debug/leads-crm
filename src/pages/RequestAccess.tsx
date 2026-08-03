@@ -140,7 +140,7 @@ export function RequestAccess() {
               </div>
             )}
             {mutation.data && (
-              <Link to={`/pay?request=${mutation.data.id}`} className="btn-primary mt-4 w-full">
+              <Link to={`/pay?request=${mutation.data.payment_token}`} className="btn-primary mt-4 w-full">
                 <Wallet size={16} />
                 Continue to Payment Instructions
               </Link>

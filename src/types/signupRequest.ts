@@ -30,6 +30,10 @@ export interface SignupRequest {
   discount_amount_bdt: number
   final_price_bdt: number | null
   payment_method: PaymentMethod | null
+  /** Non-guessable token used ONLY for the public /pay link — never the
+   * plain `id`, so leaking/guessing it can't expose or tamper with another
+   * applicant's payment flow. */
+  payment_token: string
 }
 
 export interface ApproveSignupRequestResult {

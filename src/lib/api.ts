@@ -686,22 +686,23 @@ export const signupRequestsApi = {
   updatePaymentStatus: (id: string, payment_status: PaymentStatus) =>
     request<SignupRequest>(`/signup-requests/${id}/payment-status`, { method: 'PATCH', body: JSON.stringify({ payment_status }) }),
 
-  /** Public — reachable from the /pay page before any session exists. */
-  getPublicForPayment: (id: string) =>
+  /** Public — reachable from the /pay page before any session exists.
+   * `token` is the dedicated payment_token, never the request's real id. */
+  getPublicForPayment: (token: string) =>
     requestPublic<{
-      id: string
       organization_name: string
       status: 'pending' | 'approved' | 'rejected'
       final_price_bdt: number | null
       billing_cycle: BillingCycle
       payment_method: PaymentMethod | null
-    }>(`/signup-requests/${id}/public`),
+    }>(`/signup-requests/${token}/public`),
 
-  /** Public — the /pay page's "I've Completed My Payment" action. Never marks
+  /** Public — the /pay page's "I've Completed My Payment" action. `token` is
+   * the dedicated payment_token, never the request's real id. Never marks
    * the request paid/approved; only pre-fills payment_method for the Super
    * Admin's Approval step. */
-  submitPaymentMethod: (id: string, payment_account_id: string) =>
-    requestPublic<{ id: string; payment_method: PaymentMethod }>(`/signup-requests/${id}/payment-method`, {
+  submitPaymentMethod: (token: string, payment_account_id: string) =>
+    requestPublic<{ payment_method: PaymentMethod }>(`/signup-requests/${token}/payment-method`, {
       method: 'POST',
       body: JSON.stringify({ payment_account_id }),
     }),

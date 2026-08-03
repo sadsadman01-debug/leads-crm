@@ -101,7 +101,9 @@ function PaymentAccountCard({
 export function Pay() {
   usePlatformBranding()
   const [searchParams] = useSearchParams()
-  const requestId = searchParams.get('request')?.trim() || null
+  // The ?request= value is a dedicated non-guessable payment_token, never the
+  // signup request's real database id — see migration 045.
+  const paymentToken = searchParams.get('request')?.trim() || null
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
 
   const { data: accountsData, isLoading: accountsLoading } = useQuery({
@@ -111,20 +113,20 @@ export function Pay() {
   const accounts = accountsData?.accounts ?? []
 
   const { data: request, isLoading: requestLoading } = useQuery({
-    queryKey: ['public-signup-request', requestId],
-    queryFn: () => signupRequestsApi.getPublicForPayment(requestId!),
-    enabled: Boolean(requestId),
+    queryKey: ['public-signup-request', paymentToken],
+    queryFn: () => signupRequestsApi.getPublicForPayment(paymentToken!),
+    enabled: Boolean(paymentToken),
   })
 
   const mutation = useMutation({
-    mutationFn: () => signupRequestsApi.submitPaymentMethod(requestId!, selectedAccountId!),
+    mutationFn: () => signupRequestsApi.submitPaymentMethod(paymentToken!, selectedAccountId!),
   })
 
   const grouped = (['mfs', 'bank_account', 'crypto'] as PaymentAccountMethodType[])
     .map((type) => ({ type, accounts: accounts.filter((a) => a.method_type === type) }))
     .filter((g) => g.accounts.length > 0)
 
-  const canSubmitSelection = Boolean(requestId) && request?.status === 'pending'
+  const canSubmitSelection = Boolean(paymentToken) && request?.status === 'pending'
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-base-950 px-4 py-8 animate-fadeIn">
@@ -150,9 +152,9 @@ export function Pay() {
           <p className="mt-1 text-sm text-base-400">Send your payment using any method below, then confirm which one you used.</p>
         </div>
 
-        {requestId && requestLoading && <p className="text-center text-sm text-base-400">Loading your request…</p>}
+        {paymentToken && requestLoading && <p className="text-center text-sm text-base-400">Loading your request…</p>}
 
-        {requestId && !requestLoading && request && (
+        {paymentToken && !requestLoading && request && (
           <div className="mb-6 rounded-xl border border-accent-500/40 bg-gradient-to-br from-accent-500/15 to-accent-500/5 p-4 text-center">
             <p className="text-xs uppercase tracking-wide text-base-400">Amount to Pay</p>
             <p className="mt-1 text-2xl font-semibold text-base-100">
