@@ -12,10 +12,11 @@ import { ALLOWED_SIGNUP_COUNTRIES } from '../lib/allowedSignupCountries.js'
 import { PAYMENT_METHODS } from '../lib/paymentMethods.js'
 import { checkPromoCode } from '../lib/promoCodes.js'
 import { generateUniqueOrgReferralCode } from '../lib/orgReferralCode.js'
+import { generateUniquePaymentReferenceCode } from '../lib/paymentReferenceCode.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const COLUMNS =
-  'id, organization_name, contact_name, email, phone, message, city, country, zip_code, status, requested_at, reviewed_at, reviewed_by, rejection_reason, pricing_tier, monthly_price_usd, payment_status, billing_cycle, annual_total_usd, referred_by_affiliate_id, referred_by_organization_id, promo_code_id, promo_code_text, original_price_bdt, discount_amount_bdt, final_price_bdt, payment_method, payment_token'
+  'id, organization_name, contact_name, email, phone, message, city, country, zip_code, status, requested_at, reviewed_at, reviewed_by, rejection_reason, pricing_tier, monthly_price_usd, payment_status, billing_cycle, annual_total_usd, referred_by_affiliate_id, referred_by_organization_id, promo_code_id, promo_code_text, original_price_bdt, discount_amount_bdt, final_price_bdt, payment_method, payment_token, payment_reference_code'
 
 /** Re-runs the exact same eligibility check the "Apply" button used (active /
  * usage limit / expiry / Early Bird) and computes the discount against
@@ -129,6 +130,11 @@ export async function createSignupRequest(event: HandlerEvent) {
     referred_by_organization_id = referringOrg?.id ?? null
   }
 
+  // Distinct from payment_token below: this is the short, human-typable code
+  // the payer includes as a reference/note when actually sending money, so
+  // the Super Admin can match it against their own bKash/bank statement.
+  const payment_reference_code = await generateUniquePaymentReferenceCode('signup_requests')
+
   const { data, error } = await supabase
     .from('signup_requests')
     .insert({
@@ -157,6 +163,7 @@ export async function createSignupRequest(event: HandlerEvent) {
       // secure, application-generated value — never sequential, never
       // derivable from the request's own internal id/email/timestamp.
       payment_token: crypto.randomUUID(),
+      payment_reference_code,
     })
     .select(COLUMNS)
     .single()
@@ -327,6 +334,13 @@ export async function approveSignupRequest(id: string, event: HandlerEvent, user
     throw new HttpError(400, `payment_method must be one of ${PAYMENT_METHODS.join(', ')}`)
   }
   const payment_method = body.payment_method as (typeof PAYMENT_METHODS)[number]
+  // The UI gates the Approve button on this same checkbox, but the backend
+  // enforces it independently too — there is no automated bank/MFS
+  // verification anywhere in this app, so this manual attestation is the
+  // only actual confirmation step that a payment was received.
+  if (body.payment_verified !== true) {
+    throw new HttpError(400, 'You must confirm you have verified the payment reference code before approving.')
+  }
 
   const temporaryPassword = generateTempPassword()
   const now = new Date()
@@ -409,6 +423,7 @@ export async function approveSignupRequest(id: string, event: HandlerEvent, user
     paid_at: firstPaymentConfirmedAt.slice(0, 10),
     recorded_by: user.id,
     payment_method,
+    payment_reference_code: request.payment_reference_code,
   })
 
   // Increment times_used exactly once, only on approval (never on rejection).
@@ -516,7 +531,7 @@ export async function getPublicSignupRequestForPayment(token: string) {
   const supabase = getSupabaseAdmin()
   const { data, error } = await supabase
     .from('signup_requests')
-    .select('organization_name, status, final_price_bdt, billing_cycle, payment_method')
+    .select('organization_name, status, final_price_bdt, billing_cycle, payment_method, payment_reference_code')
     .eq('payment_token', token)
     .maybeSingle()
   if (error) throw new HttpError(500, error.message)

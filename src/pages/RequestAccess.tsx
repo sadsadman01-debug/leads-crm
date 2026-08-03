@@ -5,6 +5,7 @@ import { Building2, ArrowLeft, AlertCircle, Loader2, CheckCircle2, Sparkles, Par
 import { signupRequestsApi, billingApi, promoCodesApi, referralClicksApi, pageViewsApi, orgReferralsApi } from '@/lib/api'
 import { usePlatformBranding } from '@/hooks/usePlatformBranding'
 import { PreAuthHelpWidget } from '@/components/PreAuthHelpWidget'
+import { CopyButton } from '@/components/TempPasswordResult'
 import { PRICING_TIER_LABELS, type BillingCycle } from '@/types/billing'
 import { COUNTRIES } from '@/lib/countries'
 import { ALLOWED_SIGNUP_COUNTRIES } from '@/lib/allowedSignupCountries'
@@ -134,6 +135,20 @@ export function RequestAccess() {
             <p className="mt-2 text-sm text-base-400">
               Thanks! Your request has been submitted. Our team will review it and reach out to you by email soon.
             </p>
+            {mutation.data && (
+              <div className="mt-4 w-full rounded-lg border border-accent-500/40 bg-base-850 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-base-400">Your Payment Reference Code</p>
+                <p className="mt-1 select-all font-mono text-2xl font-bold tracking-widest text-accent-400">{mutation.data.payment_reference_code}</p>
+                <div className="mt-2 flex justify-center">
+                  <CopyButton text={mutation.data.payment_reference_code} label="Copy Reference Code" />
+                </div>
+                <p className="mt-3 text-xs text-warn">
+                  ⚠️ IMPORTANT: You MUST include this exact reference code when sending your payment (e.g., in the "Reference," "Note," or "Remarks" field
+                  of your bKash, Nagad, Rocket, or bank transfer). Payments received without this reference code cannot be matched to your account and may
+                  cause delays or rejection of your application.
+                </p>
+              </div>
+            )}
             {pricing && (
               <div className="mt-4 w-full rounded-lg bg-base-850 p-3 text-left text-sm">
                 <p className="text-base-200">

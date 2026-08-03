@@ -28,6 +28,7 @@ interface BillingRow {
   payment_method: string | null
   is_referral_reward: boolean
   notes: string | null
+  payment_reference_code: string | null
 }
 
 interface OrgLite {
@@ -74,7 +75,9 @@ async function fetchAllBillingHistory(dateFrom?: string, dateTo?: string): Promi
   const supabase = getSupabaseAdmin()
   const rows: BillingRow[] = []
   for (let offset = 0; offset < MAX_ROWS; offset += CHUNK_SIZE) {
-    let query = supabase.from('billing_history').select('id, organization_id, amount_usd, paid_at, payment_method, is_referral_reward, notes')
+    let query = supabase
+      .from('billing_history')
+      .select('id, organization_id, amount_usd, paid_at, payment_method, is_referral_reward, notes, payment_reference_code')
     if (dateFrom) query = query.gte('paid_at', dateFrom)
     if (dateTo) query = query.lte('paid_at', dateTo)
     const { data, error } = await query.order('paid_at', { ascending: true }).range(offset, offset + CHUNK_SIZE - 1)
@@ -474,6 +477,7 @@ async function resolveFilteredTransactions(filters: TransactionFilters) {
       promo_code_text: isFirstPayment ? org?.promo_code_text ?? null : null,
       discount_amount: isFirstPayment ? Number(org?.discount_amount_bdt ?? 0) : 0,
       reason: row.is_referral_reward ? row.notes : null,
+      payment_reference_code: row.payment_reference_code,
     }
   })
 
@@ -492,6 +496,7 @@ async function resolveFilteredTransactions(filters: TransactionFilters) {
       promo_code_text: null,
       discount_amount: 0,
       reason: row.reason,
+      payment_reference_code: null,
     }
   })
 
@@ -535,6 +540,7 @@ export async function exportEarningsTransactionsCsv(event: HandlerEvent, user: A
     pricing_tier: r.pricing_tier ?? '',
     billing_cycle: r.billing_cycle ?? '',
     reason: r.reason ?? '',
+    payment_reference_code: r.payment_reference_code ?? '',
   }))
 
   const dateStr = todayStr()

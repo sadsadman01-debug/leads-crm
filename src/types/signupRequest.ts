@@ -34,6 +34,10 @@ export interface SignupRequest {
    * plain `id`, so leaking/guessing it can't expose or tamper with another
    * applicant's payment flow. */
   payment_token: string
+  /** Short, human-typable code the payer includes as a reference/note when
+   * actually sending money, so the Super Admin can match the payment to this
+   * request — distinct from payment_token above, which only secures the URL. */
+  payment_reference_code: string
 }
 
 export interface ApproveSignupRequestResult {

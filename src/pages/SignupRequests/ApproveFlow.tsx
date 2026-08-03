@@ -30,6 +30,7 @@ export function ApproveFlow({ request, onClose }: { request: SignupRequest | nul
   const [result, setResult] = useState<ApproveSignupRequestResult | null>(null)
   const [draft, setDraft] = useState('')
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | ''>('')
+  const [verified, setVerified] = useState(false)
 
   useEffect(() => {
     if (request) {
@@ -38,11 +39,12 @@ export function ApproveFlow({ request, onClose }: { request: SignupRequest | nul
       // Pre-filled by the applicant via the public /pay page, if they used
       // it — the Super Admin can still change this before approving.
       setPaymentMethod(request.payment_method ?? '')
+      setVerified(false)
     }
   }, [request])
 
   const mutation = useMutation({
-    mutationFn: () => signupRequestsApi.approve(request!.id, paymentMethod as PaymentMethod),
+    mutationFn: () => signupRequestsApi.approve(request!.id, paymentMethod as PaymentMethod, true),
     onSuccess: (data) => {
       setResult(data)
       setDraft(draftWelcomeMessage(data))
@@ -119,6 +121,23 @@ export function ApproveFlow({ request, onClose }: { request: SignupRequest | nul
           </div>
         )}
 
+        <div className="rounded-lg border border-accent-500/40 bg-base-850 p-3 text-center">
+          <p className="text-xs font-semibold uppercase tracking-wide text-base-400">Payment Reference Code</p>
+          <p className="mt-1 select-all font-mono text-2xl font-bold tracking-widest text-accent-400">{request.payment_reference_code}</p>
+          <p className="mt-1 text-xs text-base-500">Check your bKash/bank statement for a transaction containing this exact code.</p>
+        </div>
+
+        <label className="flex items-start gap-2 rounded-lg border border-base-700/60 bg-base-850 p-3 text-sm text-base-200">
+          <input
+            type="checkbox"
+            className="mt-0.5 h-4 w-4 rounded border-base-600 bg-base-800"
+            checked={verified}
+            onChange={(e) => setVerified(e.target.checked)}
+          />
+          I have verified a payment was received with reference code <strong className="font-mono">{request.payment_reference_code}</strong> matching the
+          expected amount
+        </label>
+
         <div>
           <label className="mb-1 block text-xs font-medium text-base-400">Payment Method *</label>
           <select
@@ -148,7 +167,7 @@ export function ApproveFlow({ request, onClose }: { request: SignupRequest | nul
 
       <div className="mt-5 flex justify-end gap-3 border-t border-base-700/60 pt-4">
         <button className="btn-secondary" onClick={handleClose}>Cancel</button>
-        <button className="btn-primary" disabled={mutation.isPending || !paymentMethod} onClick={() => mutation.mutate()}>
+        <button className="btn-primary" disabled={mutation.isPending || !paymentMethod || !verified} onClick={() => mutation.mutate()}>
           {mutation.isPending ? 'Creating…' : 'Approve & Create Account'}
         </button>
       </div>

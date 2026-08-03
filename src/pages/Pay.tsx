@@ -2,10 +2,31 @@ import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { CheckCircle2, AlertCircle, ArrowLeft, Copy, Check, Smartphone, Landmark, Bitcoin, Wallet } from 'lucide-react'
-import { paymentAccountsApi, signupRequestsApi } from '@/lib/api'
+import { paymentAccountsApi, signupRequestsApi, renewalPaymentsApi } from '@/lib/api'
 import { usePlatformBranding } from '@/hooks/usePlatformBranding'
 import { PAYOUT_METHOD_LABELS, type MfsDetails, type BankAccountDetails, type CryptoDetails } from '@/types/affiliate'
 import type { PublicPaymentAccount, PaymentAccountMethodType } from '@/types/paymentAccount'
+import { CopyButton } from '@/components/TempPasswordResult'
+
+/** Prominently displayed at the top of the page (above the payment method
+ * list) whether this is a signup or renewal payment — the reference code and
+ * the warning beneath it look and behave identically in both contexts. */
+function ReferenceCodeCard({ code }: { code: string }) {
+  return (
+    <div className="mb-6 rounded-xl border border-accent-500/40 bg-base-850 p-5 text-center">
+      <p className="text-xs font-semibold uppercase tracking-wide text-base-400">Your Payment Reference Code</p>
+      <p className="mt-1 select-all font-mono text-3xl font-bold tracking-widest text-accent-400">{code}</p>
+      <div className="mt-3 flex justify-center">
+        <CopyButton text={code} label="Copy Reference Code" />
+      </div>
+      <p className="mt-4 text-xs text-warn">
+        ⚠️ IMPORTANT: You MUST include this exact reference code when sending your payment (e.g., in the "Reference," "Note," or "Remarks" field of your
+        bKash, Nagad, Rocket, or bank transfer). Payments received without this reference code cannot be matched to your account and may cause delays or
+        rejection of your application/renewal.
+      </p>
+    </div>
+  )
+}
 
 const METHOD_ICON: Record<PaymentAccountMethodType, typeof Smartphone> = {
   mfs: Smartphone,
@@ -144,8 +165,12 @@ export function Pay() {
   usePlatformBranding()
   const [searchParams] = useSearchParams()
   // The ?token= value is a dedicated non-guessable payment_token, never the
-  // signup request's real database id — see migrations 045/046.
+  // signup request's real database id — see migrations 045/046. ?renewal_token=
+  // is the equivalent for a renewal_payment_requests row — the two are
+  // mutually exclusive on any given /pay link.
   const paymentToken = searchParams.get('token')?.trim() || null
+  const renewalToken = searchParams.get('renewal_token')?.trim() || null
+  const isRenewal = Boolean(renewalToken)
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
 
   const { data: accountsData, isLoading: accountsLoading } = useQuery({
@@ -166,6 +191,17 @@ export function Pay() {
     retry: false,
   })
 
+  const {
+    data: renewal,
+    isLoading: renewalLoading,
+    isError: renewalIsError,
+  } = useQuery({
+    queryKey: ['public-renewal-payment', renewalToken],
+    queryFn: () => renewalPaymentsApi.getPublicForPayment(renewalToken!),
+    enabled: Boolean(renewalToken),
+    retry: false,
+  })
+
   const mutation = useMutation({
     mutationFn: () => signupRequestsApi.submitPaymentMethod(paymentToken!, selectedAccountId!),
   })
@@ -183,9 +219,15 @@ export function Pay() {
   const isAwaitingPayment = request?.status === 'awaiting_payment'
   const isAlreadyConfirmed = request?.status === 'pending'
   const isResolvedOrInvalid =
-    Boolean(paymentToken) && !requestLoading && (requestIsError || (request && (request.status === 'approved' || request.status === 'rejected')))
-  const showAmount = Boolean(request) && (isAwaitingPayment || isAlreadyConfirmed)
-  const canSubmitSelection = Boolean(paymentToken) && isAwaitingPayment
+    !isRenewal &&
+    Boolean(paymentToken) &&
+    !requestLoading &&
+    (requestIsError || (request && (request.status === 'approved' || request.status === 'rejected')))
+  const isRenewalAlreadyConfirmed = isRenewal && renewal?.status === 'confirmed'
+  const isRenewalInvalid = isRenewal && !renewalLoading && renewalIsError
+  const showAmount = isRenewal ? Boolean(renewal) && !isRenewalAlreadyConfirmed : Boolean(request) && (isAwaitingPayment || isAlreadyConfirmed)
+  const canSubmitSelection = !isRenewal && Boolean(paymentToken) && isAwaitingPayment
+  const referenceCode = isRenewal ? renewal?.payment_reference_code : request?.payment_reference_code
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-base-950 px-4 py-8 animate-fadeIn">
@@ -212,8 +254,11 @@ export function Pay() {
         </div>
 
         {paymentToken && requestLoading && <p className="text-center text-sm text-base-400">Loading your request…</p>}
+        {renewalToken && renewalLoading && <p className="text-center text-sm text-base-400">Loading your renewal…</p>}
 
-        {showAmount && request && (
+        {referenceCode && !isResolvedOrInvalid && !isRenewalInvalid && <ReferenceCodeCard code={referenceCode} />}
+
+        {showAmount && !isRenewal && request && (
           <div className="mb-6 rounded-xl border border-accent-500/40 bg-gradient-to-br from-accent-500/15 to-accent-500/5 p-4 text-center">
             <p className="text-xs uppercase tracking-wide text-base-400">Amount to Pay</p>
             <p className="mt-1 text-2xl font-semibold text-base-100">
@@ -225,7 +270,55 @@ export function Pay() {
           </div>
         )}
 
-        {isResolvedOrInvalid ? (
+        {showAmount && isRenewal && renewal && (
+          <div className="mb-6 rounded-xl border border-accent-500/40 bg-gradient-to-br from-accent-500/15 to-accent-500/5 p-4 text-center">
+            <p className="text-xs uppercase tracking-wide text-base-400">Amount to Pay</p>
+            <p className="mt-1 text-2xl font-semibold text-base-100">৳{renewal.amount_bdt}</p>
+            {renewal.organization_name && <p className="mt-1 text-xs text-base-500">For {renewal.organization_name}</p>}
+          </div>
+        )}
+
+        {isRenewal ? (
+          isRenewalInvalid ? (
+            <div className="flex flex-col items-center gap-2 rounded-xl border border-base-700/60 bg-base-850 p-8 text-center">
+              <AlertCircle size={24} className="text-base-500" />
+              <p className="text-sm text-base-300">This payment link is no longer valid.</p>
+            </div>
+          ) : isRenewalAlreadyConfirmed ? (
+            <div className="flex flex-col items-center gap-3 rounded-xl border border-success/40 bg-success-bg p-6 text-center">
+              <CheckCircle2 size={28} className="text-success" />
+              <p className="text-sm text-base-100">This renewal has already been confirmed. Thanks!</p>
+            </div>
+          ) : accountsLoading ? (
+            <p className="text-center text-sm text-base-400">Loading payment methods…</p>
+          ) : grouped.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 rounded-xl border border-base-700/60 bg-base-850 p-8 text-center">
+              <AlertCircle size={24} className="text-base-500" />
+              <p className="text-sm text-base-300">No payment methods are currently available. Please contact us directly.</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {grouped.map((group) => (
+                <div key={group.type}>
+                  <h2 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-base-400">
+                    {PAYOUT_METHOD_LABELS[group.type]}
+                  </h2>
+                  <div className="space-y-2">
+                    {group.accounts.map((account) => (
+                      <PaymentAccountOption
+                        key={account.id}
+                        account={account}
+                        selected={selectedAccountId === account.id}
+                        onSelect={() => setSelectedAccountId(account.id)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {selectedAccount && <SelectedAccountDetails account={selectedAccount} />}
+            </div>
+          )
+        ) : isResolvedOrInvalid ? (
           <div className="flex flex-col items-center gap-2 rounded-xl border border-base-700/60 bg-base-850 p-8 text-center">
             <AlertCircle size={24} className="text-base-500" />
             <p className="text-sm text-base-300">This payment link is no longer valid or has already been processed.</p>

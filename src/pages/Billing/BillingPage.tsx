@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CircleDollarSign, Receipt, Undo2, History, XCircle, RotateCcw } from 'lucide-react'
-import { billingApi } from '@/lib/api'
+import { CircleDollarSign, Receipt, Undo2, History, XCircle, RotateCcw, RefreshCw } from 'lucide-react'
+import { billingApi, renewalPaymentsApi } from '@/lib/api'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import {
@@ -13,6 +13,7 @@ import {
   type OrganizationBillingRow,
   type PaymentMethod,
 } from '@/types/billing'
+import type { RenewalPaymentWithOrg } from '@/types/renewalPayment'
 
 const STATUS_TONE: Record<BillingStatus, 'success' | 'warn' | 'danger' | 'neutral' | 'accent'> = {
   paid: 'success',
@@ -148,7 +149,123 @@ export function BillingPage() {
       <RecordPaymentModal org={recording} onClose={() => setRecording(null)} />
       <RecordRefundModal org={refunding} onClose={() => setRefunding(null)} />
       <BillingHistoryModal org={viewingHistory} onClose={() => setViewingHistory(null)} />
+
+      <RenewalPaymentsSection />
     </div>
+  )
+}
+
+function RenewalPaymentsSection() {
+  const queryClient = useQueryClient()
+  const { data, isLoading } = useQuery({ queryKey: ['renewal-payments-pending'], queryFn: renewalPaymentsApi.listPending })
+  const renewals = data?.renewals ?? []
+  const [confirming, setConfirming] = useState<RenewalPaymentWithOrg | null>(null)
+
+  return (
+    <div>
+      <h2 className="mb-3 text-lg font-semibold text-base-100">Renewal Payments</h2>
+      {isLoading ? (
+        <div className="card p-8 text-center text-base-400">Loading…</div>
+      ) : renewals.length === 0 ? (
+        <div className="card flex flex-col items-center gap-3 p-10 text-center">
+          <RefreshCw size={28} className="text-base-500" />
+          <p className="text-base-300">No pending renewal payments.</p>
+        </div>
+      ) : (
+        <div className="card overflow-x-auto p-6">
+          <table className="w-full min-w-[720px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-base-700/60 text-xs uppercase tracking-wide text-base-400">
+                <th className="py-2 pr-3 font-medium">Organization</th>
+                <th className="px-3 py-2 font-medium">Reference Code</th>
+                <th className="px-3 py-2 font-medium">Amount</th>
+                <th className="px-3 py-2 font-medium">Requested</th>
+                <th className="px-3 py-2 font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {renewals.map((r) => (
+                <tr key={r.id} className="border-b border-base-800">
+                  <td className="py-3 pr-3 font-medium text-base-100">{r.organization_name}</td>
+                  <td className="px-3 py-3 font-mono text-accent-400">{r.payment_reference_code}</td>
+                  <td className="px-3 py-3 tabular-nums text-base-300">৳{r.amount_bdt}</td>
+                  <td className="px-3 py-3 text-base-400">{new Date(r.requested_at).toLocaleString()}</td>
+                  <td className="px-3 py-3">
+                    <button className="btn-ghost px-2 text-xs text-accent-400" onClick={() => setConfirming(r)}>
+                      <Receipt size={13} />
+                      Confirm Payment Received
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {confirming && (
+        <ConfirmRenewalModal
+          renewal={confirming}
+          onClose={() => setConfirming(null)}
+          onConfirmed={() => {
+            queryClient.invalidateQueries({ queryKey: ['renewal-payments-pending'] })
+            queryClient.invalidateQueries({ queryKey: ['billing'] })
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function ConfirmRenewalModal({
+  renewal,
+  onClose,
+  onConfirmed,
+}: {
+  renewal: RenewalPaymentWithOrg
+  onClose: () => void
+  onConfirmed: () => void
+}) {
+  const [verified, setVerified] = useState(false)
+
+  const mutation = useMutation({
+    mutationFn: () => renewalPaymentsApi.confirm(renewal.id),
+    onSuccess: () => {
+      onConfirmed()
+      onClose()
+    },
+  })
+
+  return (
+    <Modal open onClose={onClose} title={`Confirm Renewal — ${renewal.organization_name}`}>
+      <div className="space-y-4">
+        <div className="rounded-lg border border-accent-500/40 bg-base-850 p-3 text-center">
+          <p className="text-xs font-semibold uppercase tracking-wide text-base-400">Payment Reference Code</p>
+          <p className="mt-1 select-all font-mono text-2xl font-bold tracking-widest text-accent-400">{renewal.payment_reference_code}</p>
+          <p className="mt-1 text-xs text-base-500">Expected amount: ৳{renewal.amount_bdt}</p>
+        </div>
+
+        <label className="flex items-start gap-2 rounded-lg border border-base-700/60 bg-base-850 p-3 text-sm text-base-200">
+          <input
+            type="checkbox"
+            className="mt-0.5 h-4 w-4 rounded border-base-600 bg-base-800"
+            checked={verified}
+            onChange={(e) => setVerified(e.target.checked)}
+          />
+          I have verified a payment was received with reference code <strong className="font-mono">{renewal.payment_reference_code}</strong> matching the
+          expected amount
+        </label>
+
+        {mutation.isError && <p className="text-sm text-danger">{(mutation.error as Error).message}</p>}
+
+        <div className="flex justify-end gap-3 border-t border-base-700/60 pt-4">
+          <button className="btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn-primary" disabled={mutation.isPending || !verified} onClick={() => mutation.mutate()}>
+            {mutation.isPending ? 'Confirming…' : 'Confirm Payment Received'}
+          </button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 
@@ -409,6 +526,9 @@ function BillingHistoryModal({ org, onClose }: { org: OrganizationBillingRow | n
                 <p className="mt-1 text-xs text-base-400">
                   ৳{entry.amount_bdt} {entry.payment_method && `via ${PAYMENT_METHOD_LABELS[entry.payment_method as PaymentMethod] ?? entry.payment_method}`}
                   {entry.notes && ` — ${entry.notes}`}
+                  {entry.payment_reference_code && (
+                    <span className="ml-1 font-mono text-base-500">[Ref: {entry.payment_reference_code}]</span>
+                  )}
                 </p>
               )}
               {entry.type === 'refund' && (

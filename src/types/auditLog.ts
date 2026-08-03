@@ -49,6 +49,10 @@ export type AuditEventType =
   | 'refund_recorded'
   | 'org_referral_reward_granted'
   | 'org_referral_reward_skipped'
+  | 'announcement_created'
+  | 'announcement_deactivated'
+  | 'renewal_payment_requested'
+  | 'renewal_payment_confirmed'
 
 export interface AuditLogEntry {
   id: string
@@ -130,6 +134,10 @@ export const AUDIT_EVENT_LABELS: Record<AuditEventType, string> = {
   refund_recorded: 'Refund recorded',
   org_referral_reward_granted: 'Business referral reward granted',
   org_referral_reward_skipped: 'Business referral reward skipped',
+  announcement_created: 'Announcement created',
+  announcement_deactivated: 'Announcement deactivated',
+  renewal_payment_requested: 'Renewal payment requested',
+  renewal_payment_confirmed: 'Renewal payment confirmed',
 }
 
 /** Security-relevant events get one color family in the UI; every other

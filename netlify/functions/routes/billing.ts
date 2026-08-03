@@ -338,7 +338,7 @@ export async function getOrganizationBillingHistory(organizationId: string, user
     await Promise.all([
       supabase
         .from('billing_history')
-        .select('id, amount_usd, paid_at, payment_method, notes')
+        .select('id, amount_usd, paid_at, payment_method, notes, payment_reference_code')
         .eq('organization_id', organizationId)
         .order('paid_at', { ascending: false }),
       supabase
@@ -363,6 +363,7 @@ export async function getOrganizationBillingHistory(organizationId: string, user
       amount_bdt: Number(p.amount_usd),
       payment_method: p.payment_method,
       notes: p.notes,
+      payment_reference_code: p.payment_reference_code,
       id: p.id,
     })),
     ...(refunds ?? []).map((r) => ({

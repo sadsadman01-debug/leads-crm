@@ -102,6 +102,13 @@ import {
 } from './routes/promoCodes.js'
 import { listAnnouncements, createAnnouncement, deactivateAnnouncement } from './routes/announcements.js'
 import {
+  createRenewalPaymentRequest,
+  getMyPendingRenewal,
+  getPublicRenewalForPayment,
+  listPendingRenewalPayments,
+  confirmRenewalPayment,
+} from './routes/renewalPayments.js'
+import {
   createPasswordResetRequest,
   listPasswordResetRequests,
   resolvePasswordResetRequest,
@@ -283,6 +290,21 @@ export const handler: Handler = async (event) => {
         else if (id && sub === 'approve' && method === 'POST') response = await approveSignupRequest(id, event, user)
         else if (id && sub === 'reject' && method === 'POST') response = await rejectSignupRequest(id, event, user)
         else if (id && sub === 'payment-status' && method === 'PATCH') response = await updateSignupRequestPaymentStatus(id, event, user)
+        else throw new HttpError(404, 'Not found')
+      }
+    } else if (resource === 'renewal-payments') {
+      // Same shape as signup-requests: the /pay page's own-request read is
+      // public (looked up by token, never id); everything else needs a
+      // session, with per-function role checks inside (any org member can
+      // request/view their own org's renewal; confirming is Super-Admin-only).
+      if (id && sub === 'public' && method === 'GET') {
+        response = await getPublicRenewalForPayment(id)
+      } else {
+        const user = await requireUser(event)
+        if (!id && method === 'GET') response = await listPendingRenewalPayments(user)
+        else if (!id && method === 'POST') response = await createRenewalPaymentRequest(event, user)
+        else if (id === 'my-pending' && method === 'GET') response = await getMyPendingRenewal(event, user)
+        else if (id && method === 'PATCH') response = await confirmRenewalPayment(id, event, user)
         else throw new HttpError(404, 'Not found')
       }
     } else if (resource === 'password-reset-requests') {

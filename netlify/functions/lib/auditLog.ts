@@ -55,6 +55,8 @@ export type AuditEventType =
   | 'org_referral_reward_skipped'
   | 'announcement_created'
   | 'announcement_deactivated'
+  | 'renewal_payment_requested'
+  | 'renewal_payment_confirmed'
 
 interface InsertAuditLogParams {
   eventType: AuditEventType

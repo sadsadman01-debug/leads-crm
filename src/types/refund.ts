@@ -15,6 +15,7 @@ export interface OrganizationBillingHistoryPayment {
   paid_at: string
   payment_method: string | null
   notes: string | null
+  payment_reference_code: string | null
 }
 
 export type OrganizationBillingTimelineEntry =
@@ -25,6 +26,7 @@ export type OrganizationBillingTimelineEntry =
       amount_bdt: number
       payment_method: string | null
       notes: string | null
+      payment_reference_code: string | null
     }
   | {
       type: 'refund'

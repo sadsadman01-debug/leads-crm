@@ -32,6 +32,7 @@ import type { SavedReport, ReportRunResult, ReportType, ChartType, ReportFilters
 import type { SignupRequest, ApproveSignupRequestResult } from '@/types/signupRequest'
 import type { PromoCode } from '@/types/promoCode'
 import type { Announcement, AnnouncementAudience } from '@/types/announcement'
+import type { RenewalPaymentRequest, RenewalPaymentWithOrg, PublicRenewalPayment } from '@/types/renewalPayment'
 import type { ReceivingPaymentAccount, PublicPaymentAccount, PaymentAccountMethodType } from '@/types/paymentAccount'
 import type { PasswordResetRequest, PasswordResetResult } from '@/types/passwordResetRequest'
 import type { MfaResetRequest, MfaResetResult } from '@/types/mfaResetRequest'
@@ -679,10 +680,10 @@ export const signupRequestsApi = {
 
   list: () => request<{ requests: SignupRequest[] }>('/signup-requests'),
 
-  approve: (id: string, payment_method: PaymentMethod, payment_status?: PaymentStatus) =>
+  approve: (id: string, payment_method: PaymentMethod, paymentVerified: true, payment_status?: PaymentStatus) =>
     request<ApproveSignupRequestResult>(`/signup-requests/${id}/approve`, {
       method: 'POST',
-      body: JSON.stringify(payment_status ? { payment_method, payment_status } : { payment_method }),
+      body: JSON.stringify({ payment_method, payment_verified: paymentVerified, ...(payment_status ? { payment_status } : {}) }),
     }),
 
   reject: (id: string, rejection_reason?: string) =>
@@ -700,6 +701,7 @@ export const signupRequestsApi = {
       final_price_bdt: number | null
       billing_cycle: BillingCycle
       payment_method: PaymentMethod | null
+      payment_reference_code: string
     }>(`/signup-requests/${token}/public`),
 
   /** Public — the /pay page's "I've Completed My Payment" action. `token` is
@@ -758,6 +760,24 @@ export const billingApi = {
 
   reactivateSubscription: (organizationId: string) =>
     request<{ id: string; name: string; subscription_cancelled_at: null }>(`/billing/${organizationId}/reactivate-subscription`, { method: 'POST' }),
+}
+
+export const renewalPaymentsApi = {
+  /** Any authenticated Admin/User — creates a brand new renewal payment
+   * instance for their own organization (own reference code + payment_token). */
+  create: () => request<RenewalPaymentRequest>('/renewal-payments', { method: 'POST' }),
+
+  /** Any authenticated Admin/User — their own organization's current pending renewal, if any. */
+  getMyPending: () => request<{ renewal: RenewalPaymentRequest | null }>('/renewal-payments/my-pending'),
+
+  /** Public — reachable from the /pay page before any session exists. */
+  getPublicForPayment: (token: string) => requestPublic<PublicRenewalPayment>(`/renewal-payments/${token}/public`),
+
+  /** Super Admin only. */
+  listPending: () => request<{ renewals: RenewalPaymentWithOrg[] }>('/renewal-payments'),
+
+  /** Super Admin only. Body: { payment_verified: true } — the manual attestation gate. */
+  confirm: (id: string) => request<RenewalPaymentRequest>(`/renewal-payments/${id}`, { method: 'PATCH', body: JSON.stringify({ payment_verified: true }) }),
 }
 
 export const cancellationRequestsApi = {

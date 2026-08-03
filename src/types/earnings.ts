@@ -64,6 +64,7 @@ export interface EarningsTransaction {
   promo_code_text: string | null
   discount_amount: number
   reason: string | null
+  payment_reference_code: string | null
 }
 
 export interface EarningsTransactionFilters {

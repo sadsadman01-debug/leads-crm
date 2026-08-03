@@ -358,6 +358,7 @@ export function EarningsPage() {
                   <th className="px-3 py-2 font-medium">Organization</th>
                   <th className="px-3 py-2 font-medium">Amount</th>
                   <th className="px-3 py-2 font-medium">Payment Method</th>
+                  <th className="px-3 py-2 font-medium">Reference Code</th>
                   <th className="px-3 py-2 font-medium">Promo Code</th>
                   <th className="px-3 py-2 font-medium">Discount</th>
                   <th className="px-3 py-2 font-medium">Tier</th>
@@ -382,6 +383,7 @@ export function EarningsPage() {
                       {tx.type === 'refund' ? `−${fmtTaka(Math.abs(tx.amount))}` : tx.type === 'referral_reward' ? '৳0' : fmtTaka(tx.amount)}
                     </td>
                     <td className="px-3 py-3 text-base-300">{tx.payment_method ? PAYMENT_METHOD_LABELS[tx.payment_method] : tx.type !== 'payment' ? (tx.reason ?? '—') : '—'}</td>
+                    <td className="px-3 py-3 font-mono text-base-300">{tx.payment_reference_code ?? '—'}</td>
                     <td className="px-3 py-3 font-mono text-base-300">{tx.promo_code_text ?? '—'}</td>
                     <td className="px-3 py-3 tabular-nums text-base-400">{tx.discount_amount > 0 ? `−${fmtTaka(tx.discount_amount)}` : '—'}</td>
                     <td className="px-3 py-3 text-base-300 capitalize">{tx.pricing_tier?.replace('_', ' ') ?? '—'}</td>
