@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
 import { requireSuperAdmin } from '../lib/permissions.js'
 import { logAuditEvent } from '../lib/auditLog.js'
+import { generateUniqueOrgReferralCode } from '../lib/orgReferralCode.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const BAN_DURATION = '876000h'
@@ -15,25 +16,31 @@ export async function listOrganizations(user: AuthedUser) {
   const { data: orgs, error } = await supabase
     .from('organizations')
     .select(
-      'id, name, city, country, zip_code, status, created_at, pricing_tier, monthly_price_usd, payment_status, subscription_end_date, referred_by_affiliate_id, promo_code_id, promo_code_text, original_price_bdt, discount_amount_bdt, final_price_bdt, payment_method, subscription_cancelled_at'
+      'id, name, city, country, zip_code, status, created_at, pricing_tier, monthly_price_usd, payment_status, subscription_end_date, referred_by_affiliate_id, referred_by_organization_id, org_referral_code, promo_code_id, promo_code_text, original_price_bdt, discount_amount_bdt, final_price_bdt, payment_method, subscription_cancelled_at'
     )
     .order('created_at', { ascending: true })
   if (error) throw new HttpError(500, error.message)
 
   const affiliateIds = [...new Set((orgs ?? []).map((o) => o.referred_by_affiliate_id).filter(Boolean))] as string[]
+  const referringOrgIds = [...new Set((orgs ?? []).map((o) => o.referred_by_organization_id).filter(Boolean))] as string[]
 
-  const [{ data: admins }, { data: leadCounts }, { data: dealRows }, { data: userCounts }, { data: affiliates }] = await Promise.all([
-    supabase.from('profiles').select('id, email, nickname, organization_id').eq('role', 'admin'),
-    supabase.from('leads').select('organization_id'),
-    supabase.from('deals').select('organization_id, value, stage_id, deal_stages(is_closed)'),
-    supabase.from('profiles').select('organization_id').eq('role', 'user'),
-    affiliateIds.length > 0
-      ? supabase.from('affiliates').select('id, full_name').in('id', affiliateIds)
-      : Promise.resolve({ data: [] as any[] }),
-  ])
+  const [{ data: admins }, { data: leadCounts }, { data: dealRows }, { data: userCounts }, { data: affiliates }, { data: referringOrgs }] =
+    await Promise.all([
+      supabase.from('profiles').select('id, email, nickname, organization_id').eq('role', 'admin'),
+      supabase.from('leads').select('organization_id'),
+      supabase.from('deals').select('organization_id, value, stage_id, deal_stages(is_closed)'),
+      supabase.from('profiles').select('organization_id').eq('role', 'user'),
+      affiliateIds.length > 0
+        ? supabase.from('affiliates').select('id, full_name').in('id', affiliateIds)
+        : Promise.resolve({ data: [] as any[] }),
+      referringOrgIds.length > 0
+        ? supabase.from('organizations').select('id, name').in('id', referringOrgIds)
+        : Promise.resolve({ data: [] as any[] }),
+    ])
 
   const adminByOrg = new Map((admins ?? []).map((a) => [a.organization_id, a]))
   const affiliateNameById = new Map((affiliates ?? []).map((a: any) => [a.id, a.full_name]))
+  const referringOrgNameById = new Map((referringOrgs ?? []).map((o: any) => [o.id, o.name]))
 
   const leadCountByOrg = new Map<string, number>()
   for (const l of leadCounts ?? []) {
@@ -73,6 +80,9 @@ export async function listOrganizations(user: AuthedUser) {
       subscription_cancelled_at: org.subscription_cancelled_at,
       referred_by_affiliate_id: org.referred_by_affiliate_id,
       referred_by_affiliate_name: org.referred_by_affiliate_id ? affiliateNameById.get(org.referred_by_affiliate_id) ?? null : null,
+      referred_by_organization_id: org.referred_by_organization_id,
+      referred_by_organization_name: org.referred_by_organization_id ? referringOrgNameById.get(org.referred_by_organization_id) ?? null : null,
+      org_referral_code: org.org_referral_code,
       admin: adminByOrg.get(org.id) ?? null,
       userCount: userCountByOrg.get(org.id) ?? 0,
       leadCount: leadCountByOrg.get(org.id) ?? 0,
@@ -88,7 +98,7 @@ export async function getOrganization(id: string, user: AuthedUser) {
   const { data, error } = await supabase
     .from('organizations')
     .select(
-      'id, name, city, country, zip_code, status, created_at, pricing_tier, monthly_price_usd, payment_status, subscription_end_date, referred_by_affiliate_id, promo_code_id, promo_code_text, original_price_bdt, discount_amount_bdt, final_price_bdt, payment_method, subscription_cancelled_at'
+      'id, name, city, country, zip_code, status, created_at, pricing_tier, monthly_price_usd, payment_status, subscription_end_date, referred_by_affiliate_id, referred_by_organization_id, org_referral_code, promo_code_id, promo_code_text, original_price_bdt, discount_amount_bdt, final_price_bdt, payment_method, subscription_cancelled_at'
     )
     .eq('id', id)
     .maybeSingle()
@@ -115,9 +125,10 @@ export async function createOrganizationWithAdmin(event: HandlerEvent, user: Aut
   if (!password || password.length < 8) throw new HttpError(400, 'password must be at least 8 characters')
   if (!nickname) throw new HttpError(400, 'nickname is required')
 
+  const orgReferralCode = await generateUniqueOrgReferralCode()
   const { data: org, error: orgErr } = await supabase
     .from('organizations')
-    .insert({ name: organizationName, created_by: user.id, status: 'active' })
+    .insert({ name: organizationName, created_by: user.id, status: 'active', org_referral_code: orgReferralCode })
     .select('id, name, city, country, zip_code, status, created_at')
     .single()
   if (orgErr) throw new HttpError(500, orgErr.message)

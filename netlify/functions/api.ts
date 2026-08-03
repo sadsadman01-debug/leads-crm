@@ -222,6 +222,12 @@ import {
 import { logReferralClick } from './routes/referralClicks.js'
 import { logPageView, getPageViewCount } from './routes/pageViews.js'
 import {
+  getOrgReferralSettings,
+  updateOrgReferralSettings,
+  getMyReferralInfo,
+  logOrgReferralClick,
+} from './routes/orgReferrals.js'
+import {
   getMyMarketingMaterials,
   getAffiliateSettings,
   updateAffiliateSettings,
@@ -788,6 +794,23 @@ export const handler: Handler = async (event) => {
         if (!id && method === 'GET') response = await getAffiliateSettings(event, user)
         else if (!id && method === 'PATCH') response = await updateAffiliateSettings(event, user)
         else throw new HttpError(404, 'Not found')
+      }
+    } else if (resource === 'org-referrals') {
+      // Business Referral Program — entirely separate from the Affiliate
+      // Program above. Clicks are public; settings are Super-Admin-only;
+      // "my referral info" is any authenticated org member's own org.
+      if (id === 'clicks' && method === 'POST') {
+        response = await logOrgReferralClick(event)
+      } else if (id === 'settings') {
+        const user = await requireUser(event)
+        if (method === 'GET') response = await getOrgReferralSettings(event, user)
+        else if (method === 'PATCH') response = await updateOrgReferralSettings(event, user)
+        else throw new HttpError(404, 'Not found')
+      } else if (id === 'my-info' && method === 'GET') {
+        const user = await requireUser(event)
+        response = await getMyReferralInfo(event, user)
+      } else {
+        throw new HttpError(404, 'Not found')
       }
     } else if (resource === 'attachments') {
       const user = await requireUser(event)

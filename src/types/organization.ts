@@ -21,6 +21,9 @@ export interface OrganizationSummary extends Organization {
   subscription_cancelled_at: string | null
   referred_by_affiliate_id: string | null
   referred_by_affiliate_name: string | null
+  referred_by_organization_id: string | null
+  referred_by_organization_name: string | null
+  org_referral_code: string | null
 }
 
 export type SubscriptionStatus = 'active' | 'cancelled' | 'expired' | 'no_subscription'

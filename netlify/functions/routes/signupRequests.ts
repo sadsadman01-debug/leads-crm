@@ -4,16 +4,18 @@ import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
 import { requireSuperAdmin, requireAal2IfEnrolled } from '../lib/permissions.js'
 import { generateTempPassword } from '../lib/passwordGen.js'
-import { notifySuperAdmins } from '../lib/notifications.js'
+import { notifySuperAdmins, notifyOrgAdmins } from '../lib/notifications.js'
+import { getOrCreateOrgReferralSettingsRow } from '../lib/orgReferralSettings.js'
 import { insertAuditLog, logAuditEvent, getClientIp } from '../lib/auditLog.js'
 import { getOrCreateBillingSettingsRow, computeCurrentPricingTier, computeAnnualTotal, addBillingPeriod, type BillingSettingsRow } from '../lib/billingSettings.js'
 import { ALLOWED_SIGNUP_COUNTRIES } from '../lib/allowedSignupCountries.js'
 import { PAYMENT_METHODS } from '../lib/paymentMethods.js'
 import { checkPromoCode } from '../lib/promoCodes.js'
+import { generateUniqueOrgReferralCode } from '../lib/orgReferralCode.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const COLUMNS =
-  'id, organization_name, contact_name, email, phone, message, city, country, zip_code, status, requested_at, reviewed_at, reviewed_by, rejection_reason, pricing_tier, monthly_price_usd, payment_status, billing_cycle, annual_total_usd, referred_by_affiliate_id, promo_code_id, promo_code_text, original_price_bdt, discount_amount_bdt, final_price_bdt, payment_method, payment_token'
+  'id, organization_name, contact_name, email, phone, message, city, country, zip_code, status, requested_at, reviewed_at, reviewed_by, rejection_reason, pricing_tier, monthly_price_usd, payment_status, billing_cycle, annual_total_usd, referred_by_affiliate_id, referred_by_organization_id, promo_code_id, promo_code_text, original_price_bdt, discount_amount_bdt, final_price_bdt, payment_method, payment_token'
 
 /** Re-runs the exact same eligibility check the "Apply" button used (active /
  * usage limit / expiry / Early Bird) and computes the discount against
@@ -111,6 +113,22 @@ export async function createSignupRequest(event: HandlerEvent) {
     referred_by_affiliate_id = affiliate?.id ?? null
   }
 
+  // Business Referral Program — entirely separate from the Affiliate Program
+  // above (different link parameter, different table, different reward).
+  // Mutually exclusive with referred_by_affiliate_id in practice, but stored
+  // independently regardless.
+  let referred_by_organization_id: string | null = null
+  const orgRefCode = (body.org_ref ?? '').trim()
+  if (orgRefCode) {
+    const { data: referringOrg } = await supabase
+      .from('organizations')
+      .select('id')
+      .eq('org_referral_code', orgRefCode)
+      .eq('status', 'active')
+      .maybeSingle()
+    referred_by_organization_id = referringOrg?.id ?? null
+  }
+
   const { data, error } = await supabase
     .from('signup_requests')
     .insert({
@@ -128,6 +146,7 @@ export async function createSignupRequest(event: HandlerEvent) {
       billing_cycle,
       annual_total_usd,
       referred_by_affiliate_id,
+      referred_by_organization_id,
       promo_code_id,
       promo_code_text,
       original_price_bdt,
@@ -185,6 +204,105 @@ async function getRequestByPaymentTokenOrThrow(token: string) {
   return data
 }
 
+/** Business Referral Program reward — mirrors maybeGenerateAffiliateCommission's
+ * best-effort/never-blocks-the-main-flow shape exactly, but grants free
+ * subscription MONTHS to the referring Organization instead of a cash
+ * commission. Only fires once, on the referred Organization's actual first
+ * payment (finalPaymentStatus === 'received'), and only ever touches the
+ * REFERRING Organization's own subscription_end_date/billing_history. */
+async function maybeGrantOrgReferralReward(params: {
+  referredOrgId: string
+  referredOrgName: string
+  referringOrgId: string
+  newAdminEmail: string
+  user: AuthedUser
+  event: HandlerEvent
+}) {
+  try {
+    const supabase = getSupabaseAdmin()
+    const { referredOrgId, referredOrgName, referringOrgId, newAdminEmail, user, event } = params
+
+    const settingsRow = await getOrCreateOrgReferralSettingsRow()
+    if (!settingsRow.org_referral_program_enabled) return
+
+    const { data: referringOrg } = await supabase
+      .from('organizations')
+      .select('id, name, subscription_end_date, billing_cycle')
+      .eq('id', referringOrgId)
+      .maybeSingle()
+    if (!referringOrg) return
+
+    // Basic self-referral prevention — not sophisticated fraud detection,
+    // just catches the obvious case of someone referring their own business.
+    const { data: referringAdmin } = await supabase
+      .from('profiles')
+      .select('email')
+      .eq('organization_id', referringOrgId)
+      .eq('role', 'admin')
+      .maybeSingle()
+    const sameEmail = referringAdmin?.email && referringAdmin.email.trim().toLowerCase() === newAdminEmail.trim().toLowerCase()
+    const sameName = referringOrg.name.trim().toLowerCase() === referredOrgName.trim().toLowerCase()
+    if (sameEmail || sameName) {
+      await logAuditEvent('org_referral_reward_skipped', user, event, {
+        organizationId: referringOrgId,
+        metadata: { reason: 'self_referral_suspected', referringOrgName: referringOrg.name, referredOrgName },
+      })
+      return
+    }
+
+    if (settingsRow.org_referral_max_rewards != null) {
+      const { count } = await supabase
+        .from('billing_history')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', referringOrgId)
+        .eq('is_referral_reward', true)
+      if ((count ?? 0) >= settingsRow.org_referral_max_rewards) {
+        await logAuditEvent('org_referral_reward_skipped', user, event, {
+          organizationId: referringOrgId,
+          metadata: { reason: 'max_rewards_reached', referringOrgName: referringOrg.name },
+        })
+        return
+      }
+    }
+
+    const rewardMonths = settingsRow.org_referral_reward_months
+    const baseDate =
+      referringOrg.subscription_end_date && new Date(referringOrg.subscription_end_date) > new Date()
+        ? referringOrg.subscription_end_date
+        : new Date().toISOString().slice(0, 10)
+    let newExpiry = new Date(baseDate)
+    newExpiry.setMonth(newExpiry.getMonth() + rewardMonths)
+    const newSubscriptionEndDate = newExpiry.toISOString().slice(0, 10)
+
+    await supabase.from('organizations').update({ subscription_end_date: newSubscriptionEndDate }).eq('id', referringOrgId)
+    await supabase.from('billing_history').insert({
+      organization_id: referringOrgId,
+      amount_usd: 0,
+      paid_at: new Date().toISOString().slice(0, 10),
+      recorded_by: user.id,
+      notes: `Referral reward: ${rewardMonths} free month(s) for referring ${referredOrgName}`,
+      is_referral_reward: true,
+    })
+    await supabase.from('organizations').update({ referral_reward_granted_at: new Date().toISOString() }).eq('id', referredOrgId)
+
+    await notifyOrgAdmins(referringOrgId, {
+      type: 'org_referral_reward',
+      title: '🎉 You earned a free month!',
+      message: `${referredOrgName} became a paying customer — you've earned ${rewardMonths} free month${rewardMonths === 1 ? '' : 's'}!`,
+      link_route: '/settings',
+      related_entity_id: referredOrgId,
+      related_entity_type: 'organization',
+    })
+
+    await logAuditEvent('org_referral_reward_granted', user, event, {
+      organizationId: referringOrgId,
+      metadata: { referredOrgId, referredOrgName, rewardMonths, newSubscriptionEndDate },
+    })
+  } catch (err) {
+    console.error('Failed to grant org referral reward', err)
+  }
+}
+
 /** Atomically (best-effort, with rollback on failure) creates the Organization,
  * an auto-confirmed Auth account with a securely generated temporary password,
  * and the Admin profile flagged force_password_change — then marks the request
@@ -214,6 +332,7 @@ export async function approveSignupRequest(id: string, event: HandlerEvent, user
   const now = new Date()
   const firstPaymentConfirmedAt = now.toISOString()
   const subscriptionEndDate = addBillingPeriod(now.toISOString().slice(0, 10), request.billing_cycle)
+  const orgReferralCode = await generateUniqueOrgReferralCode()
 
   const { data: org, error: orgErr } = await supabase
     .from('organizations')
@@ -221,6 +340,8 @@ export async function approveSignupRequest(id: string, event: HandlerEvent, user
       name: request.organization_name,
       created_by: user.id,
       status: 'active',
+      org_referral_code: orgReferralCode,
+      referred_by_organization_id: request.referred_by_organization_id,
       city: request.city,
       country: request.country,
       zip_code: request.zip_code,
@@ -299,6 +420,19 @@ export async function approveSignupRequest(id: string, event: HandlerEvent, user
         .update({ times_used: promo.times_used + 1 })
         .eq('id', request.promo_code_id)
     }
+  }
+
+  // Business Referral Program reward — only for a genuinely confirmed first
+  // payment (not 'pending'/'waived', which isn't actually money received).
+  if (request.referred_by_organization_id && finalPaymentStatus === 'received') {
+    await maybeGrantOrgReferralReward({
+      referredOrgId: org.id,
+      referredOrgName: request.organization_name,
+      referringOrgId: request.referred_by_organization_id,
+      newAdminEmail: request.email,
+      user,
+      event,
+    })
   }
 
   await logAuditEvent('signup_request_approved', user, event, {

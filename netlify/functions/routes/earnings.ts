@@ -26,6 +26,8 @@ interface BillingRow {
   amount_usd: number
   paid_at: string
   payment_method: string | null
+  is_referral_reward: boolean
+  notes: string | null
 }
 
 interface OrgLite {
@@ -63,12 +65,16 @@ function tierBucketOf(org: Pick<OrgLite, 'pricing_tier' | 'billing_cycle'> | und
 }
 
 /** Fetches every billing_history row (up to MAX_ROWS, chunked) — this is the
- * one place every other endpoint below builds on top of. */
+ * one place every other endpoint below builds on top of. Includes
+ * is_referral_reward rows (amount always 0, a free-month grant from the
+ * Business Referral Program, never real revenue) — callers computing
+ * revenue figures must filter those out via realOnly(), while the
+ * Detailed Transaction Log keeps them (clearly labeled) for a complete record. */
 async function fetchAllBillingHistory(dateFrom?: string, dateTo?: string): Promise<BillingRow[]> {
   const supabase = getSupabaseAdmin()
   const rows: BillingRow[] = []
   for (let offset = 0; offset < MAX_ROWS; offset += CHUNK_SIZE) {
-    let query = supabase.from('billing_history').select('id, organization_id, amount_usd, paid_at, payment_method')
+    let query = supabase.from('billing_history').select('id, organization_id, amount_usd, paid_at, payment_method, is_referral_reward, notes')
     if (dateFrom) query = query.gte('paid_at', dateFrom)
     if (dateTo) query = query.lte('paid_at', dateTo)
     const { data, error } = await query.order('paid_at', { ascending: true }).range(offset, offset + CHUNK_SIZE - 1)
@@ -77,6 +83,10 @@ async function fetchAllBillingHistory(dateFrom?: string, dateTo?: string): Promi
     if (!data || data.length < CHUNK_SIZE) break
   }
   return rows
+}
+
+function realOnly(rows: BillingRow[]): BillingRow[] {
+  return rows.filter((r) => !r.is_referral_reward)
 }
 
 async function fetchAllCommissions(dateFrom?: string, dateTo?: string): Promise<Array<{ commission_amount_usd: number; created_at: string }>> {
@@ -142,7 +152,8 @@ export async function getEarningsSummary(event: HandlerEvent, user: AuthedUser) 
   requireSuperAdmin(user)
   const supabase = getSupabaseAdmin()
 
-  const [billing, commissions, refunds] = await Promise.all([fetchAllBillingHistory(), fetchAllCommissions(), fetchAllRefunds()])
+  const [billingRaw, commissions, refunds] = await Promise.all([fetchAllBillingHistory(), fetchAllCommissions(), fetchAllRefunds()])
+  const billing = realOnly(billingRaw)
 
   const grossAllTime = billing.reduce((sum, r) => sum + Number(r.amount_usd), 0)
   const commissionsAllTime = commissions.reduce((sum, c) => sum + Number(c.commission_amount_usd), 0)
@@ -255,11 +266,12 @@ export async function getEarningsTrend(event: HandlerEvent, user: AuthedUser) {
     return [...new Set(keys)]
   }
 
-  const [billing, commissions, refunds] = await Promise.all([
+  const [billingRaw, commissions, refunds] = await Promise.all([
     fetchAllBillingHistory(dateFrom, dateTo),
     fetchAllCommissions(dateFrom, `${dateTo}`),
     fetchAllRefunds(dateFrom, dateTo),
   ])
+  const billing = realOnly(billingRaw)
 
   const bucketKeys = buildBucketKeys()
   const grossByBucket = new Map<string, number>(bucketKeys.map((k) => [k, 0]))
@@ -293,7 +305,7 @@ export async function getEarningsTrend(event: HandlerEvent, user: AuthedUser) {
 export async function getEarningsByPaymentMethod(event: HandlerEvent, user: AuthedUser) {
   requireSuperAdmin(user)
   const params = event.queryStringParameters ?? {}
-  const billing = await fetchAllBillingHistory(params.dateFrom || undefined, params.dateTo || undefined)
+  const billing = realOnly(await fetchAllBillingHistory(params.dateFrom || undefined, params.dateTo || undefined))
 
   const byMethod = new Map<string, { revenue: number; count: number }>()
   for (const row of billing) {
@@ -318,7 +330,7 @@ export async function getEarningsByPaymentMethod(event: HandlerEvent, user: Auth
 export async function getEarningsByTier(event: HandlerEvent, user: AuthedUser) {
   requireSuperAdmin(user)
   const params = event.queryStringParameters ?? {}
-  const billing = await fetchAllBillingHistory(params.dateFrom || undefined, params.dateTo || undefined)
+  const billing = realOnly(await fetchAllBillingHistory(params.dateFrom || undefined, params.dateTo || undefined))
   const orgById = await fetchOrgsByIds(billing.map((r) => r.organization_id))
 
   const buckets: Record<TierBucket, { revenue: number; count: number }> = {
@@ -361,7 +373,7 @@ export async function getPromoCodePerformance(event: HandlerEvent, user: AuthedU
   if (!orgs || orgs.length === 0) return json(200, { promo_codes: [] })
 
   const orgIds = orgs.map((o: any) => o.id)
-  const billing = await fetchAllBillingHistory()
+  const billing = realOnly(await fetchAllBillingHistory())
   const revenueByOrg = new Map<string, number>()
   for (const row of billing) {
     if (!orgIds.includes(row.organization_id)) continue
@@ -450,7 +462,7 @@ async function resolveFilteredTransactions(filters: TransactionFilters) {
     const org = orgById.get(row.organization_id)
     const isFirstPayment = Boolean(org?.first_payment_confirmed_at) && org!.first_payment_confirmed_at!.slice(0, 10) === row.paid_at
     return {
-      type: 'payment' as const,
+      type: (row.is_referral_reward ? 'referral_reward' : 'payment') as 'payment' | 'referral_reward',
       id: row.id,
       paid_at: row.paid_at,
       organization_id: row.organization_id,
@@ -461,7 +473,7 @@ async function resolveFilteredTransactions(filters: TransactionFilters) {
       billing_cycle: org?.billing_cycle ?? null,
       promo_code_text: isFirstPayment ? org?.promo_code_text ?? null : null,
       discount_amount: isFirstPayment ? Number(org?.discount_amount_bdt ?? 0) : 0,
-      reason: null as string | null,
+      reason: row.is_referral_reward ? row.notes : null,
     }
   })
 

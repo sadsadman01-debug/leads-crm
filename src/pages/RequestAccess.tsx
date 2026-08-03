@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Building2, ArrowLeft, AlertCircle, Loader2, CheckCircle2, Sparkles, PartyPopper, X, Tag, Wallet } from 'lucide-react'
-import { signupRequestsApi, billingApi, promoCodesApi, referralClicksApi, pageViewsApi } from '@/lib/api'
+import { signupRequestsApi, billingApi, promoCodesApi, referralClicksApi, pageViewsApi, orgReferralsApi } from '@/lib/api'
 import { usePlatformBranding } from '@/hooks/usePlatformBranding'
 import { PreAuthHelpWidget } from '@/components/PreAuthHelpWidget'
 import { PRICING_TIER_LABELS, type BillingCycle } from '@/types/billing'
@@ -13,6 +13,9 @@ export function RequestAccess() {
   usePlatformBranding()
   const [searchParams] = useSearchParams()
   const referralCode = searchParams.get('ref')?.trim() || null
+  // Business Referral Program — a separate, distinguishable link parameter
+  // from the Affiliate Program's ?ref= above; mutually exclusive in practice.
+  const orgReferralCode = searchParams.get('org_ref')?.trim() || null
   const [organizationName, setOrganizationName] = useState('')
   const [contactName, setContactName] = useState('')
   const [email, setEmail] = useState('')
@@ -38,6 +41,14 @@ export function RequestAccess() {
       referralClicksApi.log(referralCode).catch(() => {})
     }
   }, [referralCode])
+
+  const loggedOrgClickRef = useRef(false)
+  useEffect(() => {
+    if (orgReferralCode && !loggedOrgClickRef.current) {
+      loggedOrgClickRef.current = true
+      orgReferralsApi.logClick(orgReferralCode).catch(() => {})
+    }
+  }, [orgReferralCode])
 
   // Platform-wide aggregate view of every visit (referred or not) — logged
   // once per page load, complementary to the per-affiliate referral click
@@ -87,6 +98,7 @@ export function RequestAccess() {
         zip_code: zipCode.trim(),
         billing_cycle: billingCycle,
         ...(referralCode ? { ref: referralCode } : {}),
+        ...(orgReferralCode ? { org_ref: orgReferralCode } : {}),
         ...(appliedPromo ? { promo_code: appliedPromo.code } : {}),
       }),
   })

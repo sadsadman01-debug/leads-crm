@@ -371,15 +371,17 @@ export function EarningsPage() {
                     <td className="px-3 py-3">
                       {tx.type === 'refund' ? (
                         <Badge tone="danger">Refund</Badge>
+                      ) : tx.type === 'referral_reward' ? (
+                        <Badge tone="warn">Referral Reward (Free Month)</Badge>
                       ) : (
                         <Badge tone="success">Payment</Badge>
                       )}
                     </td>
                     <td className="px-3 py-3 font-medium text-base-100">{tx.organization_name}</td>
                     <td className={`px-3 py-3 tabular-nums ${tx.type === 'refund' ? 'text-danger' : 'text-base-200'}`}>
-                      {tx.type === 'refund' ? `−${fmtTaka(Math.abs(tx.amount))}` : fmtTaka(tx.amount)}
+                      {tx.type === 'refund' ? `−${fmtTaka(Math.abs(tx.amount))}` : tx.type === 'referral_reward' ? '৳0' : fmtTaka(tx.amount)}
                     </td>
-                    <td className="px-3 py-3 text-base-300">{tx.payment_method ? PAYMENT_METHOD_LABELS[tx.payment_method] : tx.type === 'refund' ? (tx.reason ?? '—') : '—'}</td>
+                    <td className="px-3 py-3 text-base-300">{tx.payment_method ? PAYMENT_METHOD_LABELS[tx.payment_method] : tx.type !== 'payment' ? (tx.reason ?? '—') : '—'}</td>
                     <td className="px-3 py-3 font-mono text-base-300">{tx.promo_code_text ?? '—'}</td>
                     <td className="px-3 py-3 tabular-nums text-base-400">{tx.discount_amount > 0 ? `−${fmtTaka(tx.discount_amount)}` : '—'}</td>
                     <td className="px-3 py-3 text-base-300 capitalize">{tx.pricing_tier?.replace('_', ' ') ?? '—'}</td>

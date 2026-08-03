@@ -150,6 +150,9 @@ export function OrganizationsOverview() {
                     {org.referred_by_affiliate_name && (
                       <p className="mt-0.5 text-xs text-accent-400">Referred by: {org.referred_by_affiliate_name}</p>
                     )}
+                    {org.referred_by_organization_name && (
+                      <p className="mt-0.5 text-xs text-accent-400">Referred by: {org.referred_by_organization_name}</p>
+                    )}
                   </td>
                   <td className="max-w-[180px] px-3 py-3 text-base-300">
                     {org.admin ? (

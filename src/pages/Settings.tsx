@@ -23,6 +23,8 @@ import { ChangePasswordCard } from '@/components/ChangePasswordCard'
 import { DataExportSettings } from '@/components/DataExportSettings'
 import { RecentlyMergedSettings } from '@/components/RecentlyMergedSettings'
 import { AffiliateProgramSettings } from '@/components/AffiliateProgramSettings'
+import { BusinessReferralProgramSettings } from '@/components/BusinessReferralProgramSettings'
+import { ReferAndEarnSettings } from '@/components/ReferAndEarnSettings'
 import { MyFeedbackSettings } from '@/components/MyFeedbackSettings'
 
 /** Wraps a settings section in a disabled fieldset unless the caller passes
@@ -93,7 +95,13 @@ export function Settings() {
             <AffiliateProgramSettings />
           </Section>
         )}
+        {isSuperAdmin && (
+          <Section canWrite>
+            <BusinessReferralProgramSettings />
+          </Section>
+        )}
         {!isSuperAdmin && !isUser && <OrgBillingNotice />}
+        {!isSuperAdmin && !isUser && <ReferAndEarnSettings />}
         {isSuperAdmin && (
           <Section canWrite>
             <SupportContactSettings />

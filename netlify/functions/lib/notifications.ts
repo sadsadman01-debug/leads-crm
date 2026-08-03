@@ -14,6 +14,7 @@ export type NotificationType =
   | 'withdrawal_request'
   | 'product_review_reply'
   | 'cancellation_request'
+  | 'org_referral_reward'
 
 interface NotificationInput {
   recipient_profile_id: string

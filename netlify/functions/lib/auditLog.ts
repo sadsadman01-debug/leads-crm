@@ -51,6 +51,8 @@ export type AuditEventType =
   | 'organization_subscription_cancelled'
   | 'organization_subscription_reactivated'
   | 'refund_recorded'
+  | 'org_referral_reward_granted'
+  | 'org_referral_reward_skipped'
 
 interface InsertAuditLogParams {
   eventType: AuditEventType

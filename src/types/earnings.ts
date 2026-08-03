@@ -52,7 +52,7 @@ export interface PromoCodePerformanceRow {
 }
 
 export interface EarningsTransaction {
-  type: 'payment' | 'refund'
+  type: 'payment' | 'refund' | 'referral_reward'
   id: string
   paid_at: string
   organization_id: string

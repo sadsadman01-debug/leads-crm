@@ -81,6 +81,7 @@ import type {
   AffiliateStatus,
 } from '@/types/affiliate'
 import type { ProductReview, ProductReviewWithReviewer, ProductReviewStats, ProductReviewFilters } from '@/types/productReview'
+import type { OrgReferralSettings, MyReferralInfo } from '@/types/orgReferral'
 import { withOrgScope } from './orgScope'
 
 export class ApiError extends Error {
@@ -671,6 +672,7 @@ export const signupRequestsApi = {
     zip_code: string
     billing_cycle?: BillingCycle
     ref?: string
+    org_ref?: string
     promo_code?: string
   }) => requestPublic<SignupRequest>('/signup-requests', { method: 'POST', body: JSON.stringify(payload) }),
 
@@ -1248,4 +1250,20 @@ export const affiliateSettingsApi = {
 
   update: (payload: Partial<Omit<AffiliateSettings, 'id'>>) =>
     request<AffiliateSettings>('/affiliate-settings', { method: 'PATCH', body: JSON.stringify(payload) }),
+}
+
+export const orgReferralsApi = {
+  /** Public, fire-and-forget from the Request Access page — never awaited by the caller. */
+  logClick: (org_referral_code: string) =>
+    requestPublic<{ success: true }>('/org-referrals/clicks', { method: 'POST', body: JSON.stringify({ org_referral_code }) }),
+
+  /** Super Admin only. */
+  getSettings: () => request<OrgReferralSettings>('/org-referrals/settings'),
+
+  /** Super Admin only. */
+  updateSettings: (payload: Partial<Omit<OrgReferralSettings, 'id'>>) =>
+    request<OrgReferralSettings>('/org-referrals/settings', { method: 'PATCH', body: JSON.stringify(payload) }),
+
+  /** Any authenticated Admin/User — their own organization's referral code, stats, and history. */
+  getMyInfo: () => request<MyReferralInfo>('/org-referrals/my-info'),
 }
