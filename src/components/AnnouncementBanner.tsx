@@ -40,7 +40,7 @@ export function AnnouncementBanner() {
       {announcements.map((a) => (
         <div
           key={a.id}
-          className="flex items-start gap-3 rounded-xl border border-accent-500/40 bg-accent-500/10 px-5 py-4 text-sm text-base-100"
+          className="relative flex items-start gap-3 rounded-xl border border-accent-500/40 bg-accent-500/10 py-4 pl-5 pr-10 text-sm text-base-100"
         >
           <Megaphone size={22} className="mt-0.5 shrink-0 text-accent-400" />
           <div className="min-w-0 flex-1">
@@ -48,12 +48,12 @@ export function AnnouncementBanner() {
             <p className="mt-1 whitespace-pre-wrap text-sm text-base-200">{a.message}</p>
           </div>
           <button
-            className="shrink-0 rounded-lg p-1 text-base-400 transition-colors hover:bg-black/10 hover:text-base-100"
+            className="absolute right-2 top-2 rounded-lg p-1 text-base-400 transition-colors hover:bg-black/10 hover:text-base-100"
             onClick={() => dismissMutation.mutate(a.id)}
             disabled={dismissMutation.isPending}
             aria-label="Dismiss announcement"
           >
-            <X size={18} />
+            <X size={16} />
           </button>
         </div>
       ))}

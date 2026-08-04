@@ -103,7 +103,7 @@ export async function getMyActiveAnnouncements(user: AuthedUser) {
   if (user.role === 'affiliate') {
     const { data: affiliate, error: affErr } = await supabase
       .from('affiliates')
-      .select('id')
+      .select('id, created_at')
       .eq('profile_id', user.id)
       .eq('status', 'active')
       .maybeSingle()
@@ -115,6 +115,8 @@ export async function getMyActiveAnnouncements(user: AuthedUser) {
       .select(COLUMNS)
       .eq('audience', 'affiliates')
       .eq('is_active', true)
+      // Never surface an announcement published before this Affiliate account existed.
+      .gte('created_at', affiliate.created_at)
       .order('created_at', { ascending: false })
     if (error) throw new HttpError(500, error.message)
     return json(200, { announcements: await excludeDismissed(data ?? [], user.id) })
@@ -124,11 +126,19 @@ export async function getMyActiveAnnouncements(user: AuthedUser) {
   const orgId = user.organization_id
   if (!orgId) return json(200, { announcements: [] })
 
+  const { data: profile, error: profileErr } = await supabase.from('profiles').select('created_at').eq('id', user.id).maybeSingle()
+  if (profileErr) throw new HttpError(500, profileErr.message)
+  if (!profile) return json(200, { announcements: [] })
+
   const { data, error } = await supabase
     .from('announcements')
     .select(COLUMNS)
     .eq('is_active', true)
     .in('audience', ['all', 'admins_only', 'specific_organizations'])
+    // Never surface an announcement published before this profile existed —
+    // this alone also covers "before the Organization existed" for an Admin,
+    // since an Admin's own profile is created at the same time as their org.
+    .gte('created_at', profile.created_at)
     .order('created_at', { ascending: false })
   if (error) throw new HttpError(500, error.message)
 
