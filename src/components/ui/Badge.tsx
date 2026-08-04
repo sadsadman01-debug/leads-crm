@@ -3,7 +3,7 @@ import { Flame } from 'lucide-react'
 import type { ReactNode } from 'react'
 import type { Priority, ScoreBand } from '@/types/lead'
 
-type Tone = 'success' | 'warn' | 'danger' | 'neutral' | 'accent'
+type Tone = 'success' | 'warn' | 'danger' | 'neutral' | 'accent' | 'info'
 
 const TONE_CLASSES: Record<Tone, string> = {
   success: 'bg-success-bg text-success',
@@ -11,6 +11,7 @@ const TONE_CLASSES: Record<Tone, string> = {
   danger: 'bg-danger-bg text-danger',
   neutral: 'bg-base-700 text-base-200',
   accent: 'bg-accent-500/15 text-accent-400',
+  info: 'bg-blue-500/15 text-blue-400',
 }
 
 export function Badge({ tone = 'neutral', children }: { tone?: Tone; children: ReactNode }) {

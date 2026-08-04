@@ -1,11 +1,12 @@
 import { Badge } from '@/components/ui/Badge'
 import { ROLE_LABELS, type Role } from '@/types/team'
 
-const ROLE_TONE: Record<Role, 'accent' | 'warn' | 'neutral' | 'success'> = {
+const ROLE_TONE: Record<Role, 'accent' | 'warn' | 'neutral' | 'success' | 'info'> = {
   super_admin: 'accent',
   admin: 'warn',
   user: 'neutral',
   affiliate: 'success',
+  staff: 'info',
 }
 
 export function RoleBadge({ role }: { role: Role }) {

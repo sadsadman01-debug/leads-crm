@@ -68,7 +68,9 @@ export function AffiliateLeaderboardView() {
                     {e.public_display_name && <p className="text-xs text-base-500">Displays as: {e.public_display_name}</p>}
                   </td>
                   <td className="px-3 py-3 tabular-nums text-base-300">{e.completed}</td>
-                  <td className="px-3 py-3 tabular-nums text-base-200">৳{e.commission_earned_usd}</td>
+                  <td className="px-3 py-3 tabular-nums text-base-200">
+                    {e.commission_earned_usd != null ? `৳${e.commission_earned_usd}` : <span className="text-base-500">•••</span>}
+                  </td>
                   <td className="px-3 py-3">
                     <Badge tone={e.leaderboard_opt_in ? 'success' : 'neutral'}>{e.leaderboard_opt_in ? 'Visible' : 'Opted Out'}</Badge>
                   </td>

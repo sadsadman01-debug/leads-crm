@@ -1,7 +1,7 @@
 import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
-import { requireSuperAdmin } from '../lib/permissions.js'
+import { requireSuperAdminOrStaff } from '../lib/permissions.js'
 import { logAuditEvent } from '../lib/auditLog.js'
 import type { AuthedUser } from '../lib/auth.js'
 
@@ -11,7 +11,7 @@ type Audience = 'all' | 'admins_only' | 'specific_organizations' | 'affiliates'
 const AUDIENCES: Audience[] = ['all', 'admins_only', 'specific_organizations', 'affiliates']
 
 export async function listAnnouncements(user: AuthedUser) {
-  requireSuperAdmin(user)
+  requireSuperAdminOrStaff(user)
   const supabase = getSupabaseAdmin()
   const { data, error } = await supabase.from('announcements').select(COLUMNS).order('created_at', { ascending: false })
   if (error) throw new HttpError(500, error.message)
@@ -23,7 +23,7 @@ export async function listAnnouncements(user: AuthedUser) {
  * Dashboard/Affiliate-Dashboard banner query, see getMyActiveAnnouncements
  * below), not a fan-out at publish time; there is nothing else to do here. */
 export async function createAnnouncement(event: HandlerEvent, user: AuthedUser) {
-  requireSuperAdmin(user)
+  requireSuperAdminOrStaff(user)
   const supabase = getSupabaseAdmin()
   const body = JSON.parse(event.body || '{}')
 
@@ -60,7 +60,7 @@ export async function createAnnouncement(event: HandlerEvent, user: AuthedUser) 
  * it yet simply stop seeing it on their next Dashboard load; there is no
  * re-publish/edit-content flow. */
 export async function deactivateAnnouncement(id: string, event: HandlerEvent, user: AuthedUser) {
-  requireSuperAdmin(user)
+  requireSuperAdminOrStaff(user)
   const supabase = getSupabaseAdmin()
 
   const { data: existing, error: fetchErr } = await supabase.from('announcements').select('title').eq('id', id).maybeSingle()

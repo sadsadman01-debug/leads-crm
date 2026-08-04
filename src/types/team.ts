@@ -1,4 +1,4 @@
-export type Role = 'super_admin' | 'admin' | 'user' | 'affiliate'
+export type Role = 'super_admin' | 'admin' | 'user' | 'affiliate' | 'staff'
 
 export type VisibilityScope = 'all' | 'own'
 
@@ -115,4 +115,5 @@ export const ROLE_LABELS: Record<Role, string> = {
   admin: 'Admin',
   user: 'User',
   affiliate: 'Affiliate',
+  staff: 'Staff',
 }

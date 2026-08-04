@@ -4,6 +4,8 @@ import {
   ProtectedRoute,
   RequireAdmin,
   RequireSuperAdmin,
+  RequireSuperAdminOrStaff,
+  RequireNotStaff,
   RequireMfaVerified,
   RequirePasswordSet,
   RequireAffiliate,
@@ -37,6 +39,7 @@ import { PromoCodesPage } from '@/pages/PromoCodes/PromoCodesPage'
 import { AnnouncementsPage } from '@/pages/Announcements/AnnouncementsPage'
 import { EarningsPage } from '@/pages/Earnings/EarningsPage'
 import { AffiliateApplicationsPage } from '@/pages/AffiliateApplications/AffiliateApplicationsPage'
+import { StaffPage } from '@/pages/Staff/StaffPage'
 import { NotificationsPage } from '@/pages/NotificationsPage'
 import { SubscriptionExpired } from '@/pages/SubscriptionExpired'
 import { OfflineBanner } from '@/components/OfflineBanner'
@@ -103,19 +106,14 @@ export default function App() {
               </Route>
               <Route element={<RequireNotAffiliate />}>
                 <Route element={<AppLayout />}>
-                  <Route element={<RequireSuperAdmin />}>
-                    <Route path="/organizations" element={<OrganizationsOverview />} />
+                  <Route element={<RequireSuperAdminOrStaff />}>
                     <Route path="/signup-requests" element={<SignupRequestsPage />} />
                     <Route path="/password-reset-requests" element={<PasswordResetRequestsPage />} />
                     <Route path="/mfa-reset-requests" element={<MfaResetRequestsPage />} />
                     <Route path="/support-contacts" element={<SupportContactsPage />} />
-                    <Route path="/audit-log" element={<AuditLogPage />} />
-                    <Route path="/billing" element={<BillingPage />} />
-                    <Route path="/cancellation-requests" element={<CancellationRequestsPage />} />
-                    <Route path="/promo-codes" element={<PromoCodesPage />} />
-                    <Route path="/earnings" element={<EarningsPage />} />
                     <Route path="/announcements" element={<AnnouncementsPage />} />
                     <Route path="/affiliate-applications" element={<AffiliateApplicationsPage />} />
+                    <Route path="/staff" element={<StaffPage />} />
                     <Route
                       path="/affiliates"
                       element={
@@ -140,6 +138,14 @@ export default function App() {
                         </Suspense>
                       }
                     />
+                  </Route>
+                  <Route element={<RequireSuperAdmin />}>
+                    <Route path="/organizations" element={<OrganizationsOverview />} />
+                    <Route path="/audit-log" element={<AuditLogPage />} />
+                    <Route path="/billing" element={<BillingPage />} />
+                    <Route path="/cancellation-requests" element={<CancellationRequestsPage />} />
+                    <Route path="/promo-codes" element={<PromoCodesPage />} />
+                    <Route path="/earnings" element={<EarningsPage />} />
                   </Route>
                   <Route
                     path="/dashboard"
@@ -170,10 +176,12 @@ export default function App() {
                       </Suspense>
                     }
                   />
-                  <Route path="/settings" element={<Settings />} />
                   <Route path="/notifications" element={<NotificationsPage />} />
-                  <Route element={<RequireAdmin />}>
-                    <Route path="/team" element={<TeamList />} />
+                  <Route element={<RequireNotStaff />}>
+                    <Route path="/settings" element={<Settings />} />
+                    <Route element={<RequireAdmin />}>
+                      <Route path="/team" element={<TeamList />} />
+                    </Route>
                   </Route>
                 </Route>
               </Route>

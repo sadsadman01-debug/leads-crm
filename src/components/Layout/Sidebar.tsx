@@ -29,6 +29,7 @@ import {
   CalendarOff,
   Megaphone,
   Activity,
+  IdCard,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useAuth } from '@/contexts/AuthContext'
@@ -62,6 +63,8 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   const { viewingOrgId, viewingOrgName, exitToOrganizations } = useOrg()
   const navigate = useNavigate()
   const isSuperAdmin = profile?.role === 'super_admin'
+  const isStaff = profile?.role === 'staff'
+  const isSuperAdminOrStaff = isSuperAdmin || isStaff
   const isAdminUp = profile?.role === 'admin' || profile?.role === 'super_admin'
 
   // Tablet-only: the sidebar defaults to an icon-only rail to save width on
@@ -74,7 +77,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   const { data: signupRequestsData } = useQuery({
     queryKey: ['signup-requests'],
     queryFn: signupRequestsApi.list,
-    enabled: isSuperAdmin,
+    enabled: isSuperAdminOrStaff,
     refetchInterval: 60_000,
   })
   const pendingSignupCount = (signupRequestsData?.requests ?? []).filter((r) => r.status === 'pending').length
@@ -82,7 +85,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   const { data: passwordResetData } = useQuery({
     queryKey: ['password-reset-requests'],
     queryFn: passwordResetRequestsApi.list,
-    enabled: isSuperAdmin,
+    enabled: isSuperAdminOrStaff,
     refetchInterval: 60_000,
   })
   const pendingPasswordResetCount = (passwordResetData?.requests ?? []).filter((r) => r.status === 'pending').length
@@ -90,7 +93,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   const { data: mfaResetData } = useQuery({
     queryKey: ['mfa-reset-requests'],
     queryFn: mfaResetRequestsApi.list,
-    enabled: isSuperAdmin,
+    enabled: isSuperAdminOrStaff,
     refetchInterval: 60_000,
   })
   const pendingMfaResetCount = (mfaResetData?.requests ?? []).filter((r) => r.status === 'pending').length
@@ -114,7 +117,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   const { data: affiliateApplicationsData } = useQuery({
     queryKey: ['affiliate-applications'],
     queryFn: affiliateApplicationsApi.list,
-    enabled: isSuperAdmin,
+    enabled: isSuperAdminOrStaff,
     refetchInterval: 60_000,
   })
   const pendingAffiliateApplicationCount = (affiliateApplicationsData?.applications ?? []).filter((a) => a.status === 'pending').length
@@ -122,7 +125,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   const { data: withdrawalRequestsData } = useQuery({
     queryKey: ['withdrawal-requests', 'all'],
     queryFn: () => withdrawalsApi.list('all'),
-    enabled: isSuperAdmin,
+    enabled: isSuperAdminOrStaff,
     refetchInterval: 60_000,
   })
   const pendingWithdrawalCount = (withdrawalRequestsData?.withdrawals ?? []).filter((w) => w.status === 'pending').length
@@ -130,7 +133,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   const { data: productReviewsData } = useQuery({
     queryKey: ['product-reviews', { reply_status: 'not_replied' as const }],
     queryFn: () => productReviewsApi.listAll({ reply_status: 'not_replied' }),
-    enabled: isSuperAdmin,
+    enabled: isSuperAdminOrStaff,
     refetchInterval: 60_000,
   })
   const pendingReplyCount = productReviewsData?.reviews.length ?? 0
@@ -140,11 +143,17 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   const resolvedLogoUrl = branding?.logo_url ?? platformBranding?.logo_url ?? null
   const appName = platformBranding?.platform_name || 'Leadify'
 
-  const navItems = [
-    ...NAV_ITEMS.slice(0, 6),
-    ...(isAdminUp ? [{ to: '/team', label: 'Team', icon: UsersRound }] : []),
-    NAV_ITEMS[6],
-  ]
+  // Staff has no Settings access of any kind, and Team is an Organization
+  // concept that doesn't apply to an org-less account — so Staff gets only
+  // the Dashboard..Reports slice (their shared personal-workspace CRM
+  // screens), with neither Team nor Settings appended.
+  const navItems = isStaff
+    ? NAV_ITEMS.slice(0, 6)
+    : [
+        ...NAV_ITEMS.slice(0, 6),
+        ...(isAdminUp ? [{ to: '/team', label: 'Team', icon: UsersRound }] : []),
+        NAV_ITEMS[6],
+      ]
 
   const workspaceLabel =
     branding?.display_name ||
@@ -273,22 +282,22 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
               Organizations
             </NavItem>
           )}
-          {isSuperAdmin && (
+          {isSuperAdminOrStaff && (
             <NavItem to="/signup-requests" icon={UserPlus2} badge={pendingSignupCount}>
               Signup Requests
             </NavItem>
           )}
-          {isSuperAdmin && (
+          {isSuperAdminOrStaff && (
             <NavItem to="/password-reset-requests" icon={KeyRound} badge={pendingPasswordResetCount}>
               Password Reset Requests
             </NavItem>
           )}
-          {isSuperAdmin && (
+          {isSuperAdminOrStaff && (
             <NavItem to="/mfa-reset-requests" icon={ShieldAlert} badge={pendingMfaResetCount}>
               MFA Reset Requests
             </NavItem>
           )}
-          {isSuperAdmin && (
+          {isSuperAdminOrStaff && (
             <NavItem to="/support-contacts" icon={LifeBuoy}>
               Support Contacts
             </NavItem>
@@ -308,22 +317,22 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
               Cancellation Requests
             </NavItem>
           )}
-          {isSuperAdmin && (
+          {isSuperAdminOrStaff && (
             <NavItem to="/affiliate-applications" icon={Handshake} badge={pendingAffiliateApplicationCount}>
               Affiliate Applications
             </NavItem>
           )}
-          {isSuperAdmin && (
+          {isSuperAdminOrStaff && (
             <NavItem to="/affiliates" icon={UsersRound}>
               Affiliates
             </NavItem>
           )}
-          {isSuperAdmin && (
+          {isSuperAdminOrStaff && (
             <NavItem to="/withdrawal-requests" icon={Wallet} badge={pendingWithdrawalCount}>
               Withdrawal Requests
             </NavItem>
           )}
-          {isSuperAdmin && (
+          {isSuperAdminOrStaff && (
             <NavItem to="/product-reviews" icon={MessageSquareText} badge={pendingReplyCount}>
               Product Reviews
             </NavItem>
@@ -338,9 +347,14 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
               Earnings
             </NavItem>
           )}
-          {isSuperAdmin && (
+          {isSuperAdminOrStaff && (
             <NavItem to="/announcements" icon={Megaphone}>
               Announcements
+            </NavItem>
+          )}
+          {isSuperAdminOrStaff && (
+            <NavItem to="/staff" icon={IdCard}>
+              Platform Staff
             </NavItem>
           )}
           {navItems.map(({ to, label, icon: Icon }) => (

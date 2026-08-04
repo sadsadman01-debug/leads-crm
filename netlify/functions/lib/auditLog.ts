@@ -57,6 +57,10 @@ export type AuditEventType =
   | 'announcement_deactivated'
   | 'renewal_payment_requested'
   | 'renewal_payment_confirmed'
+  | 'staff_account_created'
+  | 'staff_account_deactivated'
+  | 'staff_account_reactivated'
+  | 'staff_account_deleted'
 
 interface InsertAuditLogParams {
   eventType: AuditEventType

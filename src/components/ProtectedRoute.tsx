@@ -56,7 +56,8 @@ export function RequireAdmin() {
   return <Outlet />
 }
 
-/** Gates a route to the Super Admin only (the Organizations platform view). */
+/** Gates a route to the Super Admin only (the Organizations platform view,
+ * and every other screen Platform Staff is explicitly restricted from). */
 export function RequireSuperAdmin() {
   const { profile, loading } = useAuth()
 
@@ -64,6 +65,37 @@ export function RequireSuperAdmin() {
   if (!profile) return <ProfileLoadError />
 
   if (profile.role !== 'super_admin') {
+    return <Navigate to="/dashboard" state={{ accessDenied: true }} replace />
+  }
+
+  return <Outlet />
+}
+
+/** Gates a route to Super Admin OR Platform Staff — the operational
+ * screens Staff has full (or view-only, per-screen) access to. */
+export function RequireSuperAdminOrStaff() {
+  const { profile, loading } = useAuth()
+
+  if (loading) return <SpinnerScreen />
+  if (!profile) return <ProfileLoadError />
+
+  if (profile.role !== 'super_admin' && profile.role !== 'staff') {
+    return <Navigate to="/dashboard" state={{ accessDenied: true }} replace />
+  }
+
+  return <Outlet />
+}
+
+/** Keeps Platform Staff out of Settings/Team — Staff has zero Settings
+ * access of any kind, and Team is an Organization-team concept that doesn't
+ * apply to an org-less account. */
+export function RequireNotStaff() {
+  const { profile, loading } = useAuth()
+
+  if (loading) return <SpinnerScreen />
+  if (!profile) return <ProfileLoadError />
+
+  if (profile.role === 'staff') {
     return <Navigate to="/dashboard" state={{ accessDenied: true }} replace />
   }
 
@@ -132,9 +164,18 @@ export function RequireNotAffiliate() {
 }
 
 /** Sends the Super Admin to the Organizations Overview, Affiliates to their
- * own Dashboard, and everyone else to Leads. */
+ * own Dashboard, Platform Staff to Signup Requests (their primary
+ * operational screen — they have no Organizations access), and everyone
+ * else to Leads. */
 export function DefaultLanding() {
   const { profile } = useAuth()
-  const to = profile?.role === 'super_admin' ? '/organizations' : profile?.role === 'affiliate' ? '/affiliate' : '/leads'
+  const to =
+    profile?.role === 'super_admin'
+      ? '/organizations'
+      : profile?.role === 'affiliate'
+        ? '/affiliate'
+        : profile?.role === 'staff'
+          ? '/signup-requests'
+          : '/leads'
   return <Navigate to={to} replace />
 }

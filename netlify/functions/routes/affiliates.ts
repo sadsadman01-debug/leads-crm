@@ -1,14 +1,25 @@
 import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
-import { requireSuperAdmin } from '../lib/permissions.js'
-import { getAffiliateBalances, getAffiliateFunnel, getAffiliateTrend } from '../lib/affiliateBalances.js'
+import { requireSuperAdminOrStaff, isStaff } from '../lib/permissions.js'
+import { getAffiliateBalances, getAffiliateFunnel, getAffiliateTrend, type AffiliateBalances } from '../lib/affiliateBalances.js'
 import { getOrCreateAffiliateSettingsRow } from '../lib/affiliateSettings.js'
 import { buildAffiliateLeaderboard, type LeaderboardPeriod } from '../lib/affiliateLeaderboard.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const AFFILIATE_COLUMNS =
   'id, profile_id, full_name, email, referral_code, city, country, zip_code, status, created_at, public_display_name, leaderboard_opt_in'
+
+/** Staff has full view+act access to this screen EXCEPT monetary figures —
+ * Total Earned/Pending/Paid Out (and per-affiliate commission) are masked
+ * server-side, never sent to the browser at all, rather than merely hidden
+ * by frontend CSS. Non-financial fields (referral/conversion counts, status)
+ * are untouched. Withdrawal Requests is a separate screen and is NOT masked
+ * — Staff needs real amounts there to actually process a withdrawal. */
+function maskBalancesForStaff(balances: AffiliateBalances, user: AuthedUser): AffiliateBalances | null {
+  if (!isStaff(user)) return balances
+  return null
+}
 
 export async function getAffiliateForUser(user: AuthedUser) {
   if (user.role !== 'affiliate') throw new HttpError(403, 'Affiliate access required')
@@ -106,10 +117,11 @@ export async function getAffiliateLeaderboard(event: HandlerEvent, user: AuthedU
  * filtering (real name, email, and exact commission for everyone) and no
  * top-N cap, since this is for full oversight rather than peer motivation. */
 export async function getAffiliateLeaderboardAdmin(event: HandlerEvent, user: AuthedUser) {
-  requireSuperAdmin(user)
+  requireSuperAdminOrStaff(user)
   const period = parsePeriod(event)
   const rows = await buildAffiliateLeaderboard(period)
-  return json(200, { period, entries: rows })
+  const entries = rows.map((r) => (isStaff(user) ? { ...r, commission_earned_usd: null } : r))
+  return json(200, { period, entries })
 }
 
 /** Everything the Affiliate Dashboard's Overview tab needs in one call:
@@ -182,7 +194,7 @@ export async function listMyReferrals(user: AuthedUser) {
 /** Super Admin only — every affiliate, with earnings + funnel summary
  * columns for at-a-glance comparison. */
 export async function listAffiliates(user: AuthedUser) {
-  requireSuperAdmin(user)
+  requireSuperAdminOrStaff(user)
   const supabase = getSupabaseAdmin()
   const { data: affiliates, error } = await supabase.from('affiliates').select(AFFILIATE_COLUMNS).order('created_at', { ascending: true })
   if (error) throw new HttpError(500, error.message)
@@ -190,7 +202,7 @@ export async function listAffiliates(user: AuthedUser) {
   const rows = await Promise.all(
     (affiliates ?? []).map(async (a) => {
       const [balances, funnel] = await Promise.all([getAffiliateBalances(a.id), getAffiliateFunnel(a.id)])
-      return { ...a, balances, funnel }
+      return { ...a, balances: maskBalancesForStaff(balances, user), funnel }
     })
   )
 
@@ -200,7 +212,7 @@ export async function listAffiliates(user: AuthedUser) {
 /** Super Admin only — single affiliate's full profile plus the same
  * funnel/trend data the affiliate sees on their own dashboard, for auditing. */
 export async function getAffiliateDetail(id: string, event: HandlerEvent, user: AuthedUser) {
-  requireSuperAdmin(user)
+  requireSuperAdminOrStaff(user)
   const supabase = getSupabaseAdmin()
   const { data: affiliate, error } = await supabase.from('affiliates').select(AFFILIATE_COLUMNS).eq('id', id).maybeSingle()
   if (error) throw new HttpError(500, error.message)
@@ -211,14 +223,15 @@ export async function getAffiliateDetail(id: string, event: HandlerEvent, user: 
   const funnel = await getAffiliateFunnel(id, dateFrom, dateTo)
   const trend = dateFrom && dateTo ? await getAffiliateTrend(id, dateFrom, dateTo) : []
 
-  return json(200, { affiliate, balances, funnel, trend })
+  return json(200, { affiliate, balances: maskBalancesForStaff(balances, user), funnel, trend })
 }
 
-/** Super Admin only — suspend/reactivate an affiliate account (blocks/allows
- * login the same way Organization suspension already does for Admins/Users,
- * via banning the underlying Auth user). Body: { status: 'active' | 'suspended' }. */
+/** Staff (per spec, full access) or Super Admin — suspend/reactivate an
+ * affiliate account (blocks/allows login the same way Organization
+ * suspension already does for Admins/Users, via banning the underlying Auth
+ * user). Body: { status: 'active' | 'suspended' }. */
 export async function updateAffiliateStatus(id: string, event: HandlerEvent, user: AuthedUser) {
-  requireSuperAdmin(user)
+  requireSuperAdminOrStaff(user)
   const supabase = getSupabaseAdmin()
   const body = JSON.parse(event.body || '{}')
   if (!['active', 'suspended'].includes(body.status)) throw new HttpError(400, "status must be 'active' or 'suspended'")

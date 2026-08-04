@@ -21,8 +21,9 @@ export function AffiliatesPage() {
 
   const sorted = useMemo(() => {
     return [...affiliates].sort((a, b) => {
-      const av = sortKey === 'clicks' || sortKey === 'requests' || sortKey === 'completed' ? a.funnel[sortKey] : a.balances[sortKey]
-      const bv = sortKey === 'clicks' || sortKey === 'requests' || sortKey === 'completed' ? b.funnel[sortKey] : b.balances[sortKey]
+      const isFunnelKey = sortKey === 'clicks' || sortKey === 'requests' || sortKey === 'completed'
+      const av = isFunnelKey ? a.funnel[sortKey] : (a.balances?.[sortKey] ?? 0)
+      const bv = isFunnelKey ? b.funnel[sortKey] : (b.balances?.[sortKey] ?? 0)
       return bv - av
     })
   }, [affiliates, sortKey])
@@ -94,9 +95,9 @@ export function AffiliatesPage() {
                   <td className="px-3 py-3">
                     <Badge tone={a.status === 'active' ? 'success' : 'neutral'}>{a.status}</Badge>
                   </td>
-                  <td className="px-3 py-3 tabular-nums text-base-200">৳{a.balances.lifetimeEarned}</td>
-                  <td className="px-3 py-3 tabular-nums text-warn">৳{a.balances.pendingWithdrawal}</td>
-                  <td className="px-3 py-3 tabular-nums text-success">৳{a.balances.totalPaidOut}</td>
+                  <td className="px-3 py-3 tabular-nums text-base-200">{a.balances ? `৳${a.balances.lifetimeEarned}` : <span className="text-base-500">•••</span>}</td>
+                  <td className="px-3 py-3 tabular-nums text-warn">{a.balances ? `৳${a.balances.pendingWithdrawal}` : <span className="text-base-500">•••</span>}</td>
+                  <td className="px-3 py-3 tabular-nums text-success">{a.balances ? `৳${a.balances.totalPaidOut}` : <span className="text-base-500">•••</span>}</td>
                   <td className="px-3 py-3 tabular-nums text-base-300">{a.funnel.clicks}</td>
                   <td className="px-3 py-3 tabular-nums text-base-300">{a.funnel.requests}</td>
                   <td className="px-3 py-3 tabular-nums text-base-300">{a.funnel.completed}</td>
@@ -153,7 +154,9 @@ function AffiliateDetailModal({ affiliate, onClose }: { affiliate: AffiliateWith
           </div>
           <div className="rounded-lg bg-base-850 p-3">
             <p className="text-xs text-base-500">Available Balance</p>
-            <p className="text-base-100">৳{detail?.balances.availableBalance ?? affiliate.balances.availableBalance}</p>
+            <p className="text-base-100">
+              {(detail?.balances ?? affiliate.balances) ? `৳${(detail?.balances ?? affiliate.balances)!.availableBalance}` : '•••'}
+            </p>
           </div>
           <div className="rounded-lg bg-base-850 p-3">
             <p className="text-xs text-base-500">Joined</p>

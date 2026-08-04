@@ -2,7 +2,7 @@ import type { HandlerEvent } from '@netlify/functions'
 import crypto from 'crypto'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
-import { requireSuperAdmin, requireAal2IfEnrolled } from '../lib/permissions.js'
+import { requireSuperAdminOrStaff, requireAal2IfEnrolled } from '../lib/permissions.js'
 import { generateTempPassword } from '../lib/passwordGen.js'
 import { notifySuperAdmins, notifyOrgAdmins } from '../lib/notifications.js'
 import { getOrCreateOrgReferralSettingsRow } from '../lib/orgReferralSettings.js'
@@ -185,7 +185,7 @@ export async function createSignupRequest(event: HandlerEvent) {
 }
 
 export async function listSignupRequests(user: AuthedUser) {
-  requireSuperAdmin(user)
+  requireSuperAdminOrStaff(user)
   const supabase = getSupabaseAdmin()
   const { data, error } = await supabase.from('signup_requests').select(COLUMNS).order('requested_at', { ascending: false })
   if (error) throw new HttpError(500, error.message)
@@ -327,7 +327,7 @@ async function maybeGrantOrgReferralReward(params: {
  * approved. The temporary password is returned once, in this response only;
  * it is never stored anywhere and never sent by this app via email. */
 export async function approveSignupRequest(id: string, event: HandlerEvent, user: AuthedUser) {
-  requireSuperAdmin(user)
+  requireSuperAdminOrStaff(user)
   await requireAal2IfEnrolled(user)
   const supabase = getSupabaseAdmin()
   const request = await getRequestOrThrow(id)
@@ -484,7 +484,7 @@ export async function approveSignupRequest(id: string, event: HandlerEvent, user
 
 /** Body: { rejection_reason?: string } — an internal-only note, never sent anywhere. */
 export async function rejectSignupRequest(id: string, event: HandlerEvent, user: AuthedUser) {
-  requireSuperAdmin(user)
+  requireSuperAdminOrStaff(user)
   await requireAal2IfEnrolled(user)
   const request = await getRequestOrThrow(id)
   if (request.status !== 'pending') throw new HttpError(400, 'This request has already been reviewed')
@@ -512,7 +512,7 @@ export async function rejectSignupRequest(id: string, event: HandlerEvent, user:
  * time before (or as part of) approval, so the Super Admin can mark payment
  * confirmed once it actually arrives, without having to approve immediately. */
 export async function updateSignupRequestPaymentStatus(id: string, event: HandlerEvent, user: AuthedUser) {
-  requireSuperAdmin(user)
+  requireSuperAdminOrStaff(user)
   const supabase = getSupabaseAdmin()
   const request = await getRequestOrThrow(id)
   const body = JSON.parse(event.body || '{}')

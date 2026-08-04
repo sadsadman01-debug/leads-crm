@@ -1,7 +1,7 @@
 import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
-import { requireSuperAdmin, requireAal2IfEnrolled } from '../lib/permissions.js'
+import { requireSuperAdminOrStaff, requireAal2IfEnrolled } from '../lib/permissions.js'
 import { generateTempPassword } from '../lib/passwordGen.js'
 import { generateUniqueReferralCode } from '../lib/referralCode.js'
 import { notifySuperAdmins } from '../lib/notifications.js'
@@ -65,7 +65,7 @@ export async function createAffiliateApplication(event: HandlerEvent) {
 }
 
 export async function listAffiliateApplications(user: AuthedUser) {
-  requireSuperAdmin(user)
+  requireSuperAdminOrStaff(user)
   const supabase = getSupabaseAdmin()
   const { data, error } = await supabase.from('affiliate_applications').select(COLUMNS).order('applied_at', { ascending: false })
   if (error) throw new HttpError(500, error.message)
@@ -84,7 +84,7 @@ async function getApplicationOrThrow(id: string) {
  * with a securely generated temporary password, force_password_change set,
  * a unique referral_code minted, then the affiliates row created. */
 export async function approveAffiliateApplication(id: string, event: HandlerEvent, user: AuthedUser) {
-  requireSuperAdmin(user)
+  requireSuperAdminOrStaff(user)
   await requireAal2IfEnrolled(user)
   const supabase = getSupabaseAdmin()
   const application = await getApplicationOrThrow(id)
@@ -149,7 +149,7 @@ export async function approveAffiliateApplication(id: string, event: HandlerEven
 
 /** Body: { rejection_reason?: string } — an internal-only note. */
 export async function rejectAffiliateApplication(id: string, event: HandlerEvent, user: AuthedUser) {
-  requireSuperAdmin(user)
+  requireSuperAdminOrStaff(user)
   await requireAal2IfEnrolled(user)
   const application = await getApplicationOrThrow(id)
   if (application.status !== 'pending') throw new HttpError(400, 'This application has already been reviewed')

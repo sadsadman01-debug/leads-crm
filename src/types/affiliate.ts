@@ -64,7 +64,9 @@ export interface AffiliateLeaderboard {
   totalRanked: number
 }
 
-/** Super Admin's unfiltered view — every active affiliate, real identity + exact commission for all. */
+/** Super Admin's unfiltered view — every active affiliate, real identity +
+ * exact commission for all. commission_earned_usd is null for a Staff
+ * viewer specifically — masked server-side, same as the Affiliates list/detail. */
 export interface AffiliateLeaderboardAdminEntry {
   affiliate_id: string
   full_name: string
@@ -72,7 +74,7 @@ export interface AffiliateLeaderboardAdminEntry {
   public_display_name: string | null
   leaderboard_opt_in: boolean
   completed: number
-  commission_earned_usd: number
+  commission_earned_usd: number | null
   rank: number
 }
 
@@ -171,14 +173,16 @@ export interface AffiliateDashboardSummary {
   minWithdrawalUsd: number | null
 }
 
+/** balances is null for a Staff viewer — masked server-side, never sent to
+ * the browser at all, since Staff has no access to Affiliate financial figures. */
 export interface AffiliateWithSummary extends Affiliate {
-  balances: AffiliateBalances
+  balances: AffiliateBalances | null
   funnel: FunnelCounts
 }
 
 export interface AffiliateDetail {
   affiliate: Affiliate
-  balances: AffiliateBalances
+  balances: AffiliateBalances | null
   funnel: FunnelCounts
   trend: TrendPoint[]
 }

@@ -17,6 +17,7 @@ import type {
   TemplateType,
 } from '@/types/lead'
 import type { TeamActivityFilters, TeamActivityListResponse } from '@/types/teamActivity'
+import type { StaffMember } from '@/types/staff'
 import type {
   Deal,
   DealFilters,
@@ -477,6 +478,18 @@ export const organizationsApi = {
    * exact same underlying mechanism as Team Management's per-user reset. */
   resetAdminPassword: (id: string) =>
     request<{ admin: PasswordResetResult }>(`/organizations/${id}/reset-admin-password`, { method: 'POST' }),
+}
+
+export const staffApi = {
+  list: () => request<{ staff: StaffMember[] }>('/staff-members'),
+
+  create: (payload: { email: string; password: string; nickname: string }) =>
+    request<StaffMember>('/staff-members', { method: 'POST', body: JSON.stringify(payload) }),
+
+  updateStatus: (id: string, status: 'active' | 'suspended') =>
+    request<StaffMember>(`/staff-members/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+
+  remove: (id: string) => request<{ success: true }>(`/staff-members/${id}`, { method: 'DELETE' }),
 }
 
 export const brandingApi = {

@@ -29,6 +29,7 @@ import {
 import { importRows, importFromSheet, exportLeads } from './routes/importExport.js'
 import { getDashboardSummary } from './routes/dashboard.js'
 import { listTeamActivity } from './routes/teamActivity.js'
+import { listStaffMembers, createStaffMember, updateStaffStatus, deleteStaffMember } from './routes/staffMembers.js'
 import { listStages, createStage, renameStage, reorderStages, deleteStage } from './routes/pipelineStages.js'
 import { getSettings, updateSettings } from './routes/settings.js'
 import { listTemplates, createTemplate, updateTemplate, deleteTemplate } from './routes/templates.js'
@@ -749,6 +750,13 @@ export const handler: Handler = async (event) => {
         else if (id && sub === 'reject' && method === 'POST') response = await rejectAffiliateApplication(id, event, user)
         else throw new HttpError(404, 'Not found')
       }
+    } else if (resource === 'staff-members') {
+      const user = await requireUser(event)
+      if (!id && method === 'GET') response = await listStaffMembers(user)
+      else if (!id && method === 'POST') response = await createStaffMember(event, user)
+      else if (id && sub === 'status' && method === 'PATCH') response = await updateStaffStatus(id, event, user)
+      else if (id && method === 'DELETE') response = await deleteStaffMember(id, event, user)
+      else throw new HttpError(404, 'Not found')
     } else if (resource === 'affiliates') {
       const user = await requireUser(event)
       if (id === 'me' && sub === 'dashboard' && method === 'GET') response = await getMyDashboardSummary(event, user)

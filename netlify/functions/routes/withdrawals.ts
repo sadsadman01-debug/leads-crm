@@ -1,7 +1,7 @@
 import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
-import { requireSuperAdmin, requireAal2IfEnrolled } from '../lib/permissions.js'
+import { requireSuperAdminOrStaff, requireAal2IfEnrolled } from '../lib/permissions.js'
 import { getAffiliateForUser } from './affiliates.js'
 import { getAffiliateBalances } from '../lib/affiliateBalances.js'
 import { getOrCreateAffiliateSettingsRow } from '../lib/affiliateSettings.js'
@@ -73,7 +73,7 @@ export async function listMyWithdrawals(user: AuthedUser) {
 
 /** Super Admin only — every affiliate's requests, optionally filtered by status. */
 export async function listWithdrawalRequests(event: HandlerEvent, user: AuthedUser) {
-  requireSuperAdmin(user)
+  requireSuperAdminOrStaff(user)
   const supabase = getSupabaseAdmin()
   const status = event.queryStringParameters?.status
 
@@ -105,7 +105,7 @@ export async function listWithdrawalRequests(event: HandlerEvent, user: AuthedUs
 /** Super Admin only — full detail: complete UNMASKED payout method (the real
  * info needed to actually send money), plus the per-request status-change log. */
 export async function getWithdrawalDetail(id: string, user: AuthedUser) {
-  requireSuperAdmin(user)
+  requireSuperAdminOrStaff(user)
   const supabase = getSupabaseAdmin()
   const { data: request, error } = await supabase.from('withdrawal_requests').select(REQUEST_COLUMNS).eq('id', id).maybeSingle()
   if (error) throw new HttpError(500, error.message)
@@ -145,7 +145,7 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
  * balance formula only counts pending/processing toward Pending Withdrawal,
  * so a rejected request simply stops counting the moment its status changes. */
 export async function updateWithdrawalStatus(id: string, event: HandlerEvent, user: AuthedUser) {
-  requireSuperAdmin(user)
+  requireSuperAdminOrStaff(user)
   await requireAal2IfEnrolled(user)
   const supabase = getSupabaseAdmin()
   const body = JSON.parse(event.body || '{}')

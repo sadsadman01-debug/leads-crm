@@ -15,6 +15,11 @@ export const PERSONAL_SCOPE = '__personal__'
  * that can legitimately act across tenants.
  */
 export function resolveOrganizationId(user: AuthedUser, event: HandlerEvent): string | null {
+  // Staff only ever operates in the shared personal/private workspace (same
+  // organization_id IS NULL space as the Super Admin's own sandbox) — never
+  // an arbitrary tenant Organization, regardless of any ?organizationId=
+  // a request happens to include.
+  if (user.role === 'staff') return null
   if (user.role !== 'super_admin') {
     if (!user.organization_id) throw new HttpError(403, 'This account is not linked to an organization')
     return user.organization_id
@@ -51,6 +56,18 @@ export function isAdminOrAbove(user: AuthedUser): boolean {
 
 export function isSuperAdmin(user: AuthedUser): boolean {
   return user.role === 'super_admin'
+}
+
+/** Platform Staff — a restricted, org-less role alongside Super Admin. Only
+ * ever relevant for the specific operational screens Staff has full access
+ * to (see requireSuperAdminOrStaff); every other existing check in this file
+ * is untouched, so Staff is blocked by default everywhere else. */
+export function isStaff(user: AuthedUser): boolean {
+  return user.role === 'staff'
+}
+
+export function requireSuperAdminOrStaff(user: AuthedUser) {
+  if (!isSuperAdmin(user) && !isStaff(user)) throw new HttpError(403, 'Super Admin or Staff access required')
 }
 
 export function requireAdminOrAbove(user: AuthedUser) {

@@ -66,9 +66,12 @@ export async function createNotifications(inputs: NotificationInput[]) {
 }
 
 /** All active Super Admins — platform-level notifications have no organization_id. */
+/** Also reaches Platform Staff — they share responsibility for these same
+ * operational queues (Signup Requests, Password/MFA Resets, etc.) alongside
+ * the Super Admin, so they need the same heads-up notifications to act on them. */
 export async function notifySuperAdmins(fields: Omit<NotificationInput, 'recipient_profile_id' | 'organization_id'>) {
   const supabase = getSupabaseAdmin()
-  const { data } = await supabase.from('profiles').select('id').eq('role', 'super_admin').eq('is_active', true)
+  const { data } = await supabase.from('profiles').select('id').in('role', ['super_admin', 'staff']).eq('is_active', true)
   await createNotifications((data ?? []).map((p) => ({ ...fields, recipient_profile_id: p.id, organization_id: null })))
 }
 

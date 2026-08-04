@@ -1,7 +1,7 @@
 import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
-import { requireSuperAdmin } from '../lib/permissions.js'
+import { requireSuperAdmin, requireSuperAdminOrStaff } from '../lib/permissions.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const MAX_MESSAGE_LENGTH = 500
@@ -90,7 +90,7 @@ export async function createPublicSupportContact(event: HandlerEvent) {
 /** Super Admin only — a simple chronological log, not a paginated/filterable
  * inbox, since this is "at a glance" visibility per the spec, not a ticketing UI. */
 export async function listSupportContacts(user: AuthedUser) {
-  requireSuperAdmin(user)
+  requireSuperAdminOrStaff(user)
   const supabase = getSupabaseAdmin()
 
   const { data, error } = await supabase.from('support_contacts').select(COLUMNS).order('created_at', { ascending: false }).limit(500)

@@ -1,7 +1,7 @@
 import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
-import { requireSuperAdmin } from '../lib/permissions.js'
+import { requireSuperAdminOrStaff } from '../lib/permissions.js'
 import { logAuditEvent } from '../lib/auditLog.js'
 import { createNotification } from '../lib/notifications.js'
 import { computeReviewStatus } from '../lib/productReviewSchedule.js'
@@ -93,7 +93,7 @@ export async function listMyReviews(user: AuthedUser) {
  * since there's no direct FK-embed convention for cross-role joins elsewhere
  * in this codebase (same approach as listWithdrawalRequests). */
 export async function listAllReviews(event: HandlerEvent, user: AuthedUser) {
-  requireSuperAdmin(user)
+  requireSuperAdminOrStaff(user)
   const supabase = getSupabaseAdmin()
   const params = event.queryStringParameters ?? {}
 
@@ -136,7 +136,7 @@ export async function listAllReviews(event: HandlerEvent, user: AuthedUser) {
 /** Super Admin only — average rating (all-time and optionally a selected
  * range), total count, and a 1-5 star distribution for the stats row/chart. */
 export async function getReviewStats(event: HandlerEvent, user: AuthedUser) {
-  requireSuperAdmin(user)
+  requireSuperAdminOrStaff(user)
   const supabase = getSupabaseAdmin()
   const params = event.queryStringParameters ?? {}
 
@@ -168,7 +168,7 @@ export async function getReviewStats(event: HandlerEvent, user: AuthedUser) {
 /** Body: { reply }. Works identically for a first reply or editing an
  * existing one — always just overwrites super_admin_reply/replied_at/replied_by. */
 export async function replyToReview(id: string, event: HandlerEvent, user: AuthedUser) {
-  requireSuperAdmin(user)
+  requireSuperAdminOrStaff(user)
   const supabase = getSupabaseAdmin()
   const body = JSON.parse(event.body || '{}')
 

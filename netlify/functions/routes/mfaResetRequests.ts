@@ -1,7 +1,7 @@
 import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
-import { isAdminOrAbove, isSuperAdmin, requireSuperAdmin, requireAal2IfEnrolled } from '../lib/permissions.js'
+import { isAdminOrAbove, isSuperAdmin, isStaff, requireSuperAdminOrStaff, requireAal2IfEnrolled } from '../lib/permissions.js'
 import { notifySuperAdmins, notifyOrgAdmins } from '../lib/notifications.js'
 import { insertAuditLog, getClientIp } from '../lib/auditLog.js'
 import type { AuthedUser } from '../lib/auth.js'
@@ -71,11 +71,11 @@ export async function createMfaResetRequest(event: HandlerEvent) {
 /** Admin sees only pending/resolved requests targeting Users in their own
  * organization; Super Admin sees every request platform-wide. */
 export async function listMfaResetRequests(event: HandlerEvent, user: AuthedUser) {
-  if (!isAdminOrAbove(user)) throw new HttpError(403, 'Admin access required')
+  if (!isAdminOrAbove(user) && !isStaff(user)) throw new HttpError(403, 'Admin access required')
   const supabase = getSupabaseAdmin()
 
   let query = supabase.from('mfa_reset_requests').select(COLUMNS).order('requested_at', { ascending: false })
-  if (!isSuperAdmin(user)) {
+  if (!isSuperAdmin(user) && !isStaff(user)) {
     query = query.eq('target_role', 'user').eq('organization_id', user.organization_id)
   }
 
@@ -125,10 +125,10 @@ export async function performMfaReset(targetProfileId: string, resolver: AuthedU
     throw new HttpError(403, "A Super Admin's two-factor authentication cannot be reset through this flow")
   }
   if (target.role === 'admin') {
-    requireSuperAdmin(resolver)
+    requireSuperAdminOrStaff(resolver)
   } else {
-    if (!isAdminOrAbove(resolver)) throw new HttpError(403, 'You do not have permission to reset this account’s two-factor authentication')
-    if (!isSuperAdmin(resolver) && target.organization_id !== resolver.organization_id) {
+    if (!isAdminOrAbove(resolver) && !isStaff(resolver)) throw new HttpError(403, 'You do not have permission to reset this account’s two-factor authentication')
+    if (!isSuperAdmin(resolver) && !isStaff(resolver) && target.organization_id !== resolver.organization_id) {
       throw new HttpError(404, 'Account not found')
     }
   }
@@ -162,7 +162,7 @@ export async function performMfaReset(targetProfileId: string, resolver: AuthedU
 }
 
 export async function resolveMfaResetRequest(id: string, event: HandlerEvent, user: AuthedUser) {
-  if (!isAdminOrAbove(user)) throw new HttpError(403, 'Admin access required')
+  if (!isAdminOrAbove(user) && !isStaff(user)) throw new HttpError(403, 'Admin access required')
   await requireAal2IfEnrolled(user)
   const supabase = getSupabaseAdmin()
 
@@ -171,7 +171,7 @@ export async function resolveMfaResetRequest(id: string, event: HandlerEvent, us
   if (!reqRow) throw new HttpError(404, 'Request not found')
   if (reqRow.status !== 'pending') throw new HttpError(400, 'This request has already been resolved')
 
-  if (!isSuperAdmin(user) && (reqRow.target_role !== 'user' || reqRow.organization_id !== user.organization_id)) {
+  if (!isSuperAdmin(user) && !isStaff(user) && (reqRow.target_role !== 'user' || reqRow.organization_id !== user.organization_id)) {
     throw new HttpError(404, 'Request not found')
   }
 

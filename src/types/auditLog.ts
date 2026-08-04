@@ -53,12 +53,16 @@ export type AuditEventType =
   | 'announcement_deactivated'
   | 'renewal_payment_requested'
   | 'renewal_payment_confirmed'
+  | 'staff_account_created'
+  | 'staff_account_deactivated'
+  | 'staff_account_reactivated'
+  | 'staff_account_deleted'
 
 export interface AuditLogEntry {
   id: string
   event_type: AuditEventType
   actor_profile_id: string | null
-  actor_role: 'super_admin' | 'admin' | 'user' | 'affiliate' | null
+  actor_role: 'super_admin' | 'admin' | 'user' | 'affiliate' | 'staff' | null
   actor_nickname: string | null
   organization_id: string | null
   organization_name: string | null
@@ -138,6 +142,10 @@ export const AUDIT_EVENT_LABELS: Record<AuditEventType, string> = {
   announcement_deactivated: 'Announcement deactivated',
   renewal_payment_requested: 'Renewal payment requested',
   renewal_payment_confirmed: 'Renewal payment confirmed',
+  staff_account_created: 'Staff account created',
+  staff_account_deactivated: 'Staff account deactivated',
+  staff_account_reactivated: 'Staff account reactivated',
+  staff_account_deleted: 'Staff account deleted',
 }
 
 /** Security-relevant events get one color family in the UI; every other
