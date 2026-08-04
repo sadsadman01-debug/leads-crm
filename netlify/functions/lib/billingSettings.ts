@@ -9,10 +9,11 @@ export interface BillingSettingsRow {
   standard_price_usd: number
   promotional_banner_text: string | null
   grace_period_days: number
+  subscription_warning_days: number
 }
 
 const BILLING_COLUMNS =
-  'id, payment_instructions, early_bird_threshold, early_bird_price_usd, standard_price_usd, promotional_banner_text, grace_period_days'
+  'id, payment_instructions, early_bird_threshold, early_bird_price_usd, standard_price_usd, promotional_banner_text, grace_period_days, subscription_warning_days'
 
 /** Single platform-wide row, shared with Platform Branding (same
  * `platform_settings` table) — created lazily on first access. */

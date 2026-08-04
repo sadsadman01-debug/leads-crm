@@ -1,9 +1,10 @@
 import type { HandlerEvent } from '@netlify/functions'
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
-import { requireSuperAdmin } from '../lib/permissions.js'
+import { requireSuperAdmin, requireAal2IfEnrolled } from '../lib/permissions.js'
 import { logAuditEvent } from '../lib/auditLog.js'
 import { generateUniqueOrgReferralCode } from '../lib/orgReferralCode.js'
+import { performPasswordReset } from './passwordResetRequests.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const BAN_DURATION = '876000h'
@@ -276,6 +277,29 @@ export async function setOrganizationCancelled(id: string, event: HandlerEvent, 
   })
 
   return json(200, data)
+}
+
+/** A direct shortcut from the Organizations table — resets this Organization's
+ * single Admin account's password, reusing performPasswordReset exactly (the
+ * same mechanism behind the Team Management row action and the forgot-password
+ * resolve flow), so the audit trail/notification/force_password_change
+ * behavior is identical, not a parallel implementation. */
+export async function resetOrgAdminPassword(organizationId: string, event: HandlerEvent, user: AuthedUser) {
+  requireSuperAdmin(user)
+  await requireAal2IfEnrolled(user)
+  const supabase = getSupabaseAdmin()
+
+  const { data: admin, error } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('organization_id', organizationId)
+    .eq('role', 'admin')
+    .maybeSingle()
+  if (error) throw new HttpError(500, error.message)
+  if (!admin) throw new HttpError(404, 'This organization has no Admin account')
+
+  const result = await performPasswordReset(admin.id, user)
+  return json(200, { admin: result })
 }
 
 /** Reverses setOrganizationCancelled (e.g. the customer changed their mind

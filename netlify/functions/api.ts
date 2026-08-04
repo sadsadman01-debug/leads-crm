@@ -132,6 +132,7 @@ import {
   deleteOrganization,
   setOrganizationCancelled,
   reactivateOrganizationSubscription,
+  resetOrgAdminPassword,
 } from './routes/organizations.js'
 import {
   listCustomFields,
@@ -419,6 +420,9 @@ export const handler: Handler = async (event) => {
         else throw new HttpError(405, 'Method not allowed')
       } else if (sub === 'status') {
         if (method === 'PATCH') response = await updateOrganizationStatus(id, event, user)
+        else throw new HttpError(405, 'Method not allowed')
+      } else if (sub === 'reset-admin-password') {
+        if (method === 'POST') response = await resetOrgAdminPassword(id, event, user)
         else throw new HttpError(405, 'Method not allowed')
       } else {
         if (method === 'GET') response = await getOrganization(id, user)

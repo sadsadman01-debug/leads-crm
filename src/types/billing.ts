@@ -38,6 +38,7 @@ export interface BillingSettings {
   standard_price_usd: number
   promotional_banner_text: string | null
   grace_period_days: number
+  subscription_warning_days: number
 }
 
 export interface OrganizationBillingRow {
@@ -62,6 +63,7 @@ export interface MyOrgBilling {
   annual_total_usd: number | null
   subscription_end_date: string | null
   payment_instructions: string | null
+  subscription_warning_days: number
 }
 
 /** The 402 error payload requireUser returns once an Organization's

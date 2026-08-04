@@ -15,8 +15,6 @@ import { getOrCreateAffiliateSettingsRow } from '../lib/affiliateSettings.js'
 import { PAYMENT_METHODS } from '../lib/paymentMethods.js'
 import type { AuthedUser } from '../lib/auth.js'
 
-const DUE_SOON_DAYS = 5
-
 /** Public — reachable from the Login/Request Access pages before any session
  * exists, so the requester sees the price they'll actually be locked into. */
 export async function getPublicPricing() {
@@ -83,6 +81,11 @@ export async function updateBillingSettings(event: HandlerEvent, user: AuthedUse
     if (!Number.isInteger(n) || n < 0) throw new HttpError(400, 'grace_period_days must be a non-negative integer')
     update.grace_period_days = n
   }
+  if ('subscription_warning_days' in body) {
+    const n = Number(body.subscription_warning_days)
+    if (!Number.isInteger(n) || n < 0) throw new HttpError(400, 'subscription_warning_days must be a non-negative integer')
+    update.subscription_warning_days = n
+  }
   if (Object.keys(update).length === 0) throw new HttpError(400, 'Nothing to update')
 
   const { data, error } = await supabase
@@ -90,7 +93,7 @@ export async function updateBillingSettings(event: HandlerEvent, user: AuthedUse
     .update(update)
     .eq('id', row.id)
     .select(
-      'id, payment_instructions, early_bird_threshold, early_bird_price_usd, standard_price_usd, promotional_banner_text, grace_period_days'
+      'id, payment_instructions, early_bird_threshold, early_bird_price_usd, standard_price_usd, promotional_banner_text, grace_period_days, subscription_warning_days'
     )
     .single()
   if (error) throw new HttpError(500, error.message)
@@ -103,14 +106,14 @@ export async function updateBillingSettings(event: HandlerEvent, user: AuthedUse
  * Organization is never shown as Overdue/Due Soon (they're not expected to
  * renew), even though its subscription_end_date keeps enforcing access
  * exactly as before until it naturally passes. */
-function computeBillingStatus(subscriptionEndDate: string | null): 'pending' | 'overdue' | 'due_soon' | 'paid' {
+function computeBillingStatus(subscriptionEndDate: string | null, dueSoonDays: number): 'pending' | 'overdue' | 'due_soon' | 'paid' {
   if (!subscriptionEndDate) return 'pending'
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const due = new Date(subscriptionEndDate)
   const diffDays = Math.round((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
   if (diffDays < 0) return 'overdue'
-  if (diffDays <= DUE_SOON_DAYS) return 'due_soon'
+  if (diffDays <= dueSoonDays) return 'due_soon'
   return 'paid'
 }
 
@@ -122,6 +125,7 @@ const STATUS_RANK: Record<string, number> = { overdue: 0, due_soon: 1, pending: 
 export async function listBilling(event: HandlerEvent, user: AuthedUser) {
   requireSuperAdmin(user)
   const supabase = getSupabaseAdmin()
+  const settings = await getOrCreateBillingSettingsRow()
   const { data, error } = await supabase
     .from('organizations')
     .select(
@@ -132,7 +136,9 @@ export async function listBilling(event: HandlerEvent, user: AuthedUser) {
 
   const rows = (data ?? []).map((org) => ({
     ...org,
-    billing_status: org.subscription_cancelled_at ? ('cancelled' as const) : computeBillingStatus(org.subscription_end_date),
+    billing_status: org.subscription_cancelled_at
+      ? ('cancelled' as const)
+      : computeBillingStatus(org.subscription_end_date, settings.subscription_warning_days),
   }))
 
   rows.sort((a, b) => {
@@ -296,6 +302,7 @@ export async function recordPayment(organizationId: string, event: HandlerEvent,
 export async function getMyOrgBilling(event: HandlerEvent, user: AuthedUser) {
   const supabase = getSupabaseAdmin()
   const orgId = resolveOrganizationId(user, event)
+  const settings = await getOrCreateBillingSettingsRow()
   if (orgId === null) {
     return json(200, {
       pricing_tier: null,
@@ -304,6 +311,7 @@ export async function getMyOrgBilling(event: HandlerEvent, user: AuthedUser) {
       annual_total_usd: null,
       subscription_end_date: null,
       payment_instructions: null,
+      subscription_warning_days: settings.subscription_warning_days,
     })
   }
 
@@ -315,8 +323,7 @@ export async function getMyOrgBilling(event: HandlerEvent, user: AuthedUser) {
   if (error) throw new HttpError(500, error.message)
   if (!data) throw new HttpError(404, 'Organization not found')
 
-  const settings = await getOrCreateBillingSettingsRow()
-  return json(200, { ...data, payment_instructions: settings.payment_instructions })
+  return json(200, { ...data, payment_instructions: settings.payment_instructions, subscription_warning_days: settings.subscription_warning_days })
 }
 
 /** Super Admin only — a single Organization's complete financial relationship

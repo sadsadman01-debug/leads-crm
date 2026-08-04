@@ -22,6 +22,7 @@ export function BillingSettings() {
   const [earlyBirdPrice, setEarlyBirdPrice] = useState('499')
   const [standardPrice, setStandardPrice] = useState('999')
   const [gracePeriodDays, setGracePeriodDays] = useState('0')
+  const [subscriptionWarningDays, setSubscriptionWarningDays] = useState('5')
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
@@ -32,6 +33,7 @@ export function BillingSettings() {
     setEarlyBirdPrice(String(data.early_bird_price_usd))
     setStandardPrice(String(data.standard_price_usd))
     setGracePeriodDays(String(data.grace_period_days))
+    setSubscriptionWarningDays(String(data.subscription_warning_days))
   }, [data])
 
   const dirty =
@@ -41,7 +43,8 @@ export function BillingSettings() {
       Number(earlyBirdThreshold) !== data!.early_bird_threshold ||
       Number(earlyBirdPrice) !== data!.early_bird_price_usd ||
       Number(standardPrice) !== data!.standard_price_usd ||
-      Number(gracePeriodDays) !== data!.grace_period_days)
+      Number(gracePeriodDays) !== data!.grace_period_days ||
+      Number(subscriptionWarningDays) !== data!.subscription_warning_days)
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -52,6 +55,7 @@ export function BillingSettings() {
         early_bird_price_usd: Number(earlyBirdPrice),
         standard_price_usd: Number(standardPrice),
         grace_period_days: Number(gracePeriodDays),
+        subscription_warning_days: Number(subscriptionWarningDays),
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['billing-settings'] })
@@ -143,6 +147,22 @@ export function BillingSettings() {
         />
         <p className="mt-1 text-xs text-base-500">
           Extra days after a subscription's end date before access is blocked. Defaults to 0 (immediate cutoff).
+        </p>
+      </div>
+
+      <div className="mt-4">
+        <label className="label">Subscription Warning Threshold (days)</label>
+        <input
+          type="number"
+          min={0}
+          step={1}
+          className="input w-32"
+          value={subscriptionWarningDays}
+          onChange={(e) => setSubscriptionWarningDays(e.target.value)}
+        />
+        <p className="mt-1 text-xs text-base-500">
+          How many days before a subscription's end date the Organization's Dashboard warning banner appears, and
+          the Billing dashboard marks it "Due Soon." Defaults to 5.
         </p>
       </div>
 

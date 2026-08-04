@@ -454,6 +454,11 @@ export const organizationsApi = {
 
   remove: (id: string, confirm: string) =>
     request<{ success: true }>(`/organizations/${id}`, { method: 'DELETE', body: JSON.stringify({ confirm }) }),
+
+  /** Resets this Organization's single Admin account's password — reuses the
+   * exact same underlying mechanism as Team Management's per-user reset. */
+  resetAdminPassword: (id: string) =>
+    request<{ admin: PasswordResetResult }>(`/organizations/${id}/reset-admin-password`, { method: 'POST' }),
 }
 
 export const brandingApi = {
@@ -725,7 +730,13 @@ export const billingApi = {
     payload: Partial<
       Pick<
         BillingSettings,
-        'payment_instructions' | 'early_bird_threshold' | 'early_bird_price_usd' | 'standard_price_usd' | 'promotional_banner_text' | 'grace_period_days'
+        | 'payment_instructions'
+        | 'early_bird_threshold'
+        | 'early_bird_price_usd'
+        | 'standard_price_usd'
+        | 'promotional_banner_text'
+        | 'grace_period_days'
+        | 'subscription_warning_days'
       >
     >
   ) => request<BillingSettings>('/billing/settings', { method: 'PATCH', body: JSON.stringify(payload) }),

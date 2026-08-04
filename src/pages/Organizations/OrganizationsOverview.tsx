@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Building2, Plus, Users, Handshake, DollarSign, ShieldOff, ShieldCheck, ArrowRight, Download, Loader2 } from 'lucide-react'
+import { Building2, Plus, Users, Handshake, DollarSign, ShieldOff, ShieldCheck, ArrowRight, Download, Loader2, KeyRound, Megaphone } from 'lucide-react'
 import { organizationsApi, dataExportApi } from '@/lib/api'
 import { formatCurrency } from '@/lib/currency'
 import { StatTile } from '@/components/charts/StatTile'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
+import { OrgAdminPasswordResetModal } from '@/components/OrgAdminPasswordResetModal'
+import { CreateAnnouncementModal } from '@/components/CreateAnnouncementModal'
 import { useOrg } from '@/contexts/OrgContext'
 import { computeSubscriptionStatus, type OrganizationSummary, type SubscriptionStatus } from '@/types/organization'
 
@@ -33,6 +35,8 @@ export function OrganizationsOverview() {
   const [deleting, setDeleting] = useState<OrganizationSummary | null>(null)
   const [exportingId, setExportingId] = useState<string | null>(null)
   const [exportError, setExportError] = useState<string | null>(null)
+  const [resettingAdminPassword, setResettingAdminPassword] = useState<OrganizationSummary | null>(null)
+  const [announcingTo, setAnnouncingTo] = useState<OrganizationSummary | null>(null)
 
   const { data, isLoading } = useQuery({ queryKey: ['organizations'], queryFn: organizationsApi.list })
   const orgs = data?.organizations ?? []
@@ -198,6 +202,14 @@ export function OrganizationsOverview() {
                         {exportingId === org.id ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
                         Export
                       </button>
+                      <button className="btn-ghost px-2 text-accent-400" onClick={() => setResettingAdminPassword(org)}>
+                        <KeyRound size={14} />
+                        Reset Admin Password
+                      </button>
+                      <button className="btn-ghost px-2 text-accent-400" onClick={() => setAnnouncingTo(org)}>
+                        <Megaphone size={14} />
+                        Send Announcement
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -208,6 +220,16 @@ export function OrganizationsOverview() {
       )}
 
       <AddAdminModal open={addOpen} onClose={() => setAddOpen(false)} onSaved={invalidate} />
+
+      <OrgAdminPasswordResetModal org={resettingAdminPassword} onClose={() => setResettingAdminPassword(null)} />
+
+      {announcingTo && (
+        <CreateAnnouncementModal
+          onClose={() => setAnnouncingTo(null)}
+          initialAudience="specific_organizations"
+          initialTargetOrgIds={[announcingTo.id]}
+        />
+      )}
 
       <Modal
         open={Boolean(suspending)}
