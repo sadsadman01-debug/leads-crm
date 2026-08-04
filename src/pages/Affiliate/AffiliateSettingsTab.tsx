@@ -1,8 +1,8 @@
-import { useState, type FormEvent } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { KeyRound, AlertCircle, CheckCircle2, FileText } from 'lucide-react'
+import { useEffect, useState, type FormEvent } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { KeyRound, AlertCircle, CheckCircle2, FileText, Trophy } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { affiliateSettingsApi } from '@/lib/api'
+import { affiliateSettingsApi, affiliatesApi } from '@/lib/api'
 import { SecuritySettings } from '@/components/SecuritySettings'
 
 function ChangePasswordCard() {
@@ -72,12 +72,89 @@ function ChangePasswordCard() {
   )
 }
 
+function LeaderboardPrivacyCard() {
+  const queryClient = useQueryClient()
+  const { data: affiliate } = useQuery({ queryKey: ['affiliate-me'], queryFn: affiliatesApi.getMe })
+
+  const [displayName, setDisplayName] = useState('')
+  const [optIn, setOptIn] = useState(true)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    if (!affiliate) return
+    setDisplayName(affiliate.public_display_name ?? '')
+    setOptIn(affiliate.leaderboard_opt_in)
+  }, [affiliate])
+
+  const dirty =
+    Boolean(affiliate) && (displayName.trim() !== (affiliate!.public_display_name ?? '') || optIn !== affiliate!.leaderboard_opt_in)
+
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      affiliatesApi.updateMyProfile({ public_display_name: displayName.trim() || null, leaderboard_opt_in: optIn }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['affiliate-me'] })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+    },
+  })
+
+  return (
+    <div className="card p-6">
+      <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-base-300">
+        <Trophy size={15} /> Leaderboard Privacy
+      </h2>
+      <p className="mt-1 text-xs text-base-400">
+        Other affiliates never see your real email, payout methods, or exact earnings — only your rank and converted-referral count.
+      </p>
+
+      <div className="mt-4 max-w-sm">
+        <label className="label">Public Display Name (optional)</label>
+        <input
+          className="input"
+          value={displayName}
+          onChange={(e) => setDisplayName(e.target.value)}
+          placeholder={affiliate?.full_name || 'Your name'}
+        />
+        <p className="mt-1 text-xs text-base-500">Shown to other affiliates on the leaderboard instead of your real name. Leave blank to use your name.</p>
+      </div>
+
+      <label className="mt-4 flex items-start gap-2 text-sm text-base-200">
+        <input
+          type="checkbox"
+          className="mt-0.5 h-4 w-4 rounded border-base-600 bg-base-800"
+          checked={optIn}
+          onChange={(e) => setOptIn(e.target.checked)}
+        />
+        <span>
+          Show me on the public leaderboard
+          <span className="block text-xs text-base-500">
+            If turned off, other affiliates won't see your row — you'll still see your own rank and stats privately.
+          </span>
+        </span>
+      </label>
+
+      <div className="mt-4 flex items-center gap-3 border-t border-base-700/60 pt-4">
+        <button className="btn-primary" disabled={!dirty || saveMutation.isPending} onClick={() => saveMutation.mutate()}>
+          {saveMutation.isPending ? 'Saving…' : 'Save'}
+        </button>
+        {saved && (
+          <span className="flex items-center gap-1 text-sm text-success">
+            <CheckCircle2 size={15} /> Saved
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function AffiliateSettingsTab() {
   const { data: programInfo } = useQuery({ queryKey: ['public-affiliate-program-info'], queryFn: affiliateSettingsApi.getPublic })
 
   return (
     <div className="space-y-6">
       <ChangePasswordCard />
+      <LeaderboardPrivacyCard />
       <SecuritySettings />
       {programInfo?.terms && (
         <div className="card p-6">

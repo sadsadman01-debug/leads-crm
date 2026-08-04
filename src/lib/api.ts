@@ -81,6 +81,9 @@ import type {
   PublicAffiliateProgramInfo,
   MarketingMaterials,
   AffiliateStatus,
+  LeaderboardPeriod,
+  AffiliateLeaderboard,
+  AffiliateLeaderboardAdmin,
 } from '@/types/affiliate'
 import type { ProductReview, ProductReviewWithReviewer, ProductReviewStats, ProductReviewFilters } from '@/types/productReview'
 import type { OrgReferralSettings, MyReferralInfo } from '@/types/orgReferral'
@@ -1197,6 +1200,15 @@ export const affiliatesApi = {
 
   updateStatus: (id: string, status: AffiliateStatus) =>
     request<Affiliate>(`/affiliates/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+
+  updateMyProfile: (payload: Partial<{ public_display_name: string | null; leaderboard_opt_in: boolean }>) =>
+    request<Affiliate>('/affiliates/me/profile', { method: 'PATCH', body: JSON.stringify(payload) }),
+
+  getLeaderboard: (period: LeaderboardPeriod) =>
+    request<AffiliateLeaderboard>(`/affiliates/leaderboard?period=${period}`),
+
+  getLeaderboardAdmin: (period: LeaderboardPeriod) =>
+    request<AffiliateLeaderboardAdmin>(`/affiliates/leaderboard/admin?period=${period}`),
 }
 
 export const payoutMethodsApi = {

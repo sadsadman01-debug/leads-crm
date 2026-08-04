@@ -4,9 +4,11 @@ import { HttpError, json } from '../lib/http.js'
 import { requireSuperAdmin } from '../lib/permissions.js'
 import { getAffiliateBalances, getAffiliateFunnel, getAffiliateTrend } from '../lib/affiliateBalances.js'
 import { getOrCreateAffiliateSettingsRow } from '../lib/affiliateSettings.js'
+import { buildAffiliateLeaderboard, type LeaderboardPeriod } from '../lib/affiliateLeaderboard.js'
 import type { AuthedUser } from '../lib/auth.js'
 
-const AFFILIATE_COLUMNS = 'id, profile_id, full_name, email, referral_code, city, country, zip_code, status, created_at'
+const AFFILIATE_COLUMNS =
+  'id, profile_id, full_name, email, referral_code, city, country, zip_code, status, created_at, public_display_name, leaderboard_opt_in'
 
 export async function getAffiliateForUser(user: AuthedUser) {
   if (user.role !== 'affiliate') throw new HttpError(403, 'Affiliate access required')
@@ -25,6 +27,89 @@ function parseDateRange(event: HandlerEvent) {
 export async function getMyAffiliateProfile(user: AuthedUser) {
   const affiliate = await getAffiliateForUser(user)
   return json(200, affiliate)
+}
+
+/** Body: { public_display_name?, leaderboard_opt_in? } — the only two fields
+ * an Affiliate can self-edit. public_display_name blank/null clears back to
+ * showing their real full_name to other affiliates on the leaderboard. */
+export async function updateMyAffiliateProfile(event: HandlerEvent, user: AuthedUser) {
+  const affiliate = await getAffiliateForUser(user)
+  const supabase = getSupabaseAdmin()
+  const body = JSON.parse(event.body || '{}')
+  const update: Record<string, any> = {}
+
+  if ('public_display_name' in body) {
+    update.public_display_name = (body.public_display_name ?? '').trim() || null
+  }
+  if ('leaderboard_opt_in' in body) {
+    update.leaderboard_opt_in = Boolean(body.leaderboard_opt_in)
+  }
+  if (Object.keys(update).length === 0) throw new HttpError(400, 'Nothing to update')
+
+  const { data, error } = await supabase.from('affiliates').update(update).eq('id', affiliate.id).select(AFFILIATE_COLUMNS).single()
+  if (error) throw new HttpError(500, error.message)
+  return json(200, data)
+}
+
+const LEADERBOARD_TOP_N = 10
+const LEADERBOARD_PERIODS: LeaderboardPeriod[] = ['this_month', 'this_quarter', 'all_time']
+
+function parsePeriod(event: HandlerEvent): LeaderboardPeriod {
+  const raw = event.queryStringParameters?.period
+  return (LEADERBOARD_PERIODS as string[]).includes(raw ?? '') ? (raw as LeaderboardPeriod) : 'all_time'
+}
+
+/** Any authenticated Affiliate — the top N converted-referral ranks for the
+ * selected period, privacy-filtered for OTHER affiliates (real name only
+ * shown as their own public_display_name-or-full_name, commission never
+ * shown, and any row belonging to an affiliate who's opted out of the public
+ * leaderboard is simply omitted — not replaced with an anonymous
+ * placeholder). The caller's own row is always included in `myEntry` (their
+ * real stats, always visible to themselves regardless of their own opt-out),
+ * and is also included in `topEntries` if their rank happens to fall within
+ * the top N, even if they've personally opted out — opting out only ever
+ * hides you from OTHER affiliates, never from your own view. */
+export async function getAffiliateLeaderboard(event: HandlerEvent, user: AuthedUser) {
+  const affiliate = await getAffiliateForUser(user)
+  const period = parsePeriod(event)
+  const rows = await buildAffiliateLeaderboard(period)
+
+  const myRow = rows.find((r) => r.affiliate_id === affiliate.id) ?? null
+
+  const topEntries = rows
+    .slice(0, LEADERBOARD_TOP_N)
+    .filter((r) => r.leaderboard_opt_in || r.affiliate_id === affiliate.id)
+    .map((r) => ({
+      affiliate_id: r.affiliate_id,
+      rank: r.rank,
+      display_name: r.public_display_name || r.full_name,
+      completed: r.completed,
+      commission_earned_usd: r.affiliate_id === affiliate.id ? r.commission_earned_usd : null,
+      is_self: r.affiliate_id === affiliate.id,
+    }))
+
+  const myEntry = myRow
+    ? {
+        affiliate_id: myRow.affiliate_id,
+        rank: myRow.rank,
+        display_name: myRow.public_display_name || myRow.full_name,
+        completed: myRow.completed,
+        commission_earned_usd: myRow.commission_earned_usd,
+        is_self: true,
+      }
+    : null
+
+  return json(200, { period, topEntries, myEntry, totalRanked: rows.length })
+}
+
+/** Super Admin only — the same ranking, every affiliate, no privacy
+ * filtering (real name, email, and exact commission for everyone) and no
+ * top-N cap, since this is for full oversight rather than peer motivation. */
+export async function getAffiliateLeaderboardAdmin(event: HandlerEvent, user: AuthedUser) {
+  requireSuperAdmin(user)
+  const period = parsePeriod(event)
+  const rows = await buildAffiliateLeaderboard(period)
+  return json(200, { period, entries: rows })
 }
 
 /** Everything the Affiliate Dashboard's Overview tab needs in one call:

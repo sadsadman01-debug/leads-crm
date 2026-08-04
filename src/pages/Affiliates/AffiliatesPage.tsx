@@ -1,20 +1,23 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Handshake, ShieldOff, ShieldCheck, ArrowRight } from 'lucide-react'
+import { Handshake, ShieldOff, ShieldCheck, ArrowRight, Trophy } from 'lucide-react'
 import { affiliatesApi } from '@/lib/api'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import { FunnelChart } from '@/components/charts/FunnelChart'
 import { AffiliateTrendChart } from '@/pages/Affiliate/AffiliateTrendChart'
+import { AffiliateLeaderboardView } from './AffiliateLeaderboardView'
 import type { AffiliateWithSummary } from '@/types/affiliate'
 
 type SortKey = 'lifetimeEarned' | 'pendingWithdrawal' | 'totalPaidOut' | 'clicks' | 'requests' | 'completed'
+type View = 'table' | 'leaderboard'
 
 export function AffiliatesPage() {
   const { data, isLoading } = useQuery({ queryKey: ['affiliates'], queryFn: affiliatesApi.list })
   const affiliates = data?.affiliates ?? []
   const [sortKey, setSortKey] = useState<SortKey>('lifetimeEarned')
   const [viewing, setViewing] = useState<AffiliateWithSummary | null>(null)
+  const [view, setView] = useState<View>('table')
 
   const sorted = useMemo(() => {
     return [...affiliates].sort((a, b) => {
@@ -26,12 +29,31 @@ export function AffiliatesPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-base-100">Affiliates</h1>
-        <p className="mt-1 text-sm text-base-400">Every approved affiliate, with earnings and funnel performance at a glance.</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-base-100">Affiliates</h1>
+          <p className="mt-1 text-sm text-base-400">Every approved affiliate, with earnings and funnel performance at a glance.</p>
+        </div>
+        <div className="flex gap-1 rounded-lg bg-base-850 p-1 w-fit">
+          <button
+            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${view === 'table' ? 'bg-accent-500 text-white' : 'text-base-300 hover:text-base-100'}`}
+            onClick={() => setView('table')}
+          >
+            Table
+          </button>
+          <button
+            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${view === 'leaderboard' ? 'bg-accent-500 text-white' : 'text-base-300 hover:text-base-100'}`}
+            onClick={() => setView('leaderboard')}
+          >
+            <Trophy size={14} />
+            Leaderboard
+          </button>
+        </div>
       </div>
 
-      {isLoading ? (
+      {view === 'leaderboard' ? (
+        <AffiliateLeaderboardView />
+      ) : isLoading ? (
         <div className="card p-12 text-center text-base-400">Loading affiliates…</div>
       ) : affiliates.length === 0 ? (
         <div className="card flex flex-col items-center gap-3 p-16 text-center">

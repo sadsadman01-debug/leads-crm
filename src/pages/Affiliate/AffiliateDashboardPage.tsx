@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { LayoutDashboard, Users, Wallet, CreditCard, Megaphone, Settings as SettingsIcon, LogOut, Target, Menu, X } from 'lucide-react'
+import { LayoutDashboard, Users, Wallet, CreditCard, Megaphone, Trophy, Settings as SettingsIcon, LogOut, Target, Menu, X } from 'lucide-react'
 import clsx from 'clsx'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePlatformBranding } from '@/hooks/usePlatformBranding'
@@ -9,16 +9,18 @@ import { HelpWidget } from '@/components/HelpWidget'
 import { AnnouncementBanner } from '@/components/AnnouncementBanner'
 import { OverviewTab } from './OverviewTab'
 import { ReferralsTab } from './ReferralsTab'
+import { LeaderboardTab } from './LeaderboardTab'
 import { WithdrawalsTab } from './WithdrawalsTab'
 import { PayoutMethodsTab } from './PayoutMethodsTab'
 import { MarketingTab } from './MarketingTab'
 import { AffiliateSettingsTab } from './AffiliateSettingsTab'
 
-type Tab = 'overview' | 'referrals' | 'withdrawals' | 'payout-methods' | 'marketing' | 'settings'
+type Tab = 'overview' | 'referrals' | 'leaderboard' | 'withdrawals' | 'payout-methods' | 'marketing' | 'settings'
 
 const TABS: Array<{ id: Tab; label: string; icon: typeof LayoutDashboard }> = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
   { id: 'referrals', label: 'Referrals', icon: Users },
+  { id: 'leaderboard', label: 'Leaderboard', icon: Trophy },
   { id: 'withdrawals', label: 'Withdrawals', icon: Wallet },
   { id: 'payout-methods', label: 'Payout Methods', icon: CreditCard },
   { id: 'marketing', label: 'Marketing', icon: Megaphone },
@@ -133,6 +135,7 @@ export function AffiliateDashboardPage() {
           <AnnouncementBanner />
           {tab === 'overview' && <OverviewTab />}
           {tab === 'referrals' && <ReferralsTab />}
+          {tab === 'leaderboard' && <LeaderboardTab />}
           {tab === 'withdrawals' && <WithdrawalsTab />}
           {tab === 'payout-methods' && <PayoutMethodsTab />}
           {tab === 'marketing' && <MarketingTab />}

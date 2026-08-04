@@ -208,11 +208,14 @@ import {
 } from './routes/affiliateApplications.js'
 import {
   getMyAffiliateProfile,
+  updateMyAffiliateProfile,
   getMyDashboardSummary,
   listMyReferrals,
   listAffiliates,
   getAffiliateDetail,
   updateAffiliateStatus,
+  getAffiliateLeaderboard,
+  getAffiliateLeaderboardAdmin,
 } from './routes/affiliates.js'
 import {
   listMyPayoutMethods,
@@ -745,7 +748,10 @@ export const handler: Handler = async (event) => {
       const user = await requireUser(event)
       if (id === 'me' && sub === 'dashboard' && method === 'GET') response = await getMyDashboardSummary(event, user)
       else if (id === 'me' && sub === 'referrals' && method === 'GET') response = await listMyReferrals(user)
+      else if (id === 'me' && sub === 'profile' && method === 'PATCH') response = await updateMyAffiliateProfile(event, user)
       else if (id === 'me' && method === 'GET') response = await getMyAffiliateProfile(user)
+      else if (id === 'leaderboard' && sub === 'admin' && method === 'GET') response = await getAffiliateLeaderboardAdmin(event, user)
+      else if (id === 'leaderboard' && method === 'GET') response = await getAffiliateLeaderboard(event, user)
       else if (!id && method === 'GET') response = await listAffiliates(user)
       else if (id && sub === 'status' && method === 'PATCH') response = await updateAffiliateStatus(id, event, user)
       else if (id && method === 'GET') response = await getAffiliateDetail(id, event, user)

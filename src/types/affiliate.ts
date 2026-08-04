@@ -36,6 +36,49 @@ export interface Affiliate {
   zip_code: string
   status: AffiliateStatus
   created_at: string
+  /** Shown to OTHER affiliates on the leaderboard instead of full_name, if set. */
+  public_display_name: string | null
+  /** Whether this affiliate appears in the leaderboard's visible list to OTHER
+   * affiliates — never affects their own view, and never hides them from the
+   * Super Admin's full leaderboard. */
+  leaderboard_opt_in: boolean
+}
+
+export type LeaderboardPeriod = 'this_month' | 'this_quarter' | 'all_time'
+
+/** A privacy-filtered row as shown to a peer affiliate — commission_earned_usd
+ * is only ever non-null when is_self is true. */
+export interface LeaderboardEntry {
+  affiliate_id: string
+  rank: number
+  display_name: string
+  completed: number
+  commission_earned_usd: number | null
+  is_self: boolean
+}
+
+export interface AffiliateLeaderboard {
+  period: LeaderboardPeriod
+  topEntries: LeaderboardEntry[]
+  myEntry: LeaderboardEntry | null
+  totalRanked: number
+}
+
+/** Super Admin's unfiltered view — every active affiliate, real identity + exact commission for all. */
+export interface AffiliateLeaderboardAdminEntry {
+  affiliate_id: string
+  full_name: string
+  email: string
+  public_display_name: string | null
+  leaderboard_opt_in: boolean
+  completed: number
+  commission_earned_usd: number
+  rank: number
+}
+
+export interface AffiliateLeaderboardAdmin {
+  period: LeaderboardPeriod
+  entries: AffiliateLeaderboardAdminEntry[]
 }
 
 export interface MfsDetails {
