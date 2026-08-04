@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { usePlatformBranding } from '@/hooks/usePlatformBranding'
 import { affiliatesApi } from '@/lib/api'
 import { HelpWidget } from '@/components/HelpWidget'
+import { AnnouncementBanner } from '@/components/AnnouncementBanner'
 import { OverviewTab } from './OverviewTab'
 import { ReferralsTab } from './ReferralsTab'
 import { WithdrawalsTab } from './WithdrawalsTab'
@@ -128,7 +129,8 @@ export function AffiliateDashboardPage() {
           <p className="text-sm font-semibold text-base-100">{platformBranding?.platform_name || 'Leadify'}</p>
         </div>
 
-        <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 md:py-8">
+        <div className="mx-auto max-w-5xl space-y-6 px-4 py-6 sm:px-6 md:py-8">
+          <AnnouncementBanner />
           {tab === 'overview' && <OverviewTab />}
           {tab === 'referrals' && <ReferralsTab />}
           {tab === 'withdrawals' && <WithdrawalsTab />}

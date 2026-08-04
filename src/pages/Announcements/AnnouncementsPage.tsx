@@ -23,7 +23,9 @@ export function AnnouncementsPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-base-100">Announcements</h1>
-          <p className="mt-1 text-sm text-base-400">Broadcast a message to all Organizations, or a targeted subset, through the Notification Center.</p>
+          <p className="mt-1 text-sm text-base-400">
+            Broadcast a message to all Organizations, or a targeted subset — recipients see it as a banner at the top of their Dashboard.
+          </p>
         </div>
         <button className="btn-primary" onClick={() => setCreating(true)}>
           <Plus size={16} />

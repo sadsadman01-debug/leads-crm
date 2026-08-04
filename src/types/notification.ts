@@ -13,7 +13,6 @@ export type NotificationType =
   | 'product_review_reply'
   | 'cancellation_request'
   | 'org_referral_reward'
-  | 'announcement'
 
 export interface AppNotification {
   id: string

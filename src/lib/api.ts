@@ -839,6 +839,11 @@ export const announcementsApi = {
     request<Announcement>('/announcements', { method: 'POST', body: JSON.stringify(payload) }),
 
   deactivate: (id: string) => request<Announcement>(`/announcements/${id}`, { method: 'PATCH', body: JSON.stringify({ is_active: false }) }),
+
+  /** Any authenticated Admin/User/Affiliate — active announcements targeting them, minus ones they've dismissed. */
+  getMyActive: () => request<{ announcements: Announcement[] }>('/announcements/my-active'),
+
+  dismiss: (id: string) => request<{ success: true }>(`/announcements/${id}/dismiss`, { method: 'POST' }),
 }
 
 /** Accounts the Super Admin personally receives customer payments into — the

@@ -20,11 +20,9 @@ import {
   Wallet,
   CalendarOff,
   Gift,
-  Megaphone,
 } from 'lucide-react'
 import { notificationsApi } from '@/lib/api'
 import { formatRelativeTime } from '@/lib/relativeTime'
-import { Modal } from '@/components/ui/Modal'
 import type { AppNotification, NotificationType } from '@/types/notification'
 
 const TYPE_ICON: Record<NotificationType, typeof Bell> = {
@@ -42,7 +40,6 @@ const TYPE_ICON: Record<NotificationType, typeof Bell> = {
   product_review_reply: MessageSquareText,
   cancellation_request: CalendarOff,
   org_referral_reward: Gift,
-  announcement: Megaphone,
 }
 
 const TYPE_LABELS: Array<{ value: NotificationType | ''; label: string }> = [
@@ -61,7 +58,6 @@ const TYPE_LABELS: Array<{ value: NotificationType | ''; label: string }> = [
   { value: 'product_review_reply', label: 'Product Review Replies' },
   { value: 'cancellation_request', label: 'Cancellation Requests' },
   { value: 'org_referral_reward', label: 'Referral Rewards' },
-  { value: 'announcement', label: 'Announcements' },
 ]
 
 type StatusFilter = 'all' | 'unread' | 'read'
@@ -73,7 +69,6 @@ export function NotificationsPage() {
   const [status, setStatus] = useState<StatusFilter>('all')
   const [type, setType] = useState<NotificationType | ''>('')
   const [page, setPage] = useState(1)
-  const [announcementDetail, setAnnouncementDetail] = useState<AppNotification | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['notifications-list', status, type, page],
@@ -102,11 +97,7 @@ export function NotificationsPage() {
 
   function handleItemClick(n: AppNotification) {
     if (!n.is_read) markReadMutation.mutate(n.id)
-    if (n.type === 'announcement') {
-      setAnnouncementDetail(n)
-    } else if (n.link_route) {
-      navigate(n.link_route)
-    }
+    if (n.link_route) navigate(n.link_route)
   }
 
   function updateStatus(next: StatusFilter) {
@@ -208,11 +199,6 @@ export function NotificationsPage() {
           </div>
         </div>
       )}
-
-      <Modal open={Boolean(announcementDetail)} onClose={() => setAnnouncementDetail(null)} title={announcementDetail?.title ?? 'Announcement'}>
-        <p className="whitespace-pre-wrap text-sm text-base-200">{announcementDetail?.message}</p>
-        {announcementDetail && <p className="mt-4 text-xs text-base-500">{formatRelativeTime(announcementDetail.created_at)}</p>}
-      </Modal>
     </div>
   )
 }

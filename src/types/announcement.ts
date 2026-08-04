@@ -17,3 +17,7 @@ export interface Announcement {
   created_at: string
   is_active: boolean
 }
+
+export interface AnnouncementListResponse {
+  announcements: Announcement[]
+}

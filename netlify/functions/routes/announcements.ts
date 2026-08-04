@@ -3,7 +3,6 @@ import { getSupabaseAdmin } from '../lib/supabaseAdmin.js'
 import { HttpError, json } from '../lib/http.js'
 import { requireSuperAdmin } from '../lib/permissions.js'
 import { logAuditEvent } from '../lib/auditLog.js'
-import { createNotifications } from '../lib/notifications.js'
 import type { AuthedUser } from '../lib/auth.js'
 
 const COLUMNS = 'id, title, message, audience, target_organization_ids, created_by, created_at, is_active'
@@ -19,41 +18,10 @@ export async function listAnnouncements(user: AuthedUser) {
   return json(200, { announcements: data ?? [] })
 }
 
-/** Resolves the recipient profile ids (+ their own organization_id, for
- * correctly-scoped notification rows) for a given audience — the one query
- * per audience type, never a per-recipient round trip. */
-async function resolveAudienceRecipients(
-  audience: Audience,
-  targetOrgIds: string[] | null
-): Promise<Array<{ id: string; organization_id: string | null }>> {
-  const supabase = getSupabaseAdmin()
-
-  if (audience === 'affiliates') {
-    const { data, error } = await supabase.from('affiliates').select('profile_id').eq('status', 'active')
-    if (error) throw new HttpError(500, error.message)
-    return (data ?? []).map((a) => ({ id: a.profile_id as string, organization_id: null }))
-  }
-
-  let query = supabase.from('profiles').select('id, organization_id').eq('is_active', true)
-  if (audience === 'admins_only') {
-    query = query.eq('role', 'admin')
-  } else {
-    query = query.in('role', ['admin', 'user'])
-  }
-  if (audience === 'specific_organizations') {
-    if (!targetOrgIds || targetOrgIds.length === 0) throw new HttpError(400, 'target_organization_ids is required for audience "specific_organizations"')
-    query = query.in('organization_id', targetOrgIds)
-  }
-
-  const { data, error } = await query
-  if (error) throw new HttpError(500, error.message)
-  return (data ?? []).map((p) => ({ id: p.id as string, organization_id: (p.organization_id as string | null) ?? null }))
-}
-
 /** Body: { title, message, audience, target_organization_ids? }. Publishes
- * the announcement row and, in the same request, fans it out into one
- * notification per matching recipient via a single bulk insert — this is a
- * broadcast, not a loop of individual sends. */
+ * the announcement row — delivery to recipients is entirely pull-based (a
+ * Dashboard/Affiliate-Dashboard banner query, see getMyActiveAnnouncements
+ * below), not a fan-out at publish time; there is nothing else to do here. */
 export async function createAnnouncement(event: HandlerEvent, user: AuthedUser) {
   requireSuperAdmin(user)
   const supabase = getSupabaseAdmin()
@@ -81,28 +49,16 @@ export async function createAnnouncement(event: HandlerEvent, user: AuthedUser) 
     .single()
   if (error) throw new HttpError(500, error.message)
 
-  const recipients = await resolveAudienceRecipients(audience, targetOrgIds)
-  await createNotifications(
-    recipients.map((r) => ({
-      recipient_profile_id: r.id,
-      organization_id: r.organization_id,
-      type: 'announcement',
-      title,
-      message,
-      related_entity_id: announcement.id,
-      related_entity_type: 'announcement',
-    }))
-  )
-
   await logAuditEvent('announcement_created', user, event, {
-    metadata: { announcementId: announcement.id, title, audience, recipientCount: recipients.length },
+    metadata: { announcementId: announcement.id, title, audience, targetOrgIds },
   })
   return json(201, announcement)
 }
 
 /** Body: { is_active: false }. "Unpublishing" only stops the announcement
- * from being newly surfaced — already-delivered notifications remain in
- * recipients' history untouched; there is no re-publish/edit-content flow. */
+ * from being newly surfaced as a banner — recipients who haven't dismissed
+ * it yet simply stop seeing it on their next Dashboard load; there is no
+ * re-publish/edit-content flow. */
 export async function deactivateAnnouncement(id: string, event: HandlerEvent, user: AuthedUser) {
   requireSuperAdmin(user)
   const supabase = getSupabaseAdmin()
@@ -116,4 +72,84 @@ export async function deactivateAnnouncement(id: string, event: HandlerEvent, us
 
   await logAuditEvent('announcement_deactivated', user, event, { metadata: { announcementId: id, title: existing.title } })
   return json(200, data)
+}
+
+async function excludeDismissed(announcements: any[], profileId: string) {
+  if (announcements.length === 0) return []
+  const supabase = getSupabaseAdmin()
+  const { data: dismissed, error } = await supabase
+    .from('announcement_dismissals')
+    .select('announcement_id')
+    .eq('profile_id', profileId)
+    .in(
+      'announcement_id',
+      announcements.map((a) => a.id)
+    )
+  if (error) throw new HttpError(500, error.message)
+  const dismissedIds = new Set((dismissed ?? []).map((d) => d.announcement_id))
+  return announcements.filter((a) => !dismissedIds.has(a.id))
+}
+
+/** Any authenticated Admin/User/Affiliate — every currently-active
+ * announcement that targets THEM specifically, minus any they've already
+ * dismissed. Super Admin always gets an empty list back: Announcements are
+ * something they author, never something they receive on their own
+ * platform-level views. */
+export async function getMyActiveAnnouncements(user: AuthedUser) {
+  const supabase = getSupabaseAdmin()
+
+  if (user.role === 'super_admin') return json(200, { announcements: [] })
+
+  if (user.role === 'affiliate') {
+    const { data: affiliate, error: affErr } = await supabase
+      .from('affiliates')
+      .select('id')
+      .eq('profile_id', user.id)
+      .eq('status', 'active')
+      .maybeSingle()
+    if (affErr) throw new HttpError(500, affErr.message)
+    if (!affiliate) return json(200, { announcements: [] })
+
+    const { data, error } = await supabase
+      .from('announcements')
+      .select(COLUMNS)
+      .eq('audience', 'affiliates')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+    if (error) throw new HttpError(500, error.message)
+    return json(200, { announcements: await excludeDismissed(data ?? [], user.id) })
+  }
+
+  // Admin/User — scoped to their own organization.
+  const orgId = user.organization_id
+  if (!orgId) return json(200, { announcements: [] })
+
+  const { data, error } = await supabase
+    .from('announcements')
+    .select(COLUMNS)
+    .eq('is_active', true)
+    .in('audience', ['all', 'admins_only', 'specific_organizations'])
+    .order('created_at', { ascending: false })
+  if (error) throw new HttpError(500, error.message)
+
+  const matching = (data ?? []).filter((a) => {
+    if (a.audience === 'all') return true
+    if (a.audience === 'admins_only') return user.role === 'admin'
+    if (a.audience === 'specific_organizations') return Array.isArray(a.target_organization_ids) && a.target_organization_ids.includes(orgId)
+    return false
+  })
+
+  return json(200, { announcements: await excludeDismissed(matching, user.id) })
+}
+
+/** Any authenticated Admin/User/Affiliate — dismisses one announcement for
+ * themselves only; it never reappears in getMyActiveAnnouncements for this
+ * profile again, regardless of what other recipients do with it. */
+export async function dismissAnnouncement(id: string, user: AuthedUser) {
+  const supabase = getSupabaseAdmin()
+  const { error } = await supabase
+    .from('announcement_dismissals')
+    .upsert({ announcement_id: id, profile_id: user.id }, { onConflict: 'announcement_id,profile_id' })
+  if (error) throw new HttpError(500, error.message)
+  return json(200, { success: true })
 }

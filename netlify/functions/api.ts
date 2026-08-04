@@ -100,7 +100,13 @@ import {
   deletePromoCode,
   validatePromoCode,
 } from './routes/promoCodes.js'
-import { listAnnouncements, createAnnouncement, deactivateAnnouncement } from './routes/announcements.js'
+import {
+  listAnnouncements,
+  createAnnouncement,
+  deactivateAnnouncement,
+  getMyActiveAnnouncements,
+  dismissAnnouncement,
+} from './routes/announcements.js'
 import {
   createRenewalPaymentRequest,
   getMyPendingRenewal,
@@ -782,7 +788,9 @@ export const handler: Handler = async (event) => {
       }
     } else if (resource === 'announcements') {
       const user = await requireUser(event)
-      if (!id && method === 'GET') response = await listAnnouncements(user)
+      if (id === 'my-active' && method === 'GET') response = await getMyActiveAnnouncements(user)
+      else if (id && sub === 'dismiss' && method === 'POST') response = await dismissAnnouncement(id, user)
+      else if (!id && method === 'GET') response = await listAnnouncements(user)
       else if (!id && method === 'POST') response = await createAnnouncement(event, user)
       else if (id && method === 'PATCH') response = await deactivateAnnouncement(id, event, user)
       else throw new HttpError(404, 'Not found')

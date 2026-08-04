@@ -25,6 +25,7 @@ import { OnboardingChecklist } from '@/components/OnboardingChecklist'
 import { MfaNudgeBanner } from '@/components/MfaNudgeBanner'
 import { SubscriptionStatusWidget } from '@/components/SubscriptionStatusWidget'
 import { SubscriptionExpiryBanner } from '@/components/SubscriptionExpiryBanner'
+import { AnnouncementBanner } from '@/components/AnnouncementBanner'
 import { IndustryComparisonTable } from '@/components/IndustryComparisonTable'
 import { TeamPerformanceTable } from '@/components/TeamPerformanceTable'
 import { RevenueSection } from '@/components/RevenueSection'
@@ -122,6 +123,7 @@ export function Dashboard() {
         </div>
       )}
 
+      <AnnouncementBanner />
       <SubscriptionExpiryBanner />
       <SubscriptionStatusWidget />
       <MfaNudgeBanner />
