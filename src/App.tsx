@@ -20,6 +20,7 @@ import { MfaChallenge } from '@/pages/MfaChallenge'
 import { MfaLockedOut } from '@/pages/MfaLockedOut'
 import { SetNewPassword } from '@/pages/SetNewPassword'
 import { LeadsList } from '@/pages/Leads/LeadsList'
+import { TeamActivityPage } from '@/pages/TeamActivity/TeamActivityPage'
 import { LeadForm } from '@/pages/Leads/LeadForm'
 import { LeadDetail } from '@/pages/Leads/LeadDetail'
 import { Settings } from '@/pages/Settings'
@@ -148,6 +149,7 @@ export default function App() {
                       </Suspense>
                     }
                   />
+                  <Route path="/activity" element={<TeamActivityPage />} />
                   <Route path="/leads" element={<LeadsList />} />
                   <Route path="/leads/new" element={<LeadForm />} />
                   <Route path="/leads/:id" element={<LeadDetail />} />

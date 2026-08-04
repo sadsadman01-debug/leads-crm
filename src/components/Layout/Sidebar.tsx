@@ -28,6 +28,7 @@ import {
   TrendingUp,
   CalendarOff,
   Megaphone,
+  Activity,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useAuth } from '@/contexts/AuthContext'
@@ -48,6 +49,7 @@ import {
 
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/activity', label: 'Activity', icon: Activity },
   { to: '/leads', label: 'Leads', icon: Users },
   { to: '/leads/new', label: 'Add New Lead', icon: UserPlus },
   { to: '/deals', label: 'Deals', icon: Handshake },
@@ -139,9 +141,9 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   const appName = platformBranding?.platform_name || 'Leadify'
 
   const navItems = [
-    ...NAV_ITEMS.slice(0, 5),
+    ...NAV_ITEMS.slice(0, 6),
     ...(isAdminUp ? [{ to: '/team', label: 'Team', icon: UsersRound }] : []),
-    NAV_ITEMS[5],
+    NAV_ITEMS[6],
   ]
 
   const workspaceLabel =

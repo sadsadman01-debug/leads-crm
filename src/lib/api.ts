@@ -16,6 +16,7 @@ import type {
   Template,
   TemplateType,
 } from '@/types/lead'
+import type { TeamActivityFilters, TeamActivityListResponse } from '@/types/teamActivity'
 import type {
   Deal,
   DealFilters,
@@ -303,6 +304,20 @@ export const dashboardApi = {
     if (industryId) qs.set('industryId', industryId)
     if (assignedTo) qs.set('assignedTo', assignedTo)
     return request<DashboardSummary>(`/dashboard/summary?${qs.toString()}`)
+  },
+}
+
+export const teamActivityApi = {
+  list: (filters: TeamActivityFilters = {}) => {
+    const qs = new URLSearchParams()
+    if (filters.memberId) qs.set('memberId', filters.memberId)
+    if (filters.activityType) qs.set('activityType', filters.activityType)
+    if (filters.dateFrom) qs.set('dateFrom', filters.dateFrom)
+    if (filters.dateTo) qs.set('dateTo', filters.dateTo)
+    if (filters.page) qs.set('page', String(filters.page))
+    if (filters.pageSize) qs.set('pageSize', String(filters.pageSize))
+    const suffix = qs.toString()
+    return request<TeamActivityListResponse>(`/team-activity${suffix ? `?${suffix}` : ''}`)
   },
 }
 

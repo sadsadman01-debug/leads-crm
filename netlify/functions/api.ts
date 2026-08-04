@@ -28,6 +28,7 @@ import {
 } from './routes/attachments.js'
 import { importRows, importFromSheet, exportLeads } from './routes/importExport.js'
 import { getDashboardSummary } from './routes/dashboard.js'
+import { listTeamActivity } from './routes/teamActivity.js'
 import { listStages, createStage, renameStage, reorderStages, deleteStage } from './routes/pipelineStages.js'
 import { getSettings, updateSettings } from './routes/settings.js'
 import { listTemplates, createTemplate, updateTemplate, deleteTemplate } from './routes/templates.js'
@@ -472,6 +473,10 @@ export const handler: Handler = async (event) => {
     } else if (resource === 'dashboard') {
       const user = await requireUser(event)
       if (id === 'summary' && method === 'GET') response = await getDashboardSummary(event, user)
+      else throw new HttpError(404, 'Not found')
+    } else if (resource === 'team-activity') {
+      const user = await requireUser(event)
+      if (!id && method === 'GET') response = await listTeamActivity(event, user)
       else throw new HttpError(404, 'Not found')
     } else if (resource === 'pipeline-stages') {
       const user = await requireUser(event)
